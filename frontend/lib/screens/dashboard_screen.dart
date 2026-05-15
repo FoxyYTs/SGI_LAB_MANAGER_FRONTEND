@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/qr_generator_dialog.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -49,7 +50,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // Widget para el menú fijo en Escritorio
   Widget _buildSideMenu(BuildContext context) {
     return Container(
       width: 250,
@@ -74,6 +74,16 @@ class DashboardScreen extends StatelessWidget {
           leading: const Icon(Icons.assignment),
           title: const Text("Préstamos"),
           onTap: () {},
+        ),
+        ListTile(
+          leading: const Icon(Icons.qr_code_2, color: Colors.green),
+          title: const Text("Generar QR de Préstamo"),
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => QrGeneratorDialog(),
+            );
+          },
         ),
       ],
     );

@@ -37,6 +37,9 @@ dependencies:
   dio: ^5.9.2
   flutter_secure_storage: ^10.2.0
   provider: ^6.1.5+1
+  qr_flutter: ^4.1.0
+  barcode_widget: ^2.0.4
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
