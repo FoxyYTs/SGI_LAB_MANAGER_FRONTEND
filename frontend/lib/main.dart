@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
-import 'providers/inventario_provider.dart'; // Asegúrate de añadir este también
+import 'providers/inventario_provider.dart';
 import 'screens/login_screen.dart';
-import 'screens/dashboard_screen.dart';   // <--- ESTE FALTA
-import 'screens/inventario_screen.dart';  // <--- ESTE FALTA
+import 'screens/dashboard_screen.dart';
+import 'screens/inventario_screen.dart';
+import 'screens/solicitud_prestamo_screen.dart';
+
 
 void main() {
   runApp(
@@ -34,6 +36,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/dashboard': (context) => DashboardScreen(),
         '/inventario': (context) => InventarioScreen(),
+        '/solicitud': (context) => SolicitudPrestamoScreen(),
       },
     );
   }
