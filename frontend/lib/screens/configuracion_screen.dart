@@ -115,7 +115,8 @@ class _CrudListState extends State<_CrudList> {
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       final resp = await dio.get(widget.endpoint);
       setState(() {
-        _items   = List<Map<String, dynamic>>.from(resp.data['results'] ?? resp.data);
+        final d  = resp.data;
+        _items   = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
         _loading = false;
       });
     } catch (e) {
