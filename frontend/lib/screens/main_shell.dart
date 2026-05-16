@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
+import '../core/sync/sync_service.dart';
 import 'dashboard_screen.dart';
 import 'inventario_screen.dart';
 import 'movimientos_screen.dart';
@@ -30,8 +31,9 @@ class MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    final tabs = _tabs(auth);
+    final auth  = context.watch<AuthProvider>();
+    final sync  = context.watch<SyncService>();
+    final tabs  = _tabs(auth);
 
     return DefaultTabController(
       length: tabs.length,
@@ -48,6 +50,30 @@ class MainShell extends StatelessWidget {
             style: TextStyle(fontWeight: FontWeight.bold, color: kPrimary, fontSize: 20),
           ),
           actions: [
+            // ── Indicador offline / sync pendiente ──
+            if (!sync.online)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 4),
+                child: Chip(
+                  label: Text('Sin red', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  backgroundColor: kDanger,
+                  padding: EdgeInsets.zero,
+                ),
+              )
+            else if (sync.pending > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Chip(
+                  avatar: sync.syncing
+                      ? const SizedBox(width: 14, height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.sync, size: 14, color: Colors.white),
+                  label: Text('${sync.pending} pendiente${sync.pending > 1 ? 's' : ''}',
+                      style: const TextStyle(color: Colors.white, fontSize: 11)),
+                  backgroundColor: kSemaforoAmarillo,
+                  padding: EdgeInsets.zero,
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Center(

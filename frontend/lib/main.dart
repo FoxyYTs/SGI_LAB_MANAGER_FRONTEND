@@ -11,13 +11,20 @@ import 'screens/restablecer_pass_screen.dart';
 import 'screens/permisos_screen.dart';
 import 'screens/insumo_form_screen.dart';
 import 'core/theme/colors.dart';
+import 'core/sync/sync_service.dart';
+import 'core/database/local_db.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Inicializa SQLite antes de arrancar la app
+  await LocalDb.instance;
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => InventarioProvider()),
+        ChangeNotifierProvider.value(value: SyncService.instance),
       ],
       child: const MyApp(),
     ),
