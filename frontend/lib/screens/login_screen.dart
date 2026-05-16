@@ -155,7 +155,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              TextButton(
+                                onPressed: () => Navigator.pushNamed(context, '/recuperar-pass'),
+                                child: const Text(
+                                  'Olvidé mi contraseña',
+                                  style: TextStyle(color: kPrimary, fontSize: 13),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pushNamed(context, '/registro'),
+                                child: const Text(
+                                  'Crear cuenta',
+                                  style: TextStyle(color: kPrimary, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
                           const Text(
                             "SGI LAB MANAGER",
                             style: TextStyle(
