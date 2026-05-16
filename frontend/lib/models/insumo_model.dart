@@ -8,6 +8,7 @@ class Insumo {
   final double stockMinimo;
   final String semaforo;
   final bool   activo;
+  final bool   tieneSga;
   final String? observaciones;
 
   const Insumo({
@@ -20,6 +21,7 @@ class Insumo {
     required this.stockMinimo,
     required this.semaforo,
     required this.activo,
+    this.tieneSga = false,
     this.observaciones,
   });
 
@@ -33,6 +35,7 @@ class Insumo {
     stockMinimo: double.parse(json['stock_minimo'].toString()),
     semaforo:    json['semaforo'] as String,
     activo:      json['activo'] as bool? ?? true,
+    tieneSga:    json['tiene_sga'] as bool? ?? false,
     observaciones: json['observaciones'] as String?,
   );
 
