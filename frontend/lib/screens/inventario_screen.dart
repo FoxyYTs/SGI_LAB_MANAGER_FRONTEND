@@ -6,6 +6,7 @@ import '../models/insumo_model.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import 'insumo_form_screen.dart';
+import 'sga_screen.dart';
 
 class InventarioContent extends StatefulWidget {
   const InventarioContent({super.key});
@@ -140,7 +141,8 @@ class _InventarioContentState extends State<InventarioContent> {
                                 2: FlexColumnWidth(1.5),
                                 3: FlexColumnWidth(1.2),
                                 4: FlexColumnWidth(1.2),
-                                5: FixedColumnWidth(80),
+                                5: FixedColumnWidth(60),
+                                6: FixedColumnWidth(56),
                               },
                               border: TableBorder(
                                 horizontalInside: const BorderSide(color: Color(0xFFDEE2E6)),
@@ -149,11 +151,10 @@ class _InventarioContentState extends State<InventarioContent> {
                                 // Encabezado azul
                                 TableRow(
                                   decoration: const BoxDecoration(color: kPrimary),
-                                  children: ["Nombre", "Tipo", "Ubicación", "Stock", "Stock Mín.", "Estado"]
+                                  children: ["Nombre", "Tipo", "Ubicación", "Stock", "Stock Mín.", "Estado", "SGA"]
                                       .map((h) => Padding(
                                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                            child: Text(
-                                              h,
+                                            child: Text(h,
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontWeight: FontWeight.bold,
@@ -167,6 +168,7 @@ class _InventarioContentState extends State<InventarioContent> {
                                   final i = entry.key;
                                   final insumo = entry.value;
                                   final rowColor = i.isOdd ? const Color(0xFFF8F9FA) : Colors.white;
+                                  final esQuimico = insumo.tipo == 'Químico';
                                   return TableRow(
                                     decoration: BoxDecoration(color: rowColor),
                                     children: [
@@ -187,6 +189,29 @@ class _InventarioContentState extends State<InventarioContent> {
                                             ),
                                           ),
                                         ),
+                                      ),
+                                      // Botón SGA solo para Químicos
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                        child: esQuimico
+                                            ? Tooltip(
+                                                message: 'Ver ficha SGA',
+                                                child: IconButton(
+                                                  icon: const Icon(Icons.science_outlined, size: 20, color: kPrimary),
+                                                  onPressed: () => Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) => SgaScreen(
+                                                        insumoId: insumo.id,
+                                                        insumoNombre: insumo.nombre,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(),
+                                                ),
+                                              )
+                                            : const SizedBox.shrink(),
                                       ),
                                     ],
                                   );
