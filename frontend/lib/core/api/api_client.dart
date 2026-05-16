@@ -1,20 +1,29 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+/// IP del servidor inyectada en build time.
+/// Ejemplo móvil: flutter run -d android --dart-define=SERVER_IP=192.168.1.50
+const _kServerIp = String.fromEnvironment('SERVER_IP', defaultValue: '');
+
 class ApiClient {
   static ApiClient? _instance;
 
-  late final Dio _dio;
+  late final Dio   _dio;
   late final String baseUrl;
 
   ApiClient._() {
-    // En Web usamos el mismo host desde donde se sirve la app
-    // (funciona con localhost Y con 10.51.1.226 sin cambiar código)
-    final host = kIsWeb ? Uri.base.host : 'localhost';
+    String host;
+    if (_kServerIp.isNotEmpty) {
+      host = _kServerIp;
+    } else if (kIsWeb) {
+      host = Uri.base.host;
+    } else {
+      host = 'localhost';
+    }
     baseUrl = 'http://$host:8000/api/';
 
     _dio = Dio(BaseOptions(
-      baseUrl: baseUrl,
+      baseUrl:        baseUrl,
       connectTimeout: const Duration(seconds: 8),
       receiveTimeout: const Duration(seconds: 10),
     ));
@@ -24,16 +33,10 @@ class ApiClient {
 
   Dio get dio => _dio;
 
-  // Agrega el header de autorización JWT en cada petición autenticada
-  Dio authenticatedDio(String? token) {
-    final authDio = Dio(BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 8),
-      receiveTimeout: const Duration(seconds: 10),
-      headers: {
-        if (token != null) 'Authorization': 'Bearer $token',
-      },
-    ));
-    return authDio;
-  }
+  Dio authenticatedDio(String? token) => Dio(BaseOptions(
+    baseUrl:        baseUrl,
+    connectTimeout: const Duration(seconds: 8),
+    receiveTimeout: const Duration(seconds: 10),
+    headers: {if (token != null) 'Authorization': 'Bearer $token'},
+  ));
 }

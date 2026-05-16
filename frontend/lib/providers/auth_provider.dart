@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/api/api_client.dart';
+import '../core/sync/sync_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage();
@@ -23,6 +24,7 @@ class AuthProvider with ChangeNotifier {
 
   Future<void> cargarSesion() async {
     _token        = await _storage.read(key: 'token');
+    if (_token != null) await SyncService.instance.init(_token);
     _refreshToken = await _storage.read(key: 'refresh_token');
     _rol          = await _storage.read(key: 'rol');
     _username     = await _storage.read(key: 'username');
@@ -49,8 +51,9 @@ class AuthProvider with ChangeNotifier {
       await _storage.write(key: 'refresh_token', value: _refreshToken);
       await _storage.write(key: 'username',       value: username);
 
-      // Carga permisos justo después del login
+      // Carga permisos y arranca sync
       await _cargarPermisos();
+      await SyncService.instance.init(_token);
 
       notifyListeners();
       return true;
