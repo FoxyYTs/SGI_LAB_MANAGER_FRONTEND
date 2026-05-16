@@ -8,15 +8,18 @@ class AuthProvider with ChangeNotifier {
 
   String? _token;
   String? _rol;
+  String? _username;
 
   bool get isAuthenticated => _token != null;
   String? get rol => _rol;
   String? get token => _token;
+  String? get username => _username;
 
   // Llamar esto en el arranque de la app para restaurar la sesión guardada
   Future<void> cargarSesion() async {
     _token = await _storage.read(key: 'token');
     _rol = await _storage.read(key: 'rol');
+    _username = await _storage.read(key: 'username');
     notifyListeners();
   }
 
@@ -28,7 +31,9 @@ class AuthProvider with ChangeNotifier {
       });
 
       _token = response.data['access'];
+      _username = username;
       await _storage.write(key: 'token', value: _token);
+      await _storage.write(key: 'username', value: username);
 
       // El endpoint /token/ no retorna el rol directamente; lo pedimos aparte si existe
       // Por ahora lo dejamos en null hasta tener el endpoint de perfil
@@ -43,8 +48,10 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     await _storage.delete(key: 'token');
     await _storage.delete(key: 'rol');
+    await _storage.delete(key: 'username');
     _token = null;
     _rol = null;
+    _username = null;
     notifyListeners();
   }
 }

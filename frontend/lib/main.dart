@@ -3,10 +3,9 @@ import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/inventario_provider.dart';
 import 'screens/login_screen.dart';
-import 'screens/dashboard_screen.dart';
-import 'screens/inventario_screen.dart';
+import 'screens/main_shell.dart';
 import 'screens/solicitud_prestamo_screen.dart';
-
+import 'core/theme/colors.dart';
 
 void main() {
   runApp(
@@ -29,14 +28,34 @@ class MyApp extends StatelessWidget {
       title: 'SGI LAB Manager',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primarySwatch: Colors.green,
-        useMaterial3: true, // Se ve mejor en sistemas modernos como Arch
+        colorScheme: ColorScheme.fromSeed(seedColor: kPrimary),
+        primaryColor: kPrimary,
+        scaffoldBackgroundColor: kBackground,
+        useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+          elevation: 2,
+          shadowColor: Colors.black26,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: kPrimary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          ),
+        ),
+        tabBarTheme: const TabBarThemeData(
+          labelColor: kPrimary,
+          unselectedLabelColor: kTextMuted,
+          indicatorColor: kPrimary,
+        ),
       ),
       home: const LoginScreen(),
       routes: {
-        '/dashboard': (context) => DashboardScreen(),
-        '/inventario': (context) => InventarioScreen(),
-        '/solicitud': (context) => SolicitudPrestamoScreen(),
+        '/': (context) => const LoginScreen(),
+        '/dashboard': (context) => const MainShell(),
+        '/solicitud': (context) => const SolicitudPrestamoScreen(),
       },
     );
   }
