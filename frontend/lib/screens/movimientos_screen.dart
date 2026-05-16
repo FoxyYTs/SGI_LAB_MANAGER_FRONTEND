@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/inventario_provider.dart';
+import '../providers/auth_provider.dart';
 import '../core/theme/colors.dart';
 
 class MovimientosContent extends StatefulWidget {
@@ -21,8 +22,10 @@ class _MovimientosContentState extends State<MovimientosContent> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        Provider.of<InventarioProvider>(context, listen: false).fetchInsumos());
+    Future.microtask(() {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      Provider.of<InventarioProvider>(context, listen: false).fetchInsumos(auth.token);
+    });
   }
 
   @override
