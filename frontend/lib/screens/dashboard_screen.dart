@@ -1,123 +1,204 @@
 import 'package:flutter/material.dart';
+import '../core/theme/colors.dart';
 import '../widgets/qr_generator_dialog.dart';
 
-class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key});
+class DashboardContent extends StatelessWidget {
+  const DashboardContent({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Obtenemos el ancho de la pantalla para decidir el diseño
-    double screenWidth = MediaQuery.of(context).size.width;
-    bool isDesktop = screenWidth > 900;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("SGI LAB - Panel Principal"),
-        backgroundColor: Colors.green[800],
-        foregroundColor: Colors.white,
-        // Si es escritorio, ocultamos el botón de 3 rayas porque usaremos menú lateral fijo
-        leading: isDesktop ? const Icon(Icons.biotech) : null,
-      ),
-      // Menú lateral (el de las 3 rayas)
-      drawer: isDesktop ? null : _buildDrawer(context), 
-      body: Row(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (isDesktop) _buildSideMenu(context), // Menú fijo para PC
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionTitle("Noticias del Laboratorio"),
-                  _buildNewsCard("Mantenimiento de Servidores", "Este sábado los servidores de renderizado estarán fuera de servicio."),
-                  const SizedBox(height: 20),
-                  _buildSectionTitle("Horarios de Monitores"),
-                  _buildScheduleTable(),
-                ],
-              ),
+          // Jumbotron — estilo Bootstrap
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Bienvenido al SGI LAB MANAGER",
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.w300),
+                ),
+                const Divider(height: 32, thickness: 1),
+                const Text(
+                  "Sistema de Gestión de Inventario para el Laboratorio Integrado.",
+                  style: TextStyle(fontSize: 16, color: kTextMuted),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const QrGeneratorDialog(),
+                        );
+                      },
+                      icon: const Icon(Icons.qr_code_2),
+                      label: const Text("Generar QR de Préstamo"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kPrimary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
+
+          const SizedBox(height: 24),
+
+          // Tarjetas de resumen
+          Row(
+            children: [
+              _buildStatCard(
+                icon: Icons.inventory_2,
+                label: "Inventario",
+                sublabel: "Gestiona los insumos",
+                color: kPrimary,
+              ),
+              const SizedBox(width: 16),
+              _buildStatCard(
+                icon: Icons.swap_horiz,
+                label: "Movimientos",
+                sublabel: "Préstamos y devoluciones",
+                color: kSuccess,
+              ),
+              const SizedBox(width: 16),
+              _buildStatCard(
+                icon: Icons.warning_amber_rounded,
+                label: "Alertas de Stock",
+                sublabel: "Insumos bajo mínimo",
+                color: kDanger,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Sección noticias
+          _buildSectionTitle("Noticias del Laboratorio"),
+          const SizedBox(height: 12),
+          _buildNewsCard(
+            "Mantenimiento de Servidores",
+            "Este sábado los servidores de renderizado estarán fuera de servicio.",
+            Icons.notifications_active,
+            kWarning,
+          ),
+
+          const SizedBox(height: 24),
+
+          // Horarios de monitores
+          _buildSectionTitle("Horarios de Monitores"),
+          const SizedBox(height: 12),
+          _buildScheduleTable(),
         ],
       ),
     );
   }
 
-  // Widget para el menú lateral (Drawer/3 rayas)
-  Widget _buildDrawer(BuildContext context) {
-    return Drawer(
-      child: _buildMenuContent(context),
-    );
-  }
-
-  Widget _buildSideMenu(BuildContext context) {
-    return Container(
-      width: 250,
-      color: Colors.grey[200],
-      child: _buildMenuContent(context),
-    );
-  }
-
-  Widget _buildMenuContent(BuildContext context) {
-    return Column(
-      children: [
-        const DrawerHeader(
-          decoration: BoxDecoration(color: Colors.green),
-          child: Center(child: Text("Menú SGI", style: TextStyle(color: Colors.white, fontSize: 20))),
+  Widget _buildStatCard({
+    required IconData icon,
+    required String label,
+    required String sublabel,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+          border: Border(left: BorderSide(color: color, width: 4)),
         ),
-        ListTile(
-          leading: const Icon(Icons.inventory),
-          title: const Text("Inventario"),
-          onTap: () => Navigator.pushNamed(context, '/inventario'),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 36),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(sublabel, style: const TextStyle(color: kTextMuted, fontSize: 12)),
+                ],
+              ),
+            ),
+          ],
         ),
-        ListTile(
-          leading: const Icon(Icons.assignment),
-          title: const Text("Préstamos"),
-          onTap: () {},
-        ),
-        ListTile(
-          leading: const Icon(Icons.qr_code_2, color: Colors.green),
-          title: const Text("Generar QR de Préstamo"),
-          onTap: () {
-            showDialog(
-              context: context,
-              builder: (context) => QrGeneratorDialog(),
-            );
-          },
-        ),
-      ],
+      ),
     );
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold));
+    return Text(
+      title,
+      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+    );
   }
 
-  Widget _buildNewsCard(String title, String content) {
-    return Card(
+  Widget _buildNewsCard(String title, String content, IconData icon, Color iconColor) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
       child: ListTile(
+        leading: Icon(icon, color: iconColor),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text(content),
-        leading: const Icon(Icons.notifications_active, color: Colors.orange),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       ),
     );
   }
 
   Widget _buildScheduleTable() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    final rows = [
+      ["Lunes", "Juan Pérez"],
+      ["Martes", "Ana Gómez"],
+      ["Miércoles", "Carlos Ríos"],
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
         child: Table(
-          border: TableBorder.all(color: Colors.black12),
-          children: const [
-            TableRow(children: [
-              Padding(padding: EdgeInsets.all(8), child: Text("Día", style: TextStyle(fontWeight: FontWeight.bold))),
-              Padding(padding: EdgeInsets.all(8), child: Text("Monitor", style: TextStyle(fontWeight: FontWeight.bold))),
-            ]),
-            TableRow(children: [
-              Padding(padding: EdgeInsets.all(8), child: Text("Lunes")),
-              Padding(padding: EdgeInsets.all(8), child: Text("Juan Perez")),
-            ]),
+          border: TableBorder.symmetric(
+            inside: const BorderSide(color: Color(0xFFDEE2E6)),
+          ),
+          children: [
+            TableRow(
+              decoration: const BoxDecoration(color: kPrimary),
+              children: ["Día", "Monitor"].map((h) => Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(h, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              )).toList(),
+            ),
+            ...rows.map((r) => TableRow(
+              children: r.map((cell) => Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(cell),
+              )).toList(),
+            )),
           ],
         ),
       ),
