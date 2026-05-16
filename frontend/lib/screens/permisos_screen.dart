@@ -90,7 +90,8 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
       final resp = await dio.get('usuarios/permisos-rol/');
-      final lista = List<Map<String, dynamic>>.from(resp.data['results'] ?? resp.data);
+      final d     = resp.data;
+      final lista = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
 
       final Map<String, Set<String>>    asignados = {for (final r in _roles) r: {}};
       final Map<String, Map<String, int>> ids     = {for (final r in _roles) r: {}};
@@ -286,8 +287,10 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
         dio.get('usuarios/permisos-usuario/?user=${usuario['id']}'),
       ]);
 
-      final rolList   = List<Map<String, dynamic>>.from(results[0].data['results'] ?? results[0].data);
-      final userList  = List<Map<String, dynamic>>.from(results[1].data['results'] ?? results[1].data);
+      List<Map<String, dynamic>> _parse(dynamic d) =>
+          List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+      final rolList   = _parse(results[0].data);
+      final userList  = _parse(results[1].data);
 
       setState(() {
         _rolPermisos   = Set<String>.from(rolList.map((p) => p['codigo']));

@@ -80,9 +80,11 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
         dio.get('inventario/unidades/'),
       ]);
       setState(() {
-        _tipos       = List<Map<String, dynamic>>.from(results[0].data['results'] ?? results[0].data);
-        _ubicaciones = List<Map<String, dynamic>>.from(results[1].data['results'] ?? results[1].data);
-        _unidades    = List<Map<String, dynamic>>.from(results[2].data['results'] ?? results[2].data);
+        List<Map<String, dynamic>> _parse(dynamic d) =>
+            List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _tipos       = _parse(results[0].data);
+        _ubicaciones = _parse(results[1].data);
+        _unidades    = _parse(results[2].data);
         _loading     = false;
       });
       _precargarEdicion();
