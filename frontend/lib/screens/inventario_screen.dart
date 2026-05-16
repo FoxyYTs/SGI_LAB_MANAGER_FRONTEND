@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/inventario_provider.dart';
+import '../providers/auth_provider.dart';
 import '../models/insumo_model.dart';
 import '../core/theme/colors.dart';
+import '../core/permissions.dart';
+import 'insumo_form_screen.dart';
 
 class InventarioContent extends StatefulWidget {
   const InventarioContent({super.key});
@@ -34,8 +37,17 @@ class _InventarioContentState extends State<InventarioContent> {
     _ => kSemaforoVerde,
   };
 
+  Future<void> _abrirFormulario(BuildContext context, InventarioProvider provider) async {
+    final recargado = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const InsumoFormScreen()),
+    );
+    if (recargado == true) provider.fetchInsumos();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
     return Consumer<InventarioProvider>(
       builder: (context, provider, _) {
         if (provider.cargando) {
@@ -47,7 +59,8 @@ class _InventarioContentState extends State<InventarioContent> {
           i.tipo.toLowerCase().contains(_searchQuery.toLowerCase())
         ).toList();
 
-        return Padding(
+        return Stack(children: [
+        Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -198,7 +211,20 @@ class _InventarioContentState extends State<InventarioContent> {
               ],
             ],
           ),
-        );
+        ),
+        if (auth.can(Perm.inventarioGestionar))
+          Positioned(
+            bottom: 24,
+            right: 24,
+            child: FloatingActionButton.extended(
+              backgroundColor: kPrimary,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('Nuevo insumo'),
+              onPressed: () => _abrirFormulario(context, provider),
+            ),
+          ),
+        ]);
       },
     );
   }

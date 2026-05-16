@@ -8,6 +8,8 @@ import 'screens/solicitud_prestamo_screen.dart';
 import 'screens/registro_screen.dart';
 import 'screens/recuperar_pass_screen.dart';
 import 'screens/restablecer_pass_screen.dart';
+import 'screens/permisos_screen.dart';
+import 'screens/insumo_form_screen.dart';
 import 'core/theme/colors.dart';
 
 void main() {
@@ -61,6 +63,8 @@ class MyApp extends StatelessWidget {
         '/registro': (context) => const RegistroScreen(),
         '/recuperar-pass': (context) => const RecuperarPassScreen(),
         '/restablecer-pass': (context) => const RestablecerPassScreen(),
+        '/permisos': (context) => const PermisosScreen(),
+        '/insumo-form': (context) => const InsumoFormScreen(),
       },
     );
   }
