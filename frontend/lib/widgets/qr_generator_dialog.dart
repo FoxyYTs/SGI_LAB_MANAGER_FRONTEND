@@ -1,21 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:barcode_widget/barcode_widget.dart';
-import 'dart:html' as html;
+import '../utils/qr_saver.dart';
 
 class QrGeneratorDialog extends StatelessWidget {
   const QrGeneratorDialog({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const String urlSolicitud = "http://10.51.1.226:8080/#/solicitud"; 
+    const String urlSolicitud = "http://10.51.1.226:8080/#/solicitud";
 
     return AlertDialog(
       title: const Text("Generar QR de Préstamo"),
-      content: SizedBox( // Usamos SizedBox para dar dimensiones explícitas
-        width: 300, 
+      content: SizedBox(
+        width: 300,
         child: Column(
-          mainAxisSize: MainAxisSize.min, 
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
               "Este código dirigirá a los estudiantes al formulario de solicitud.",
@@ -23,7 +23,6 @@ class QrGeneratorDialog extends StatelessWidget {
               style: TextStyle(fontSize: 14, color: Colors.grey),
             ),
             const SizedBox(height: 20),
-            // Envolvemos el QR en un Container con tamaño fijo para evitar el error intrínseco
             Container(
               width: 250,
               height: 250,
@@ -51,23 +50,18 @@ class QrGeneratorDialog extends StatelessWidget {
           child: const Text("Cerrar"),
         ),
         ElevatedButton.icon(
-          onPressed: () {
-            final barcode = Barcode.qrCode();
-            final svgString = barcode.toSvg(
-                'http://10.51.1.226:8080/#/solicitud',
-                width: 200,
-                height: 200,
+          onPressed: () async {
+            final svgString = Barcode.qrCode().toSvg(
+              urlSolicitud,
+              width: 200,
+              height: 200,
             );
-
-            // 2. Creamos un "ancla" en el navegador para descargar el archivo
-            final bytes = Uri.dataFromString(svgString, mimeType: 'image/svg+xml').toString();
-            final anchor = html.AnchorElement(href: bytes)
-                ..setAttribute("download", "qr_prestamo_sgi.svg")
-                ..click();
-                
-            ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Descargando SVG...")),
-            );
+            await guardarQrComoSvg(svgString);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("QR guardado como qr_prestamo_sgi.svg")),
+              );
+            }
           },
           icon: const Icon(Icons.save),
           label: const Text("Guardar"),
