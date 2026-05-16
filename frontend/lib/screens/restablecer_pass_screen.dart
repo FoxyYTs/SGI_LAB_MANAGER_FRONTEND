@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
@@ -12,12 +13,35 @@ class RestablecerPassScreen extends StatefulWidget {
 class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
   final _emailCtrl = TextEditingController();
   final _tokenCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  final _passCtrl  = TextEditingController();
   final _pass2Ctrl = TextEditingController();
 
-  bool _isLoading = false;
-  bool _obscurePass = true;
+  bool _isLoading    = false;
+  bool _obscurePass  = true;
   bool _obscurePass2 = true;
+  // true cuando el link del email pre-rellena el formulario
+  bool _desdeLink    = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _leerParamsDeUrl();
+  }
+
+  /// En Flutter Web, el email con el link tiene la forma:
+  ///   http://FRONTEND_URL/?token=TOKEN&email=EMAIL#/restablecer-pass
+  /// Uri.base captura los query params (?...) antes del hash.
+  void _leerParamsDeUrl() {
+    if (!kIsWeb) return;
+    final uri   = Uri.base;
+    final token = uri.queryParameters['token'] ?? '';
+    final email = uri.queryParameters['email'] ?? '';
+    if (token.isNotEmpty && email.isNotEmpty) {
+      _tokenCtrl.text = token;
+      _emailCtrl.text = email;
+      setState(() => _desdeLink = true);
+    }
+  }
 
   @override
   void dispose() {
@@ -29,34 +53,31 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
   }
 
   Future<void> _handleRestablecer() async {
-    final email = _emailCtrl.text.trim();
-    final token = _tokenCtrl.text.trim();
-    final password = _passCtrl.text;
+    final email     = _emailCtrl.text.trim();
+    final token     = _tokenCtrl.text.trim();
+    final password  = _passCtrl.text;
     final password2 = _pass2Ctrl.text;
 
     if ([email, token, password, password2].any((s) => s.isEmpty)) {
       _showError('Todos los campos son obligatorios.');
       return;
     }
-
     if (password != password2) {
       _showError('Las contraseñas no coinciden.');
       return;
     }
 
     setState(() => _isLoading = true);
-
     try {
       await ApiClient.instance.dio.post(
         'usuarios/restablecer-password/',
         data: {
-          'email': email,
-          'token': token,
-          'nueva_password': password,
+          'email':           email,
+          'token':           token,
+          'nueva_password':  password,
           'nueva_password2': password2,
         },
       );
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -139,37 +160,70 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
                       padding: const EdgeInsets.all(28),
                       child: Column(
                         children: [
-                          const Text(
-                            'Ingresa el código que recibiste en tu correo y establece tu nueva contraseña.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: kTextMuted, height: 1.5),
-                          ),
-                          const SizedBox(height: 20),
-                          TextField(
-                            controller: _emailCtrl,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(
-                              labelText: 'Correo electrónico',
-                              prefixIcon: Icon(Icons.email_outlined, color: kPrimary),
-                              border: OutlineInputBorder(),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: kPrimary, width: 2),
+                          // Banner informativo si llegó por link del email
+                          if (_desdeLink)
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 20),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: kSuccess.withOpacity(0.1),
+                                border: Border.all(color: kSuccess.withOpacity(0.4)),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.check_circle_outline, color: kSuccess, size: 18),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Enlace verificado. Solo ingresa tu nueva contraseña.',
+                                      style: TextStyle(color: kSuccess, fontSize: 13),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 20),
+                              child: Text(
+                                'Ingresa el código que recibiste en tu correo y establece tu nueva contraseña.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: kTextMuted, height: 1.5),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 14),
-                          TextField(
-                            controller: _tokenCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Código de recuperación',
-                              prefixIcon: Icon(Icons.tag, color: kPrimary),
-                              border: OutlineInputBorder(),
-                              focusedBorder: OutlineInputBorder(
-                                borderSide: BorderSide(color: kPrimary, width: 2),
+
+                          // Email — oculto si vino del link
+                          if (!_desdeLink) ...[
+                            TextField(
+                              controller: _emailCtrl,
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: const InputDecoration(
+                                labelText: 'Correo electrónico',
+                                prefixIcon: Icon(Icons.email_outlined, color: kPrimary),
+                                border: OutlineInputBorder(),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: kPrimary, width: 2),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 14),
+                            const SizedBox(height: 14),
+                            TextField(
+                              controller: _tokenCtrl,
+                              decoration: const InputDecoration(
+                                labelText: 'Código de recuperación',
+                                prefixIcon: Icon(Icons.tag, color: kPrimary),
+                                border: OutlineInputBorder(),
+                                focusedBorder: OutlineInputBorder(
+                                  borderSide: BorderSide(color: kPrimary, width: 2),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+
+                          // Nueva contraseña
                           TextField(
                             controller: _passCtrl,
                             obscureText: _obscurePass,
@@ -228,10 +282,7 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
                           const SizedBox(height: 16),
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text(
-                              'Volver',
-                              style: TextStyle(color: kPrimary),
-                            ),
+                            child: const Text('Volver', style: TextStyle(color: kPrimary)),
                           ),
                         ],
                       ),
