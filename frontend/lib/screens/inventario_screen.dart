@@ -18,6 +18,9 @@ class InventarioContent extends StatefulWidget {
 class _InventarioContentState extends State<InventarioContent> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  String _filtroTipo  = 'Todos';
+
+  static const _tipos = ['Todos', 'Implemento', 'Vidriería', 'Equipo', 'Químico'];
 
   @override
   void initState() {
@@ -34,18 +37,16 @@ class _InventarioContentState extends State<InventarioContent> {
     super.dispose();
   }
 
-  Color _semaforoColor(String semaforo) => switch (semaforo) {
-    "ROJO" => kSemaforoRojo,
-    "AMARILLO" => kSemaforoAmarillo,
-    _ => kSemaforoVerde,
+  Color _semaforoColor(String s) => switch (s) {
+    'ROJO'    => kSemaforoRojo,
+    'AMARILLO' => kSemaforoAmarillo,
+    _          => kSemaforoVerde,
   };
 
-  Future<void> _abrirFormulario(BuildContext context, InventarioProvider provider, String? token) async {
-    final recargado = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(builder: (_) => const InsumoFormScreen()),
-    );
-    if (recargado == true) provider.fetchInsumos(token);
+  Future<void> _abrirFormulario(BuildContext ctx, InventarioProvider prov, String? token) async {
+    final ok = await Navigator.push<bool>(
+      ctx, MaterialPageRoute(builder: (_) => const InsumoFormScreen()));
+    if (ok == true) prov.fetchInsumos(token);
   }
 
   @override
@@ -57,36 +58,38 @@ class _InventarioContentState extends State<InventarioContent> {
           return const Center(child: CircularProgressIndicator(color: kPrimary));
         }
 
-        final List<Insumo> filtrados = provider.insumos.where((i) =>
-          i.nombre.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          i.tipo.toLowerCase().contains(_searchQuery.toLowerCase())
-        ).toList();
+        final filtrados = provider.insumos.where((i) {
+          final matchTipo   = _filtroTipo == 'Todos' || i.tipo == _filtroTipo;
+          final matchSearch = i.nombre.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                              i.tipo.toLowerCase().contains(_searchQuery.toLowerCase());
+          return matchTipo && matchSearch;
+        }).toList();
+
+        final esQuimico = _filtroTipo == 'Químico';
 
         return Stack(children: [
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Encabezado + buscador
-              Row(
-                children: [
-                  const Text(
-                    "Implementos",
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Encabezado ───────────────────────────────────────────────
+                Row(children: [
+                  Text(
+                    esQuimico ? 'Inventario de Químicos' : 'Inventario',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   SizedBox(
-                    width: 280,
+                    width: 260,
                     child: TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
-                        hintText: "Buscar insumo...",
+                        hintText: 'Buscar...',
                         prefixIcon: const Icon(Icons.search, color: kPrimary),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                         focusedBorder: const OutlineInputBorder(
-                          borderSide: BorderSide(color: kPrimary),
-                        ),
+                            borderSide: BorderSide(color: kPrimary)),
                         contentPadding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                       onChanged: (v) => setState(() => _searchQuery = v),
@@ -96,183 +99,276 @@ class _InventarioContentState extends State<InventarioContent> {
                   ElevatedButton.icon(
                     onPressed: () => provider.fetchInsumos(auth.token),
                     icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text("Actualizar"),
+                    label: const Text('Actualizar'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: kPrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    ),
+                      backgroundColor: kPrimary, foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
+                ]),
+                const SizedBox(height: 12),
 
-              // Tabla
-              Expanded(
-                child: filtrados.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.inventory_2_outlined, size: 64, color: kTextMuted),
-                            const SizedBox(height: 12),
-                            Text(
-                              _searchQuery.isEmpty
-                                  ? "No hay insumos registrados"
-                                  : "Sin resultados para \"$_searchQuery\"",
-                              style: const TextStyle(color: kTextMuted),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: SingleChildScrollView(
-                            child: Table(
-                              columnWidths: const {
-                                0: FlexColumnWidth(3),
-                                1: FlexColumnWidth(1.5),
-                                2: FlexColumnWidth(1.5),
-                                3: FlexColumnWidth(1.2),
-                                4: FlexColumnWidth(1.2),
-                                5: FixedColumnWidth(60),
-                                6: FixedColumnWidth(56),
-                              },
-                              border: TableBorder(
-                                horizontalInside: const BorderSide(color: Color(0xFFDEE2E6)),
+                // ── Chips de filtro por tipo ──────────────────────────────────
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: _tipos.map((tipo) {
+                      final sel = _filtroTipo == tipo;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Row(mainAxisSize: MainAxisSize.min, children: [
+                            if (tipo == 'Químico')
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4),
+                                child: Icon(Icons.science_outlined, size: 14),
                               ),
-                              children: [
-                                // Encabezado azul
-                                TableRow(
-                                  decoration: const BoxDecoration(color: kPrimary),
-                                  children: ["Nombre", "Tipo", "Ubicación", "Stock", "Stock Mín.", "Estado", "SGA"]
-                                      .map((h) => Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                            child: Text(h,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ))
-                                      .toList(),
-                                ),
-                                // Filas de datos
-                                ...filtrados.asMap().entries.map((entry) {
-                                  final i = entry.key;
-                                  final insumo = entry.value;
-                                  final rowColor = i.isOdd ? const Color(0xFFF8F9FA) : Colors.white;
-                                  final esQuimico = insumo.tipo == 'Químico';
-                                  return TableRow(
-                                    decoration: BoxDecoration(color: rowColor),
-                                    children: [
-                                      _cell(insumo.nombre, bold: true),
-                                      _cell(insumo.tipo),
-                                      _cell(insumo.ubicacion),
-                                      _cell(insumo.stockActual.toStringAsFixed(0)),
-                                      _cell(insumo.stockMinimo.toStringAsFixed(0)),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        child: Center(
-                                          child: Container(
-                                            width: 16,
-                                            height: 16,
-                                            decoration: BoxDecoration(
-                                              color: _semaforoColor(insumo.semaforo),
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      // Botón SGA solo para Químicos
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                                        child: esQuimico
-                                            ? Tooltip(
-                                                message: 'Ver ficha SGA',
-                                                child: IconButton(
-                                                  icon: const Icon(Icons.science_outlined, size: 20, color: kPrimary),
-                                                  onPressed: () => Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (_) => SgaScreen(
-                                                        insumoId: insumo.id,
-                                                        insumoNombre: insumo.nombre,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  padding: EdgeInsets.zero,
-                                                  constraints: const BoxConstraints(),
-                                                ),
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                    ],
-                                  );
-                                }),
-                              ],
+                            Text(tipo),
+                          ]),
+                          selected: sel,
+                          selectedColor: kPrimary,
+                          labelStyle: TextStyle(
+                              color: sel ? Colors.white : kTextMuted,
+                              fontWeight: sel ? FontWeight.bold : FontWeight.normal),
+                          onSelected: (_) => setState(() => _filtroTipo = tipo),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Tabla ─────────────────────────────────────────────────────
+                Expanded(
+                  child: filtrados.isEmpty
+                      ? _buildEmpty()
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: const [
+                              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: SingleChildScrollView(
+                              child: esQuimico
+                                  ? _buildTablaQuimicos(filtrados, context)
+                                  : _buildTablaGeneral(filtrados, context),
                             ),
                           ),
                         ),
-                      ),
-              ),
-
-              // Leyenda semáforo
-              if (filtrados.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    _leyenda(kSemaforoVerde, "En stock"),
-                    const SizedBox(width: 16),
-                    _leyenda(kSemaforoAmarillo, "Stock bajo"),
-                    const SizedBox(width: 16),
-                    _leyenda(kSemaforoRojo, "Crítico"),
-                  ],
                 ),
+
+                // ── Leyenda ───────────────────────────────────────────────────
+                if (filtrados.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    _leyenda(kSemaforoVerde,   'En stock'),
+                    const SizedBox(width: 16),
+                    _leyenda(kSemaforoAmarillo, 'Stock bajo'),
+                    const SizedBox(width: 16),
+                    _leyenda(kSemaforoRojo,    'Crítico'),
+                    if (esQuimico) ...[
+                      const SizedBox(width: 24),
+                      const Icon(Icons.check_circle, size: 12, color: kSuccess),
+                      const SizedBox(width: 4),
+                      const Text('SGA cargado', style: TextStyle(fontSize: 12, color: kTextMuted)),
+                      const SizedBox(width: 12),
+                      const Icon(Icons.radio_button_unchecked, size: 12, color: kTextMuted),
+                      const SizedBox(width: 4),
+                      const Text('Sin datos SGA', style: TextStyle(fontSize: 12, color: kTextMuted)),
+                    ],
+                  ]),
+                ],
               ],
-            ],
-          ),
-        ),
-        if (auth.can(Perm.inventarioGestionar))
-          Positioned(
-            bottom: 24,
-            right: 24,
-            child: FloatingActionButton.extended(
-              backgroundColor: kPrimary,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add),
-              label: const Text('Nuevo insumo'),
-              onPressed: () => _abrirFormulario(context, provider, auth.token),
             ),
           ),
+
+          // ── FAB ───────────────────────────────────────────────────────────
+          if (auth.can(Perm.inventarioGestionar))
+            Positioned(
+              bottom: 24, right: 24,
+              child: FloatingActionButton.extended(
+                backgroundColor: kPrimary,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.add),
+                label: const Text('Nuevo insumo'),
+                onPressed: () => _abrirFormulario(context, provider, auth.token),
+              ),
+            ),
         ]);
       },
     );
   }
 
-  Widget _cell(String text, {bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Text(
-        text,
-        style: TextStyle(fontWeight: bold ? FontWeight.w600 : FontWeight.normal),
-      ),
-    );
-  }
+  // ── Tabla general (Todos / Implemento / Vidriería / Equipo) ───────────────
 
-  Widget _leyenda(Color color, String label) {
-    return Row(
+  Widget _buildTablaGeneral(List<Insumo> items, BuildContext context) {
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(3),
+        1: FlexColumnWidth(1.5),
+        2: FlexColumnWidth(1.5),
+        3: FlexColumnWidth(1.2),
+        4: FlexColumnWidth(1.2),
+        5: FixedColumnWidth(60),
+        6: FixedColumnWidth(52),
+      },
+      border: const TableBorder(
+          horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
       children: [
-        Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 12, color: kTextMuted)),
+        _headerRow(['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA']),
+        ...items.asMap().entries.map((e) {
+          final idx    = e.key;
+          final insumo = e.value;
+          final rowBg  = idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white;
+          final esQ    = insumo.tipo == 'Químico';
+          return TableRow(
+            decoration: BoxDecoration(color: rowBg),
+            children: [
+              _cell(insumo.nombre, bold: true),
+              _cell(insumo.tipo),
+              _cell(insumo.ubicacion),
+              _cell(insumo.stockActual.toStringAsFixed(0)),
+              _cell(insumo.stockMinimo.toStringAsFixed(0)),
+              _semaforo(insumo.semaforo),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: esQ
+                    ? _sgaBtn(context, insumo)
+                    : const SizedBox.shrink(),
+              ),
+            ],
+          );
+        }),
       ],
     );
   }
+
+  // ── Tabla especializada para Químicos ─────────────────────────────────────
+
+  Widget _buildTablaQuimicos(List<Insumo> items, BuildContext context) {
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(3),
+        1: FlexColumnWidth(1.5),
+        2: FlexColumnWidth(1.2),
+        3: FlexColumnWidth(1.2),
+        4: FixedColumnWidth(60),
+        5: FixedColumnWidth(80),
+        6: FixedColumnWidth(52),
+      },
+      border: const TableBorder(
+          horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
+      children: [
+        _headerRow(['Nombre', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'Datos SGA', 'Ficha']),
+        ...items.asMap().entries.map((e) {
+          final idx    = e.key;
+          final insumo = e.value;
+          final rowBg  = idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white;
+          return TableRow(
+            decoration: BoxDecoration(color: rowBg),
+            children: [
+              _cell(insumo.nombre, bold: true),
+              _cell(insumo.ubicacion),
+              _cell(insumo.stockActual.toStringAsFixed(0)),
+              _cell(insumo.stockMinimo.toStringAsFixed(0)),
+              _semaforo(insumo.semaforo),
+              // Indicador SGA
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: Center(
+                  child: insumo.tieneSga
+                      ? const Tooltip(
+                          message: 'Datos SGA cargados',
+                          child: Icon(Icons.check_circle, size: 16, color: kSuccess))
+                      : const Tooltip(
+                          message: 'Sin datos SGA',
+                          child: Icon(Icons.radio_button_unchecked, size: 16, color: kTextMuted)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: _sgaBtn(context, insumo),
+              ),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  TableRow _headerRow(List<String> cols) => TableRow(
+    decoration: const BoxDecoration(color: kPrimary),
+    children: cols.map((h) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Text(h, style: const TextStyle(
+          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+    )).toList(),
+  );
+
+  Widget _cell(String text, {bool bold = false}) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    child: Text(text,
+        style: TextStyle(fontWeight: bold ? FontWeight.w600 : FontWeight.normal)),
+  );
+
+  Widget _semaforo(String s) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    child: Center(
+      child: Container(
+        width: 14, height: 14,
+        decoration: BoxDecoration(
+            color: _semaforoColor(s), shape: BoxShape.circle),
+      ),
+    ),
+  );
+
+  Widget _sgaBtn(BuildContext context, Insumo insumo) => Tooltip(
+    message: 'Ver ficha SGA',
+    child: IconButton(
+      icon: Icon(
+        Icons.science_outlined,
+        size: 20,
+        color: insumo.tieneSga ? kPrimary : kTextMuted,
+      ),
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => SgaScreen(
+            insumoId: insumo.id, insumoNombre: insumo.nombre)),
+      ),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+    ),
+  );
+
+  Widget _buildEmpty() => Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(
+        _filtroTipo == 'Químico'
+            ? Icons.science_outlined
+            : Icons.inventory_2_outlined,
+        size: 64, color: kTextMuted,
+      ),
+      const SizedBox(height: 12),
+      Text(
+        _searchQuery.isEmpty
+            ? (_filtroTipo == 'Todos'
+                ? 'No hay insumos registrados'
+                : 'No hay insumos de tipo "$_filtroTipo"')
+            : 'Sin resultados para "$_searchQuery"',
+        style: const TextStyle(color: kTextMuted),
+      ),
+    ]),
+  );
+
+  Widget _leyenda(Color color, String label) => Row(children: [
+    Container(width: 12, height: 12,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+    const SizedBox(width: 4),
+    Text(label, style: const TextStyle(fontSize: 12, color: kTextMuted)),
+  ]);
 }
