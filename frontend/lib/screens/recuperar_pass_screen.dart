@@ -163,26 +163,17 @@ class _RecuperarPassScreenState extends State<RecuperarPassScreen> {
         const Icon(Icons.mark_email_read_outlined, size: 64, color: kSuccess),
         const SizedBox(height: 16),
         const Text(
-          'Si el correo está registrado, recibirás las instrucciones en tu bandeja de entrada.',
+          'Si el correo está registrado, recibirás un enlace en tu bandeja de entrada.',
           textAlign: TextAlign.center,
           style: TextStyle(height: 1.5),
         ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton.icon(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/restablecer-pass'),
-            icon: const Icon(Icons.vpn_key),
-            label: const Text('Ingresar código', style: TextStyle(fontSize: 16)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            ),
-          ),
-        ),
         const SizedBox(height: 12),
+        const Text(
+          'Abre el correo y haz clic en el botón "Restablecer contraseña".\nEl enlace es válido por 1 hora.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: kTextMuted, fontSize: 13, height: 1.5),
+        ),
+        const SizedBox(height: 28),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Volver al inicio de sesión', style: TextStyle(color: kPrimary)),
