@@ -21,8 +21,10 @@ class _InventarioContentState extends State<InventarioContent> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() =>
-        Provider.of<InventarioProvider>(context, listen: false).fetchInsumos());
+    Future.microtask(() {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      Provider.of<InventarioProvider>(context, listen: false).fetchInsumos(auth.token);
+    });
   }
 
   @override
@@ -37,12 +39,12 @@ class _InventarioContentState extends State<InventarioContent> {
     _ => kSemaforoVerde,
   };
 
-  Future<void> _abrirFormulario(BuildContext context, InventarioProvider provider) async {
+  Future<void> _abrirFormulario(BuildContext context, InventarioProvider provider, String? token) async {
     final recargado = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => const InsumoFormScreen()),
     );
-    if (recargado == true) provider.fetchInsumos();
+    if (recargado == true) provider.fetchInsumos(token);
   }
 
   @override
@@ -91,7 +93,7 @@ class _InventarioContentState extends State<InventarioContent> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton.icon(
-                    onPressed: () => provider.fetchInsumos(),
+                    onPressed: () => provider.fetchInsumos(auth.token),
                     icon: const Icon(Icons.refresh, size: 18),
                     label: const Text("Actualizar"),
                     style: ElevatedButton.styleFrom(
@@ -221,7 +223,7 @@ class _InventarioContentState extends State<InventarioContent> {
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add),
               label: const Text('Nuevo insumo'),
-              onPressed: () => _abrirFormulario(context, provider),
+              onPressed: () => _abrirFormulario(context, provider, auth.token),
             ),
           ),
         ]);

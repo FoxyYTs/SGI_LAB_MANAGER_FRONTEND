@@ -7,6 +7,7 @@ class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage();
 
   String?      _token;
+  String?      _refreshToken;
   String?      _rol;
   String?      _username;
   Set<String>  _permisos = {};
@@ -21,9 +22,10 @@ class AuthProvider with ChangeNotifier {
   bool can(String permiso) => _permisos.contains(permiso);
 
   Future<void> cargarSesion() async {
-    _token    = await _storage.read(key: 'token');
-    _rol      = await _storage.read(key: 'rol');
-    _username = await _storage.read(key: 'username');
+    _token        = await _storage.read(key: 'token');
+    _refreshToken = await _storage.read(key: 'refresh_token');
+    _rol          = await _storage.read(key: 'rol');
+    _username     = await _storage.read(key: 'username');
 
     final permsJson = await _storage.read(key: 'permisos');
     if (permsJson != null) {
@@ -39,11 +41,13 @@ class AuthProvider with ChangeNotifier {
         'password': password,
       });
 
-      _token    = response.data['access'];
-      _username = username;
+      _token        = response.data['access'];
+      _refreshToken = response.data['refresh'];
+      _username     = username;
 
-      await _storage.write(key: 'token',    value: _token);
-      await _storage.write(key: 'username', value: username);
+      await _storage.write(key: 'token',         value: _token);
+      await _storage.write(key: 'refresh_token', value: _refreshToken);
+      await _storage.write(key: 'username',       value: username);
 
       // Carga permisos justo después del login
       await _cargarPermisos();

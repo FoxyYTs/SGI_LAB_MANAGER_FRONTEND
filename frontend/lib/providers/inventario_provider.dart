@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/insumo_model.dart';
 import '../core/api/api_client.dart';
 
 class InventarioProvider with ChangeNotifier {
   List<Insumo> _insumos = [];
   bool _cargando = false;
-  final _storage = const FlutterSecureStorage();
 
   List<Insumo> get insumos => _insumos;
   bool get cargando => _cargando;
 
-  Future<void> fetchInsumos() async {
+  Future<void> fetchInsumos(String? token) async {
     _cargando = true;
     notifyListeners();
 
     try {
-      final token = await _storage.read(key: 'token');
       final dio = ApiClient.instance.authenticatedDio(token);
       final response = await dio.get('inventario/lista/');
       final List<dynamic> data = response.data;
