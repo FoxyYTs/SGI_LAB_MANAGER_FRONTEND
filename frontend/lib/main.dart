@@ -5,6 +5,9 @@ import 'providers/inventario_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/solicitud_prestamo_screen.dart';
+import 'screens/registro_screen.dart';
+import 'screens/recuperar_pass_screen.dart';
+import 'screens/restablecer_pass_screen.dart';
 import 'core/theme/colors.dart';
 
 void main() {
@@ -53,9 +56,11 @@ class MyApp extends StatelessWidget {
       ),
       home: const LoginScreen(),
       routes: {
-        '/': (context) => const LoginScreen(),
         '/dashboard': (context) => const MainShell(),
         '/solicitud': (context) => const SolicitudPrestamoScreen(),
+        '/registro': (context) => const RegistroScreen(),
+        '/recuperar-pass': (context) => const RecuperarPassScreen(),
+        '/restablecer-pass': (context) => const RestablecerPassScreen(),
       },
     );
   }

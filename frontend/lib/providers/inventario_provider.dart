@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/insumo_model.dart';
+import '../core/api/api_client.dart';
 
 class InventarioProvider with ChangeNotifier {
   List<Insumo> _insumos = [];
   bool _cargando = false;
-  final Dio _dio = Dio(BaseOptions(baseUrl: "http://localhost:8000/api/"));
   final _storage = const FlutterSecureStorage();
 
   List<Insumo> get insumos => _insumos;
@@ -18,12 +17,8 @@ class InventarioProvider with ChangeNotifier {
 
     try {
       final token = await _storage.read(key: 'token');
-      final response = await _dio.get(
-        'inventario/lista/',
-        options: Options(headers: {
-          if (token != null) 'Authorization': 'Bearer $token',
-        }),
-      );
+      final dio = ApiClient.instance.authenticatedDio(token);
+      final response = await dio.get('inventario/lista/');
       final List<dynamic> data = response.data;
       _insumos = data.map((item) => Insumo.fromJson(item)).toList();
     } catch (e) {
