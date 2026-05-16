@@ -199,59 +199,65 @@ class _MovimientosContentState extends State<MovimientosContent> {
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Table(
-                border: TableBorder(
-                  horizontalInside: const BorderSide(color: Color(0xFFDEE2E6)),
-                ),
-                columnWidths: const {
-                  0: FlexColumnWidth(2.5),
-                  1: FlexColumnWidth(1),
-                  2: FlexColumnWidth(2),
-                  3: FlexColumnWidth(2),
-                  4: FlexColumnWidth(1.5),
-                  5: FixedColumnWidth(130),
-                },
-                children: [
-                  TableRow(
-                    decoration: const BoxDecoration(color: kPrimary),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 680),
+                  child: Table(
+                    border: const TableBorder(
+                      horizontalInside: BorderSide(color: Color(0xFFDEE2E6)),
+                    ),
+                    columnWidths: const {
+                      0: FlexColumnWidth(2.5),
+                      1: FlexColumnWidth(1),
+                      2: FlexColumnWidth(2),
+                      3: FlexColumnWidth(2),
+                      4: FlexColumnWidth(1.5),
+                      5: FixedColumnWidth(110),
+                    },
                     children: [
-                      "Implemento", "Cantidad", "Fecha y hora",
-                      "Nombre de quien recibe", "Entregado por", "Devolución"
-                    ].map((h) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      child: Text(h, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    )).toList(),
-                  ),
-                  // Fila de ejemplo mientras se conecta con el backend
-                  TableRow(
-                    children: [
-                      _cell("Sin datos"),
-                      _cell("—"),
-                      _cell("—"),
-                      _cell("—"),
-                      _cell("—"),
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: ElevatedButton(
-                          onPressed: null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: kPrimary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      TableRow(
+                        decoration: const BoxDecoration(color: kPrimary),
+                        children: [
+                          "Implemento", "Cantidad", "Fecha y hora",
+                          "Nombre de quien recibe", "Entregado por", "Devolución"
+                        ].map((h) => Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Text(h, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        )).toList(),
+                      ),
+                      TableRow(
+                        children: [
+                          _cell("Sin datos"),
+                          _cell("—"),
+                          _cell("—"),
+                          _cell("—"),
+                          _cell("—"),
+                          Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: ElevatedButton(
+                              onPressed: null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: kPrimary,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              ),
+                              child: const Text("Devolver", style: TextStyle(color: Colors.white, fontSize: 12)),
+                            ),
                           ),
-                          child: const Text("Devolver", style: TextStyle(color: Colors.white, fontSize: 12)),
-                        ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
