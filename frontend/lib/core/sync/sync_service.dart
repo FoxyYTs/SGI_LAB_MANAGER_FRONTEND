@@ -30,13 +30,19 @@ class SyncService extends ChangeNotifier {
   Future<void> init(String? token) async {
     _token = token;
     _sub?.cancel();
-    _sub = Connectivity().onConnectivityChanged.listen(_onConnectivity);
 
-    // Estado inicial de red
-    final results = await Connectivity().checkConnectivity();
-    _online = results.any((r) => r != ConnectivityResult.none);
+    // connectivity_plus en Linux necesita NetworkManager via D-Bus.
+    // Si no está disponible (Arch sin NM, systemd-networkd, iwd, etc.)
+    // se asume online y se omite el listener — en escritorio siempre hay red.
+    try {
+      _sub = Connectivity().onConnectivityChanged.listen(_onConnectivity);
+      final results = await Connectivity().checkConnectivity();
+      _online = results.any((r) => r != ConnectivityResult.none);
+    } catch (_) {
+      _online = true;
+    }
+
     await _refreshPending();
-
     if (_online) _processQueue();
   }
 
