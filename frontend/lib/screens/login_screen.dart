@@ -15,13 +15,13 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   void _handleLogin() async {
-    setState() => _isLoading = true;
-    
+    setState(() => _isLoading = true);
+
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final success = await auth.login(_userController.text, _passController.text);
 
     if (mounted) {
-      setState() => _isLoading = false;
+      setState(() => _isLoading = false);
       if (success) {
         // Navegar al Dashboard según el rol obtenido
         Navigator.pushReplacementNamed(context, '/dashboard');
