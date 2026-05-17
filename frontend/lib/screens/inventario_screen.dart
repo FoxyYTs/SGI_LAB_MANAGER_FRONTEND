@@ -6,6 +6,7 @@ import '../models/insumo_model.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import 'insumo_form_screen.dart';
+import 'insumo_detail_screen.dart';
 import 'sga_screen.dart';
 
 class InventarioContent extends StatefulWidget {
@@ -230,7 +231,11 @@ class _InventarioContentState extends State<InventarioContent> {
           return TableRow(
             decoration: BoxDecoration(color: rowBg),
             children: [
-              _cell(insumo.nombre, bold: true),
+              _cell(insumo.nombre, bold: true,
+                  onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => InsumoDetailScreen(
+                        insumoId: insumo.id,
+                        insumoNombre: insumo.nombre)))),
               _cell(insumo.tipo),
               _cell(insumo.ubicacion),
               _cell(insumo.stockActual.toStringAsFixed(0)),
@@ -274,7 +279,11 @@ class _InventarioContentState extends State<InventarioContent> {
           return TableRow(
             decoration: BoxDecoration(color: rowBg),
             children: [
-              _cell(insumo.nombre, bold: true),
+              _cell(insumo.nombre, bold: true,
+                  onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => InsumoDetailScreen(
+                        insumoId: insumo.id,
+                        insumoNombre: insumo.nombre)))),
               _cell(insumo.ubicacion),
               _cell(insumo.stockActual.toStringAsFixed(0)),
               _cell(insumo.stockMinimo.toStringAsFixed(0)),
@@ -317,11 +326,20 @@ class _InventarioContentState extends State<InventarioContent> {
     )).toList(),
   );
 
-  Widget _cell(String text, {bool bold = false}) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    child: Text(text,
-        style: TextStyle(fontWeight: bold ? FontWeight.w600 : FontWeight.normal)),
-  );
+  Widget _cell(String text, {bool bold = false, VoidCallback? onTap}) {
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Text(text,
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
+            color: onTap != null ? kPrimary : null,
+            decoration: onTap != null ? TextDecoration.underline : null,
+            decorationColor: kPrimary,
+          )),
+    );
+    if (onTap == null) return content;
+    return InkWell(onTap: onTap, child: content);
+  }
 
   Widget _semaforo(String s) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
