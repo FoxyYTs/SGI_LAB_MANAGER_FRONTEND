@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -31,15 +32,22 @@ class SyncService extends ChangeNotifier {
     _token = token;
     _sub?.cancel();
 
-    // connectivity_plus en Linux necesita NetworkManager via D-Bus.
-    // Si no está disponible (Arch sin NM, systemd-networkd, iwd, etc.)
-    // se asume online y se omite el listener — en escritorio siempre hay red.
-    try {
-      _sub = Connectivity().onConnectivityChanged.listen(_onConnectivity);
-      final results = await Connectivity().checkConnectivity();
-      _online = results.any((r) => r != ConnectivityResult.none);
-    } catch (_) {
+    // Linux desktop: connectivity_plus needs NetworkManager via D-Bus which
+    // is not available on all setups (Arch + iwd/systemd-networkd).
+    // Skip entirely and assume online — desktop is always connected.
+    if (Platform.isLinux) {
       _online = true;
+    } else {
+      try {
+        _sub = Connectivity().onConnectivityChanged.listen(
+          _onConnectivity,
+          onError: (_) {},
+        );
+        final results = await Connectivity().checkConnectivity();
+        _online = results.any((r) => r != ConnectivityResult.none);
+      } catch (_) {
+        _online = true;
+      }
     }
 
     await _refreshPending();

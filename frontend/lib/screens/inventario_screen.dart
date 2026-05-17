@@ -205,25 +205,28 @@ class _InventarioContentState extends State<InventarioContent> {
   // ── Tabla general (Todos / Implemento / Vidriería / Equipo) ───────────────
 
   Widget _buildTablaGeneral(List<Insumo> items, BuildContext context) {
+    // Solo mostrar columna SGA en vista "Todos" donde puede haber químicos
+    final showSga = _filtroTipo == 'Todos';
     return Table(
-      columnWidths: const {
-        0: FlexColumnWidth(3),
-        1: FlexColumnWidth(1.5),
-        2: FlexColumnWidth(1.5),
-        3: FlexColumnWidth(1.2),
-        4: FlexColumnWidth(1.2),
-        5: FixedColumnWidth(60),
-        6: FixedColumnWidth(52),
+      columnWidths: {
+        0: const FlexColumnWidth(3),
+        1: const FlexColumnWidth(1.5),
+        2: const FlexColumnWidth(1.5),
+        3: const FlexColumnWidth(1.2),
+        4: const FlexColumnWidth(1.2),
+        5: const FixedColumnWidth(70),
+        if (showSga) 6: const FixedColumnWidth(56),
       },
       border: const TableBorder(
           horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
       children: [
-        _headerRow(['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA']),
+        _headerRow(showSga
+            ? ['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA']
+            : ['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado']),
         ...items.asMap().entries.map((e) {
           final idx    = e.key;
           final insumo = e.value;
           final rowBg  = idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white;
-          final esQ    = insumo.tipo == 'Químico';
           return TableRow(
             decoration: BoxDecoration(color: rowBg),
             children: [
@@ -233,12 +236,13 @@ class _InventarioContentState extends State<InventarioContent> {
               _cell(insumo.stockActual.toStringAsFixed(0)),
               _cell(insumo.stockMinimo.toStringAsFixed(0)),
               _semaforo(insumo.semaforo),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                child: esQ
-                    ? _sgaBtn(context, insumo)
-                    : const SizedBox.shrink(),
-              ),
+              if (showSga)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: insumo.tipo == 'Químico'
+                      ? _sgaBtn(context, insumo)
+                      : const SizedBox.shrink(),
+                ),
             ],
           );
         }),
@@ -255,14 +259,14 @@ class _InventarioContentState extends State<InventarioContent> {
         1: FlexColumnWidth(1.5),
         2: FlexColumnWidth(1.2),
         3: FlexColumnWidth(1.2),
-        4: FixedColumnWidth(60),
-        5: FixedColumnWidth(80),
-        6: FixedColumnWidth(52),
+        4: FixedColumnWidth(70),
+        5: FixedColumnWidth(60),
+        6: FixedColumnWidth(56),
       },
       border: const TableBorder(
           horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
       children: [
-        _headerRow(['Nombre', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'Datos SGA', 'Ficha']),
+        _headerRow(['Nombre', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA', 'Ficha']),
         ...items.asMap().entries.map((e) {
           final idx    = e.key;
           final insumo = e.value;
@@ -304,9 +308,12 @@ class _InventarioContentState extends State<InventarioContent> {
   TableRow _headerRow(List<String> cols) => TableRow(
     decoration: const BoxDecoration(color: kPrimary),
     children: cols.map((h) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Text(h, style: const TextStyle(
-          color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: Text(h,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
     )).toList(),
   );
 
