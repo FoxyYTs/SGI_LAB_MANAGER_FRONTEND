@@ -22,7 +22,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -59,16 +59,14 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
           unselectedLabelColor: kTextMuted,
           indicatorColor: kPrimary,
           tabs: const [
-            Tab(icon: Icon(Icons.category_outlined),    text: 'Tipos'),
-            Tab(icon: Icon(Icons.place_outlined),        text: 'Ubicaciones'),
-            Tab(icon: Icon(Icons.straighten_outlined),   text: 'Unidades'),
+            Tab(icon: Icon(Icons.place_outlined),      text: 'Ubicaciones'),
+            Tab(icon: Icon(Icons.straighten_outlined), text: 'Unidades'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tab,
         children: const [
-          _TiposTab(),
           _UbicacionesTab(),
           _UnidadesTab(),
         ],
@@ -193,74 +191,6 @@ class _CrudListState extends State<_CrudList> {
         backgroundColor: kPrimary,
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () => widget.formDialog(null, context, (data) => _save(data)),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────
-// Tab: Tipos de Insumo
-// ─────────────────────────────────────────
-class _TiposTab extends StatelessWidget {
-  const _TiposTab();
-
-  static const _opciones = ['Implemento', 'Vidriería', 'Químico', 'Equipo'];
-
-  static const _iconos = {
-    'Implemento': Icons.build_outlined,
-    'Vidriería':  Icons.wine_bar_outlined,
-    'Químico':    Icons.science_outlined,
-    'Equipo':     Icons.precision_manufacturing_outlined,
-  };
-
-  Future<void> _dialog(Map? item, BuildContext ctx,
-      Future<void> Function(Map<String, dynamic>) onSave) async {
-    String selected = item?['nombre_tipo'] ?? _opciones.first;
-    await showDialog(
-      context: ctx,
-      builder: (_) => StatefulBuilder(builder: (ctx2, setSt) => AlertDialog(
-        title: Text(item == null ? 'Nuevo tipo de insumo' : 'Editar tipo'),
-        content: DropdownButtonFormField<String>(
-          value: selected,
-          items: _opciones.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-          onChanged: (v) => setSt(() => selected = v!),
-          decoration: const InputDecoration(
-            labelText: 'Tipo',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx2), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
-            onPressed: () async {
-              Navigator.pop(ctx2);
-              await onSave({'nombre_tipo': selected});
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      )),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _CrudList(
-      endpoint: 'inventario/tipos/',
-      titulo: 'Tipos',
-      formDialog: _dialog,
-      itemBuilder: (item, onEdit, onDelete) => Card(
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: kPrimary.withOpacity(0.1),
-            child: Icon(_iconos[item['nombre_tipo']] ?? Icons.category,
-                color: kPrimary, size: 20),
-          ),
-          title: Text(item['nombre_tipo'],
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
-        ),
       ),
     );
   }
