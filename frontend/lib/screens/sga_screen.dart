@@ -266,6 +266,24 @@ class _DatosSgaTab extends StatelessWidget {
             _buildSeccion('Primeros auxilios', Icons.medical_services_outlined, kSuccess),
             _buildCard(datos['primeros_auxilios'].toString()),
           ],
+          // ── NFPA 704 ────────────────────────────────────────────────────────
+          if (datos['nfpa_salud'] != null || datos['nfpa_inflamable'] != null ||
+              datos['nfpa_reactivo'] != null) ...[
+            _buildSeccion('Rombo NFPA 704', Icons.emergency_outlined, const Color(0xFF8B0000)),
+            const SizedBox(height: 6),
+            _buildNfpa(datos),
+            const SizedBox(height: 8),
+          ],
+
+          if (datos['fecha_vencimiento']?.toString().isNotEmpty == true) ...[
+            _buildSeccion('Fecha de vencimiento', Icons.event_outlined, kTextMuted),
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 4),
+              child: Text(datos['fecha_vencimiento'].toString(),
+                  style: const TextStyle(fontSize: 13)),
+            ),
+          ],
+
           if (datos['fds_drive_url']?.toString().isNotEmpty == true)
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -414,6 +432,25 @@ class _DatosSgaTab extends StatelessWidget {
     ),
     child: Text(text, style: const TextStyle(fontSize: 13)),
   );
+
+  Widget _buildNfpa(Map<String, dynamic> d) {
+    Widget cell(String label, dynamic val, Color bg) => Container(
+      width: 56, height: 56,
+      color: bg,
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text(val?.toString() ?? '–',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
+        Text(label,
+            style: const TextStyle(color: Colors.white, fontSize: 8)),
+      ]),
+    );
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      cell('SALUD',      d['nfpa_salud'],      Colors.blue.shade700),
+      cell('INFLAM.',    d['nfpa_inflamable'],  Colors.red.shade700),
+      cell('REACTIV.',   d['nfpa_reactivo'],    Colors.yellow.shade700),
+      cell('ESPEC.',     d['nfpa_corrosivo'] == true ? 'W' : '–', Colors.grey.shade700),
+    ]);
+  }
 }
 
 // ── Tab: Edición de datos SGA ─────────────────────────────────────────────────
@@ -434,6 +471,11 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
   bool _guardando = false;
 
   final _c = <String, TextEditingController>{};
+  int? _nfpaSalud;
+  int? _nfpaInflamable;
+  int? _nfpaReactivo;
+  bool _nfpaCorrosivo = false;
+  DateTime? _fechaVencimiento;
 
   @override
   void initState() {
@@ -445,6 +487,14 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
         'controles_tecnicos', 'primeros_auxilios', 'lucha_incendios',
         'vertido_accidental', 'estabilidad_reactividad', 'numero_un', 'estado_fisico']) {
       _c[k] = TextEditingController(text: _d[k]?.toString() ?? '');
+    }
+    _nfpaSalud       = _d['nfpa_salud'] as int?;
+    _nfpaInflamable  = _d['nfpa_inflamable'] as int?;
+    _nfpaReactivo    = _d['nfpa_reactivo'] as int?;
+    _nfpaCorrosivo   = _d['nfpa_corrosivo'] as bool? ?? false;
+    final fv = _d['fecha_vencimiento']?.toString();
+    if (fv != null && fv.isNotEmpty) {
+      _fechaVencimiento = DateTime.tryParse(fv);
     }
   }
 
@@ -463,6 +513,15 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
     for (final k in _c.keys) {
       payload[k] = _c[k]!.text.trim();
     }
+    payload['nfpa_salud']       = _nfpaSalud;
+    payload['nfpa_inflamable']  = _nfpaInflamable;
+    payload['nfpa_reactivo']    = _nfpaReactivo;
+    payload['nfpa_corrosivo']   = _nfpaCorrosivo;
+    payload['fecha_vencimiento'] = _fechaVencimiento != null
+        ? '${_fechaVencimiento!.year.toString().padLeft(4, '0')}-'
+          '${_fechaVencimiento!.month.toString().padLeft(2, '0')}-'
+          '${_fechaVencimiento!.day.toString().padLeft(2, '0')}'
+        : null;
     try {
       final dio = ApiClient.instance.authenticatedDio(_token);
       final r = await dio.patch(
@@ -569,6 +628,57 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
             _seccion('Sección 14 — Transporte UN'),
             TextFormField(controller: _c['numero_un'], decoration: _deco('Número UN')),
 
+            _seccion('Rombo NFPA 704'),
+            Row(children: [
+              Expanded(child: _nfpaDropdown('Salud', _nfpaSalud,
+                  (v) => setState(() => _nfpaSalud = v))),
+              const SizedBox(width: 10),
+              Expanded(child: _nfpaDropdown('Inflamable', _nfpaInflamable,
+                  (v) => setState(() => _nfpaInflamable = v))),
+              const SizedBox(width: 10),
+              Expanded(child: _nfpaDropdown('Reactivo', _nfpaReactivo,
+                  (v) => setState(() => _nfpaReactivo = v))),
+            ]),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              title: const Text('Corrosivo (W especial)'),
+              value: _nfpaCorrosivo,
+              activeColor: kPrimary,
+              onChanged: (v) => setState(() => _nfpaCorrosivo = v),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+            ),
+
+            _seccion('Vencimiento del lote'),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.event_outlined, color: kPrimary),
+              title: Text(_fechaVencimiento != null
+                  ? '${_fechaVencimiento!.day.toString().padLeft(2,'0')}/'
+                    '${_fechaVencimiento!.month.toString().padLeft(2,'0')}/'
+                    '${_fechaVencimiento!.year}'
+                  : 'Sin fecha de vencimiento'),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                TextButton(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _fechaVencimiento ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2099),
+                    );
+                    if (picked != null) setState(() => _fechaVencimiento = picked);
+                  },
+                  child: const Text('Seleccionar'),
+                ),
+                if (_fechaVencimiento != null)
+                  IconButton(
+                    icon: const Icon(Icons.clear, size: 18),
+                    onPressed: () => setState(() => _fechaVencimiento = null),
+                  ),
+              ]),
+            ),
+
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
@@ -599,6 +709,17 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
     child: Text(title,
         style: const TextStyle(fontWeight: FontWeight.bold, color: kPrimary, fontSize: 14)),
   );
+
+  Widget _nfpaDropdown(String label, int? value, void Function(int?) onChanged) =>
+    DropdownButtonFormField<int?>(
+      value: value,
+      decoration: _deco(label),
+      items: [
+        const DropdownMenuItem(value: null, child: Text('–')),
+        ...List.generate(5, (i) => DropdownMenuItem(value: i, child: Text(i.toString()))),
+      ],
+      onChanged: onChanged,
+    );
 }
 
 // ── Tab: Datos para Colmena ARL ───────────────────────────────────────────────
