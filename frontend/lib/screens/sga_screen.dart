@@ -80,7 +80,9 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     try {
       final r = await _dio.get('inventario/lista/${widget.insumoId}/sga/colmena/');
       setState(() { _colmena = Map<String, dynamic>.from(r.data); });
-    } catch (_) {}
+    } catch (_) {
+      setState(() { _colmena = {}; });
+    }
   }
 
   Future<void> _extraerFDS() async {
@@ -609,6 +611,19 @@ class _ColmenaTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (colmena == null) {
       return const Center(child: CircularProgressIndicator(color: kPrimary));
+    }
+    if (colmena!.isEmpty) {
+      return const Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.science_outlined, size: 48, color: kTextMuted),
+          SizedBox(height: 12),
+          Text('No hay datos SGA cargados para este químico.',
+              style: TextStyle(color: kTextMuted)),
+          SizedBox(height: 4),
+          Text('Usa la pestaña "Editar" o sube una FDS para extraer los datos.',
+              style: TextStyle(color: kTextMuted, fontSize: 12)),
+        ]),
+      );
     }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
