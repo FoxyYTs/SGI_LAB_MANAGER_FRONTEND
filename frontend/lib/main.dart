@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
@@ -16,8 +17,7 @@ import 'core/database/local_db.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Inicializa SQLite antes de arrancar la app
-  await LocalDb.instance;
+  if (!kIsWeb) await LocalDb.instance;
 
   runApp(
     MultiProvider(

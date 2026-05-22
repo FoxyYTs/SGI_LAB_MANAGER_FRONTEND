@@ -8,7 +8,7 @@ class QrGeneratorDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const String urlSolicitud = "http://10.51.1.226:8080/#/solicitud";
+    const String urlSolicitud = "http://192.168.0.4:8080/#/solicitud";
 
     return AlertDialog(
       title: const Text("Generar QR de Préstamo"),

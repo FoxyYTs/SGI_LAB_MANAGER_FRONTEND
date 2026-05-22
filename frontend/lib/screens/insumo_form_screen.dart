@@ -49,6 +49,9 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
   bool _loading    = true;
   bool _guardando  = false;
 
+  // Foto (URL externa — imgur, drive, etc.)
+  final _fotoCtrl = TextEditingController();
+
   bool get _esQuimico  => _tipoNombre == 'Químico';
   bool get _esMaterial => _tipoNombre == 'Implemento' || _tipoNombre == 'Vidriería';
 
@@ -61,7 +64,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
   @override
   void dispose() {
     for (final c in [
-      _nombreCtrl, _stockActualCtrl, _stockMinimoCtrl, _observCtrl,
+      _nombreCtrl, _stockActualCtrl, _stockMinimoCtrl, _observCtrl, _fotoCtrl,
       _formulaCtrl, _casCtrl, _concCtrl, _pictogramasCtrl, _frasesHCtrl, _frasesPCtrl,
       _marcaCtrl, _capacidadCtrl, _materialCtrl,
     ]) {
@@ -103,7 +106,8 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
     _tipoId     = ins['tipo_insumo']?.toString();
     _ubicacionId = ins['ubicacion']?.toString();
     _unidadId   = ins['unidad_medida']?.toString();
-    _tipoNombre = ins['tipo_nombre'] ?? '';
+    _tipoNombre     = ins['tipo_nombre'] ?? '';
+    _fotoCtrl.text  = ins['foto'] as String? ?? '';
     setState(() {});
   }
 
@@ -122,6 +126,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
       'stock_actual':  double.tryParse(_stockActualCtrl.text) ?? 0,
       'stock_minimo':  double.tryParse(_stockMinimoCtrl.text) ?? 0,
       'observaciones': _observCtrl.text.trim(),
+      'foto':          _fotoCtrl.text.trim().isEmpty ? null : _fotoCtrl.text.trim(),
     };
 
     try {
@@ -161,7 +166,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
           content: Text('Insumo guardado correctamente.'),
           backgroundColor: kSuccess,
         ));
-        Navigator.pop(context, true); // true = recargar la lista
+        Navigator.pop(context, true);
       }
     } catch (e) {
       String msg = 'Error al guardar el insumo.';
@@ -284,6 +289,11 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                     maxLines: 2,
                     decoration: _deco('Observaciones', Icons.notes_outlined),
                   ),
+                  const SizedBox(height: 20),
+
+                  // ── Foto ──
+                  _seccion('Foto del insumo'),
+                  _buildFotoSelector(),
 
                   // ── Detalle Químico ──
                   if (_esQuimico) ...[
@@ -341,6 +351,49 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildFotoSelector() {
+    final url = _fotoCtrl.text.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (url.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                url,
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  height: 60,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text('URL de imagen inválida o inaccesible',
+                      style: TextStyle(color: kTextMuted, fontSize: 12)),
+                ),
+              ),
+            ),
+          ),
+        TextFormField(
+          controller: _fotoCtrl,
+          decoration: _deco('URL de imagen (imgur, drive…)', Icons.image_outlined),
+          keyboardType: TextInputType.url,
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Pega el enlace directo a la imagen. Ej: https://i.imgur.com/abc123.jpg',
+          style: TextStyle(fontSize: 11, color: kTextMuted),
+        ),
+      ],
     );
   }
 

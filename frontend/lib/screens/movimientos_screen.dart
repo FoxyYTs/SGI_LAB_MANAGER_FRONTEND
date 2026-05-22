@@ -5,6 +5,7 @@ import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../providers/auth_provider.dart';
 import '../providers/inventario_provider.dart';
+import '../models/insumo_model.dart';
 
 class MovimientosContent extends StatefulWidget {
   const MovimientosContent({super.key});
@@ -271,9 +272,10 @@ class _PrestamoFormState extends State<_PrestamoForm> {
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               const Text('Nuevo Préstamo',
                   style: TextStyle(
                       fontSize: 16, fontWeight: FontWeight.bold)),
@@ -364,11 +366,12 @@ class _PrestamoFormState extends State<_PrestamoForm> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
 
-  Widget _buildItemRow(int i, insumos) {
+  Widget _buildItemRow(int i, List<Insumo> insumos) {
     final item = _items[i];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),

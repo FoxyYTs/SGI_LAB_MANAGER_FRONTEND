@@ -7,6 +7,8 @@ import '../core/sync/sync_service.dart';
 import 'dashboard_screen.dart';
 import 'inventario_screen.dart';
 import 'movimientos_screen.dart';
+import 'bitacora_screen.dart';
+import 'horario_screen.dart';
 import 'configuracion_screen.dart';
 
 class _TabDef {
@@ -25,6 +27,10 @@ class MainShell extends StatelessWidget {
       const _TabDef(Icons.inventory_2_outlined, 'Inventario',  InventarioContent()),
     if (auth.can(Perm.prestamosVer))
       const _TabDef(Icons.swap_horiz_outlined,  'Movimientos', MovimientosContent()),
+    if (auth.can(Perm.bitacoraVer))
+      const _TabDef(Icons.history_outlined,     'Bitácora',    BitacoraContent()),
+    if (auth.can(Perm.academicoVer))
+      const _TabDef(Icons.calendar_month_outlined, 'Horario',  HorarioScreen()),
     if (auth.can(Perm.configuracionGestion))
       const _TabDef(Icons.settings_outlined,    'Configuración', ConfiguracionScreen()),
   ];

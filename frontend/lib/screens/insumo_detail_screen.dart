@@ -123,11 +123,38 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
       semaforoLabel = 'En stock';
     }
 
+    final fotoAbsUrl = (d['foto'] as String?)?.isNotEmpty == true
+        ? d['foto'] as String
+        : null;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Foto del insumo ─────────────────────────────────────────────
+          if (fotoAbsUrl != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(
+                fotoAbsUrl,
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                loadingBuilder: (_, child, progress) => progress == null
+                    ? child
+                    : Container(
+                        height: 200,
+                        color: Colors.grey[100],
+                        child: const Center(
+                            child: CircularProgressIndicator(color: kPrimary)),
+                      ),
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
           // ── Info general ────────────────────────────────────────────────
           Card(
             child: Padding(

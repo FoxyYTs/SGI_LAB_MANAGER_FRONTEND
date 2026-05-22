@@ -245,6 +245,8 @@ class _PermisosPorUsuario extends StatefulWidget {
 }
 
 class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
+  static const _rolesDisponibles = ['ADMIN', 'LAB', 'MONITOR', 'ESTUDIANTE'];
+
   List<Map<String, dynamic>> _usuarios = [];
   Map<String, dynamic>?      _seleccionado;
   Set<String>                _rolPermisos   = {};
@@ -253,6 +255,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   Map<String, int>           _extraIds      = {};
   bool _loadingUsuarios = true;
   bool _loadingPermisos = false;
+  bool _cambiandoRol    = false;
 
   @override
   void initState() {
@@ -300,6 +303,39 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
       });
     } catch (_) {
       setState(() => _loadingPermisos = false);
+    }
+  }
+
+  Future<void> _cambiarRol(String nuevoRol) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    setState(() => _cambiandoRol = true);
+    try {
+      await dio.patch('usuarios/rol/${_seleccionado!['id']}/', data: {'rol': nuevoRol});
+      // Actualizar el mapa local del usuario seleccionado
+      setState(() {
+        _seleccionado = {
+          ..._seleccionado!,
+          'perfil': {
+            ...(_seleccionado!['perfil'] as Map? ?? {}),
+            'rol': nuevoRol,
+          },
+        };
+        // Actualizar también en la lista lateral
+        final idx = _usuarios.indexWhere((u) => u['id'] == _seleccionado!['id']);
+        if (idx != -1) {
+          _usuarios[idx] = _seleccionado!;
+        }
+      });
+      // Recargar los permisos del rol nuevo
+      await _cargarPermisosUsuario(_seleccionado!);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Error al cambiar el rol'), backgroundColor: kDanger));
+      }
+    } finally {
+      if (mounted) setState(() => _cambiandoRol = false);
     }
   }
 
@@ -358,9 +394,9 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
               final rol     = u['perfil']?['rol'] ?? '';
               return ListTile(
                 selected: activo,
-                selectedTileColor: kPrimary.withOpacity(0.08),
+                selectedTileColor: kPrimary.withValues(alpha: 0.08),
                 leading: CircleAvatar(
-                  backgroundColor: activo ? kPrimary : kPrimary.withOpacity(0.15),
+                  backgroundColor: activo ? kPrimary : kPrimary.withValues(alpha: 0.15),
                   child: Text(
                     (u['username'] as String).substring(0, 1).toUpperCase(),
                     style: TextStyle(
@@ -392,24 +428,62 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   }
 
   Widget _buildPermisosPanel() {
-    final nombre = '${_seleccionado!['first_name'] ?? ''} ${_seleccionado!['last_name'] ?? ''}'.trim();
-    final username = _seleccionado!['username'];
-    final rol      = _seleccionado!['perfil']?['rol'] ?? '';
+    final auth     = context.watch<AuthProvider>();
+    final nombre   = '${_seleccionado!['first_name'] ?? ''} ${_seleccionado!['last_name'] ?? ''}'.trim();
+    final username = _seleccionado!['username'] as String;
+    final rol      = (_seleccionado!['perfil']?['rol'] ?? '') as String;
+    final esMiUsuario = auth.username == username;
 
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        // ── Encabezado del usuario ──────────────────────────────────────
         Row(children: [
           const Icon(Icons.person_outline, color: kPrimary),
           const SizedBox(width: 8),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(nombre.isEmpty ? username : nombre,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            Text('@$username · $rol',
-                style: const TextStyle(color: kTextMuted, fontSize: 12)),
-          ]),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(nombre.isEmpty ? username : nombre,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Text('@$username',
+                  style: const TextStyle(color: kTextMuted, fontSize: 12)),
+            ]),
+          ),
         ]),
         const Divider(height: 24),
+
+        // ── Selector de rol ─────────────────────────────────────────────
+        Row(children: [
+          const Icon(Icons.badge_outlined, size: 18, color: kPrimary),
+          const SizedBox(width: 8),
+          const Text('Rol:', style: TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          if (_cambiandoRol)
+            const SizedBox(width: 18, height: 18,
+                child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
+          else if (esMiUsuario)
+            Text(rol, style: const TextStyle(color: kTextMuted))
+          else
+            DropdownButton<String>(
+              value: rol.isEmpty ? null : rol,
+              underline: const SizedBox.shrink(),
+              isDense: true,
+              items: _rolesDisponibles.map((r) => DropdownMenuItem(
+                value: r,
+                child: Text(r, style: const TextStyle(fontSize: 13)),
+              )).toList(),
+              onChanged: (v) {
+                if (v != null && v != rol) _cambiarRol(v);
+              },
+            ),
+          if (esMiUsuario) ...[
+            const SizedBox(width: 8),
+            const Text('(tu cuenta)', style: TextStyle(fontSize: 11, color: kTextMuted)),
+          ],
+        ]),
+        const SizedBox(height: 16),
+
+        // ── Permisos del rol ────────────────────────────────────────────
         const Text('Permisos del rol (solo lectura)',
             style: TextStyle(fontSize: 12, color: kTextMuted, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
@@ -422,6 +496,8 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
           ]),
         )),
         const SizedBox(height: 20),
+
+        // ── Permisos extra ──────────────────────────────────────────────
         const Text('Permisos adicionales (editables)',
             style: TextStyle(fontSize: 12, color: kPrimary, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
@@ -435,7 +511,6 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
             value: extra,
             dense: true,
             activeColor: kPrimary,
-            // Si ya lo tiene por rol, no tiene sentido marcar extra (aunque no rompe nada)
             subtitle: delRol
                 ? const Text('Ya incluido en el rol',
                     style: TextStyle(fontSize: 10, color: kTextMuted))
