@@ -88,42 +88,54 @@ class _TabEncargadosState extends State<_TabEncargados>
     setState(() => _cargando = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
-    try {
-      final results = await Future.wait([
-        dio.get('academico/horario-encargado/'),
-        dio.get('academico/encargados-disponibles/'),
-      ]);
-      final registros = List<Map<String, dynamic>>.from(
-          results[0].data is List ? results[0].data : (results[0].data['results'] ?? []));
-      final disponibles = List<Map<String, dynamic>>.from(
-          results[1].data is List ? results[1].data : (results[1].data['results'] ?? []));
 
+    // Grid y disponibles se cargan por separado: un fallo en uno no bloquea al otro
+    try {
+      final resp = await dio.get('academico/horario-encargado/');
+      final registros = List<Map<String, dynamic>>.from(
+          resp.data is List ? resp.data : (resp.data['results'] ?? []));
       final Map<int, Map<int, List<Map<String, dynamic>>>> grid = {
         for (final d in [0,1,2,3,4,5]) d: {for (final h in _horas) h: []},
       };
       for (final r in registros) {
-        final dia  = r['dia_semana'] as int;
-        final hora = r['hora'] as int;
-        grid[dia]?[hora]?.add(r);
+        grid[r['dia_semana'] as int]?[r['hora'] as int]?.add(r);
       }
-      setState(() { _grid = grid; _disponibles = disponibles; _cargando = false; });
-    } catch (_) {
-      setState(() => _cargando = false);
-    }
+      setState(() => _grid = grid);
+    } catch (_) {}
+
+    try {
+      final resp = await dio.get('academico/encargados-disponibles/');
+      final disponibles = List<Map<String, dynamic>>.from(
+          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      setState(() => _disponibles = disponibles);
+    } catch (_) {}
+
+    setState(() => _cargando = false);
   }
 
   Future<void> _agregar(int dia, int hora) async {
     final auth = context.read<AuthProvider>();
     if (!auth.can(Perm.academicoGestionar)) return;
 
+    if (_disponibles.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No hay usuarios con rol LAB o MONITOR. '
+              'Asigna el rol en Permisos → Por usuario y actualiza.'),
+          duration: Duration(seconds: 4),
+        ));
+      }
+      return;
+    }
+
     // Excluir los que ya están en este slot
     final yaAsignados = _grid[dia]?[hora]?.map((e) => e['usuario'] as int).toSet() ?? {};
-    final opciones = _disponibles.where((u) => !yaAsignados.contains(u['id'])).toList();
+    final opciones = _disponibles.where((u) => !yaAsignados.contains(u['id'] as int)).toList();
 
     if (opciones.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Todos los encargados ya están asignados en este bloque.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Todos los encargados disponibles ya están en este bloque.')));
       }
       return;
     }
@@ -168,12 +180,42 @@ class _TabEncargadosState extends State<_TabEncargados>
 
     if (_cargando) return const Center(child: CircularProgressIndicator(color: kPrimary));
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: _buildGrid(puedeEditar),
-      ),
+    return Column(
+      children: [
+        // Barra superior con info de encargados + botón actualizar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(children: [
+            Icon(Icons.people_outline, size: 16, color: _disponibles.isEmpty ? kDanger : kTextMuted),
+            const SizedBox(width: 6),
+            Text(
+              _disponibles.isEmpty
+                  ? 'Sin encargados LAB/MONITOR disponibles'
+                  : '${_disponibles.length} encargado${_disponibles.length != 1 ? 's' : ''} disponible${_disponibles.length != 1 ? 's' : ''}',
+              style: TextStyle(
+                fontSize: 12,
+                color: _disponibles.isEmpty ? kDanger : kTextMuted,
+              ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _cargar,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Actualizar', style: TextStyle(fontSize: 12)),
+            ),
+          ]),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildGrid(puedeEditar),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -303,33 +345,43 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     setState(() => _cargando = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
-    try {
-      final results = await Future.wait([
-        dio.get('academico/horario-asignatura/'),
-        dio.get('academico/asignaturas/'),
-      ]);
-      final registros = List<Map<String, dynamic>>.from(
-          results[0].data is List ? results[0].data : (results[0].data['results'] ?? []));
-      final asignaturas = List<Map<String, dynamic>>.from(
-          results[1].data is List ? results[1].data : (results[1].data['results'] ?? []));
 
+    try {
+      final resp = await dio.get('academico/horario-asignatura/');
+      final registros = List<Map<String, dynamic>>.from(
+          resp.data is List ? resp.data : (resp.data['results'] ?? []));
       final Map<int, Map<int, List<Map<String, dynamic>>>> grid = {
         for (final d in [0,1,2,3,4,5]) d: {for (final h in _horas) h: []},
       };
       for (final r in registros) {
-        final dia  = r['dia_semana'] as int;
-        final hora = r['hora'] as int;
-        grid[dia]?[hora]?.add(r);
+        grid[r['dia_semana'] as int]?[r['hora'] as int]?.add(r);
       }
-      setState(() { _grid = grid; _asignaturas = asignaturas; _cargando = false; });
-    } catch (_) {
-      setState(() => _cargando = false);
-    }
+      setState(() => _grid = grid);
+    } catch (_) {}
+
+    try {
+      final resp = await dio.get('academico/asignaturas/');
+      final asignaturas = List<Map<String, dynamic>>.from(
+          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      setState(() => _asignaturas = asignaturas);
+    } catch (_) {}
+
+    setState(() => _cargando = false);
   }
 
   Future<void> _agregar(int dia, int hora) async {
     final auth = context.read<AuthProvider>();
     if (!auth.can(Perm.academicoGestionar)) return;
+
+    if (_asignaturas.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No hay asignaturas registradas. Créalas primero.'),
+          duration: Duration(seconds: 3),
+        ));
+      }
+      return;
+    }
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -373,12 +425,41 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
 
     if (_cargando) return const Center(child: CircularProgressIndicator(color: kPrimary));
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: _buildGrid(puedeEditar),
-      ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(children: [
+            Icon(Icons.school_outlined, size: 16, color: _asignaturas.isEmpty ? kDanger : kTextMuted),
+            const SizedBox(width: 6),
+            Text(
+              _asignaturas.isEmpty
+                  ? 'Sin asignaturas registradas'
+                  : '${_asignaturas.length} asignatura${_asignaturas.length != 1 ? 's' : ''} disponible${_asignaturas.length != 1 ? 's' : ''}',
+              style: TextStyle(
+                fontSize: 12,
+                color: _asignaturas.isEmpty ? kDanger : kTextMuted,
+              ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _cargar,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Actualizar', style: TextStyle(fontSize: 12)),
+            ),
+          ]),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildGrid(puedeEditar),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
