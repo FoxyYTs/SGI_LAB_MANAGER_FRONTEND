@@ -10,6 +10,7 @@ class Insumo {
   final bool   activo;
   final bool   tieneSga;
   final String? observaciones;
+  final String? fotoUrl;
 
   const Insumo({
     required this.id,
@@ -23,6 +24,7 @@ class Insumo {
     required this.activo,
     this.tieneSga = false,
     this.observaciones,
+    this.fotoUrl,
   });
 
   factory Insumo.fromJson(Map<String, dynamic> json) => Insumo(
@@ -37,6 +39,7 @@ class Insumo {
     activo:      json['activo'] as bool? ?? true,
     tieneSga:    json['tiene_sga'] as bool? ?? false,
     observaciones: json['observaciones'] as String?,
+    fotoUrl:     json['foto'] as String?,
   );
 
   factory Insumo.fromLocal(Map<String, dynamic> row) => Insumo(

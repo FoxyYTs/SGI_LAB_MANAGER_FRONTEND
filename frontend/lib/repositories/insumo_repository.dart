@@ -1,10 +1,8 @@
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
 import '../core/api/api_client.dart';
 import '../core/database/local_db.dart';
 import '../models/insumo_model.dart';
 
-/// Acceso a insumos: servidor primero, caché local como fallback offline.
 class InsumoRepository {
   static const _entity = 'insumos';
 
@@ -14,10 +12,17 @@ class InsumoRepository {
       final resp = await dio.get('inventario/lista/');
       final data = resp.data as List<dynamic>;
       final insumos = data.map((j) => Insumo.fromJson(j as Map<String, dynamic>)).toList();
-      await _cache(insumos);
+      if (!kIsWeb) {
+        try {
+          await _cache(insumos);
+        } catch (e) {
+          debugPrint('[InsumoRepo] Error al cachear (no crítico): $e');
+        }
+      }
       return insumos;
     } catch (e) {
       debugPrint('[InsumoRepo] Sin red, cargando caché: $e');
+      if (kIsWeb) return [];
       return _fromCache();
     }
   }
@@ -27,15 +32,13 @@ class InsumoRepository {
     final batch = db.batch();
     batch.delete('insumos_cache');
     for (final i in insumos) {
-      batch.insert('insumos_cache', i.toLocal(),
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('insumos_cache', i.toLocal());
     }
     await batch.commit(noResult: true);
 
-    await db.insert(
-      'sync_meta',
-      {'entidad': _entity, 'last_sync': DateTime.now().millisecondsSinceEpoch},
-      conflictAlgorithm: ConflictAlgorithm.replace,
+    await db.rawQuery(
+      'INSERT OR REPLACE INTO sync_meta (entidad, last_sync) VALUES (?, ?)',
+      [_entity, DateTime.now().millisecondsSinceEpoch],
     );
   }
 
@@ -45,8 +48,8 @@ class InsumoRepository {
     return rows.map(Insumo.fromLocal).toList();
   }
 
-  /// Retorna cuándo se hizo la última sincronización, o null si nunca.
   Future<DateTime?> lastSync() async {
+    if (kIsWeb) return null;
     final db = await LocalDb.instance;
     final r  = await db.query('sync_meta', where: 'entidad = ?', whereArgs: [_entity]);
     if (r.isEmpty) return null;
