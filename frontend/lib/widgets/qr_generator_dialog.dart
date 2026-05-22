@@ -2,13 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import '../utils/qr_saver.dart';
+import '../core/api/api_client.dart';
 
 class QrGeneratorDialog extends StatelessWidget {
   const QrGeneratorDialog({super.key});
 
+  static String _buildUrl() {
+    final host = Uri.parse(ApiClient.instance.baseUrl).host;
+    return 'http://$host:8080/#/solicitud';
+  }
+
   @override
   Widget build(BuildContext context) {
-    const String urlSolicitud = "http://192.168.0.4:8080/#/solicitud";
+    final String urlSolicitud = _buildUrl();
 
     return AlertDialog(
       title: const Text("Generar QR de Préstamo"),
@@ -36,7 +42,7 @@ class QrGeneratorDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            const SelectableText(
+            SelectableText(
               urlSolicitud,
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               textAlign: TextAlign.center,
