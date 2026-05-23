@@ -378,18 +378,10 @@ class _PrestamoFormState extends State<_PrestamoForm> {
       child: Row(children: [
         Expanded(
           flex: 3,
-          child: DropdownButtonFormField<String>(
-            value: item.insumoId,
-            decoration: _deco('Insumo', Icons.inventory_2_outlined),
-            items: insumos
-                .map<DropdownMenuItem<String>>((ins) =>
-                    DropdownMenuItem(
-                      value: ins.id,
-                      child: Text(ins.nombre,
-                          overflow: TextOverflow.ellipsis),
-                    ))
-                .toList(),
-            onChanged: (v) => setState(() => item.insumoId = v),
+          child: _InsumoSelectorButton(
+            insumos: insumos,
+            selectedId: item.insumoId,
+            onSelected: (id) => setState(() => item.insumoId = id),
           ),
         ),
         const SizedBox(width: 8),
@@ -434,6 +426,155 @@ class _ItemPrestamo {
   String? insumoId;
   final cantCtrl = TextEditingController(text: '1');
   void dispose() => cantCtrl.dispose();
+}
+
+// ── Botón de selección de insumo con búsqueda ─────────────────────────────────
+
+class _InsumoSelectorButton extends StatelessWidget {
+  final List<Insumo> insumos;
+  final String? selectedId;
+  final ValueChanged<String?> onSelected;
+
+  const _InsumoSelectorButton({
+    required this.insumos,
+    required this.selectedId,
+    required this.onSelected,
+  });
+
+  String? get _nombre {
+    if (selectedId == null) return null;
+    for (final i in insumos) {
+      if (i.id == selectedId) return i.nombre;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final nombre = _nombre;
+    return InkWell(
+      onTap: () async {
+        final sel = await showDialog<Insumo>(
+          context: context,
+          builder: (_) => _SelectorInsumoDialog(insumos: insumos),
+        );
+        if (sel != null) onSelected(sel.id);
+      },
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFAAAAAA)),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(children: [
+          const Icon(Icons.inventory_2_outlined, color: kPrimary, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              nombre ?? 'Seleccionar insumo...',
+              style: TextStyle(
+                color: nombre != null ? Colors.black87 : kTextMuted,
+                fontSize: 14,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const Icon(Icons.search, color: kTextMuted, size: 16),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Diálogo de búsqueda de insumos ────────────────────────────────────────────
+
+class _SelectorInsumoDialog extends StatefulWidget {
+  final List<Insumo> insumos;
+  const _SelectorInsumoDialog({required this.insumos});
+  @override
+  State<_SelectorInsumoDialog> createState() => _SelectorInsumoDialogState();
+}
+
+class _SelectorInsumoDialogState extends State<_SelectorInsumoDialog> {
+  String _query = '';
+
+  Color _semaforoColor(String s) => switch (s) {
+    'ROJO'     => kSemaforoRojo,
+    'AMARILLO' => kSemaforoAmarillo,
+    _          => kSemaforoVerde,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final filtrados = widget.insumos
+        .where((i) =>
+            i.nombre.toLowerCase().contains(_query.toLowerCase()) ||
+            i.tipo.toLowerCase().contains(_query.toLowerCase()))
+        .toList();
+
+    return AlertDialog(
+      title: const Text('Seleccionar insumo',
+          style: TextStyle(color: kPrimary, fontSize: 16)),
+      contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      content: SizedBox(
+        width: 420,
+        height: 400,
+        child: Column(children: [
+          TextField(
+            autofocus: true,
+            onChanged: (v) => setState(() => _query = v),
+            decoration: const InputDecoration(
+              hintText: 'Buscar por nombre o tipo...',
+              prefixIcon: Icon(Icons.search, color: kPrimary, size: 18),
+              border: OutlineInputBorder(),
+              focusedBorder:
+                  OutlineInputBorder(borderSide: BorderSide(color: kPrimary)),
+              isDense: true,
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: filtrados.isEmpty
+                ? const Center(
+                    child: Text('Sin resultados',
+                        style: TextStyle(color: kTextMuted)))
+                : ListView.builder(
+                    itemCount: filtrados.length,
+                    itemBuilder: (_, i) {
+                      final ins = filtrados[i];
+                      return ListTile(
+                        dense: true,
+                        leading: Container(
+                          width: 10,
+                          height: 10,
+                          margin: const EdgeInsets.only(top: 4),
+                          decoration: BoxDecoration(
+                            color: _semaforoColor(ins.semaforo),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        title: Text(ins.nombre,
+                            style: const TextStyle(fontSize: 13)),
+                        subtitle: Text(
+                            '${ins.tipo} · Stock: ${ins.stockActual.toStringAsFixed(0)} ${ins.unidad}',
+                            style: const TextStyle(fontSize: 11)),
+                        onTap: () => Navigator.pop(context, ins),
+                      );
+                    },
+                  ),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar')),
+      ],
+    );
+  }
 }
 
 // ── Tarjeta de préstamo ───────────────────────────────────────────────────────

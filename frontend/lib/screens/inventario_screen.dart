@@ -20,6 +20,8 @@ class _InventarioContentState extends State<InventarioContent> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String _filtroTipo  = 'Todos';
+  String _sortCol     = 'nombre';
+  bool   _sortAsc     = true;
 
   static const _tipos = ['Todos', 'Implemento', 'Vidriería', 'Equipo', 'Químico'];
 
@@ -44,6 +46,28 @@ class _InventarioContentState extends State<InventarioContent> {
     _          => kSemaforoVerde,
   };
 
+  int _semaforoOrder(String s) => switch (s) {
+    'ROJO'     => 0,
+    'AMARILLO' => 1,
+    _          => 2,
+  };
+
+  List<Insumo> _applySort(List<Insumo> list) {
+    final sorted = [...list];
+    sorted.sort((a, b) {
+      final cmp = switch (_sortCol) {
+        'tipo'      => a.tipo.compareTo(b.tipo),
+        'ubicacion' => a.ubicacion.compareTo(b.ubicacion),
+        'stock'     => a.stockActual.compareTo(b.stockActual),
+        'stockMin'  => a.stockMinimo.compareTo(b.stockMinimo),
+        'estado'    => _semaforoOrder(a.semaforo).compareTo(_semaforoOrder(b.semaforo)),
+        _           => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
+      };
+      return _sortAsc ? cmp : -cmp;
+    });
+    return sorted;
+  }
+
   Future<void> _abrirFormulario(BuildContext ctx, InventarioProvider prov, String? token) async {
     final ok = await Navigator.push<bool>(
       ctx, MaterialPageRoute(builder: (_) => const InsumoFormScreen()));
@@ -59,12 +83,12 @@ class _InventarioContentState extends State<InventarioContent> {
           return const Center(child: CircularProgressIndicator(color: kPrimary));
         }
 
-        final filtrados = provider.insumos.where((i) {
+        final filtrados = _applySort(provider.insumos.where((i) {
           final matchTipo   = _filtroTipo == 'Todos' || i.tipo == _filtroTipo;
           final matchSearch = i.nombre.toLowerCase().contains(_searchQuery.toLowerCase()) ||
                               i.tipo.toLowerCase().contains(_searchQuery.toLowerCase());
           return matchTipo && matchSearch;
-        }).toList();
+        }).toList());
 
         final esQuimico = _filtroTipo == 'Químico';
 
@@ -221,9 +245,14 @@ class _InventarioContentState extends State<InventarioContent> {
       border: const TableBorder(
           horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
       children: [
-        _headerRow(showSga
-            ? ['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA']
-            : ['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado']),
+        _headerRow(
+          showSga
+              ? ['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA']
+              : ['Nombre', 'Tipo', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado'],
+          showSga
+              ? ['nombre', 'tipo', 'ubicacion', 'stock', 'stockMin', 'estado', '']
+              : ['nombre', 'tipo', 'ubicacion', 'stock', 'stockMin', 'estado'],
+        ),
         ...items.asMap().entries.map((e) {
           final idx    = e.key;
           final insumo = e.value;
@@ -271,7 +300,10 @@ class _InventarioContentState extends State<InventarioContent> {
       border: const TableBorder(
           horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
       children: [
-        _headerRow(['Nombre', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA', 'Ficha']),
+        _headerRow(
+          ['Nombre', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA', 'Ficha'],
+          ['nombre', 'ubicacion', 'stock', 'stockMin', 'estado', '', ''],
+        ),
         ...items.asMap().entries.map((e) {
           final idx    = e.key;
           final insumo = e.value;
@@ -314,17 +346,43 @@ class _InventarioContentState extends State<InventarioContent> {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  TableRow _headerRow(List<String> cols) => TableRow(
-    decoration: const BoxDecoration(color: kPrimary),
-    children: cols.map((h) => Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      child: Text(h,
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-    )).toList(),
-  );
+  TableRow _headerRow(List<String> cols, List<String> keys) {
+    const padding = EdgeInsets.symmetric(horizontal: 8, vertical: 12);
+    return TableRow(
+      decoration: const BoxDecoration(color: kPrimary),
+      children: List.generate(cols.length, (i) {
+        final key      = keys[i];
+        final isActive = key.isNotEmpty && _sortCol == key;
+        final child    = Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(cols[i],
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+            if (isActive) ...[
+              const SizedBox(width: 2),
+              Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 10, color: Colors.white70),
+            ],
+          ],
+        );
+        if (key.isEmpty) return Padding(padding: padding, child: child);
+        return InkWell(
+          onTap: () => setState(() {
+            if (_sortCol == key) {
+              _sortAsc = !_sortAsc;
+            } else {
+              _sortCol = key;
+              _sortAsc = true;
+            }
+          }),
+          child: Padding(padding: padding, child: child),
+        );
+      }),
+    );
+  }
 
   Widget _cell(String text, {bool bold = false, VoidCallback? onTap}) {
     final content = Padding(
