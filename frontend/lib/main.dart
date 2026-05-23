@@ -6,6 +6,9 @@ import 'providers/inventario_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/solicitud_prestamo_screen.dart';
+import 'screens/registro_horas_screen.dart';
+import 'screens/registro_practica_screen.dart';
+import 'screens/reporte_rotura_screen.dart';
 import 'screens/registro_screen.dart';
 import 'screens/recuperar_pass_screen.dart';
 import 'screens/restablecer_pass_screen.dart';
@@ -66,7 +69,10 @@ class MyApp extends StatelessWidget {
       home: const LoginScreen(),
       routes: {
         '/dashboard': (context) => const MainShell(),
-        '/solicitud': (context) => const SolicitudPrestamoScreen(),
+        '/solicitud':          (context) => const SolicitudPrestamoScreen(),
+        '/registro-horas':    (context) => const RegistroHorasScreen(),
+        '/registro-practica': (context) => const RegistroPracticaScreen(),
+        '/reporte-rotura':    (context) => const ReporteRoturaScreen(),
         '/registro': (context) => const RegistroScreen(),
         '/recuperar-pass': (context) => const RecuperarPassScreen(),
         '/restablecer-pass': (context) => const RestablecerPassScreen(),
