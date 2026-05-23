@@ -28,7 +28,7 @@ class _HorarioScreenState extends State<HorarioScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tab = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -51,6 +51,7 @@ class _HorarioScreenState extends State<HorarioScreen>
           tabs: const [
             Tab(icon: Icon(Icons.person_pin_outlined),   text: 'Encargados'),
             Tab(icon: Icon(Icons.school_outlined),        text: 'Asignaturas'),
+            Tab(icon: Icon(Icons.category_outlined),      text: 'Gestión'),
           ],
         ),
       ),
@@ -59,6 +60,7 @@ class _HorarioScreenState extends State<HorarioScreen>
         children: const [
           _TabEncargados(),
           _TabAsignaturas(),
+          _TabGestion(),
         ],
       ),
     );
@@ -376,7 +378,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     if (_asignaturas.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('No hay asignaturas registradas. Créalas primero.'),
+          content: Text('No hay asignaturas. Créalas en la pestaña "Gestión".'),
           duration: Duration(seconds: 3),
         ));
       }
@@ -571,6 +573,408 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Tab Gestión (Áreas + Asignaturas CRUD) ────────────────────────────────────
+
+class _TabGestion extends StatefulWidget {
+  const _TabGestion();
+  @override State<_TabGestion> createState() => _TabGestionState();
+}
+
+class _TabGestionState extends State<_TabGestion>
+    with AutomaticKeepAliveClientMixin {
+  @override bool get wantKeepAlive => true;
+
+  List<Map<String, dynamic>> _areas        = [];
+  List<Map<String, dynamic>> _asignaturas  = [];
+  bool _cargando = true;
+
+  @override
+  void initState() { super.initState(); Future.microtask(_cargar); }
+
+  Future<void> _cargar() async {
+    setState(() => _cargando = true);
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+
+    try {
+      final r = await dio.get('academico/areas/');
+      setState(() => _areas = List<Map<String, dynamic>>.from(
+          r.data is List ? r.data : (r.data['results'] ?? [])));
+    } catch (_) {}
+
+    try {
+      final r = await dio.get('academico/asignaturas/');
+      setState(() => _asignaturas = List<Map<String, dynamic>>.from(
+          r.data is List ? r.data : (r.data['results'] ?? [])));
+    } catch (_) {}
+
+    setState(() => _cargando = false);
+  }
+
+  // ── CRUD Áreas ──────────────────────────────────────────────────────────────
+
+  Future<void> _guardarArea(Map<String, dynamic> data, {String? id}) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      if (id != null) {
+        await dio.patch('academico/areas/$id/', data: data);
+      } else {
+        await dio.post('academico/areas/', data: data);
+      }
+      await _cargar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _eliminarArea(String id) async {
+    if (await _confirmar() != true) return;
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.delete('academico/areas/$id/');
+      await _cargar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _dialogArea([Map<String, dynamic>? item]) async {
+    final ctrl = TextEditingController(text: item?['nombre_area'] ?? '');
+    final ok   = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(item == null ? 'Nueva área' : 'Editar área',
+            style: const TextStyle(color: kPrimary)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Nombre del área *',
+            hintText: 'Ej: Química, Biología',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    final nombre = ctrl.text.trim();
+    ctrl.dispose();
+    if (ok != true || nombre.isEmpty) return;
+    await _guardarArea({'nombre_area': nombre}, id: item?['id']?.toString());
+  }
+
+  // ── CRUD Asignaturas ────────────────────────────────────────────────────────
+
+  Future<void> _guardarAsignatura(Map<String, dynamic> data, {String? id}) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      if (id != null) {
+        await dio.patch('academico/asignaturas/$id/', data: data);
+      } else {
+        await dio.post('academico/asignaturas/', data: data);
+      }
+      await _cargar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _eliminarAsignatura(String id) async {
+    if (await _confirmar() != true) return;
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.delete('academico/asignaturas/$id/');
+      await _cargar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _dialogAsignatura([Map<String, dynamic>? item]) async {
+    if (_areas.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Crea un área primero antes de agregar asignaturas.')));
+      return;
+    }
+    final ctrl   = TextEditingController(text: item?['nombre_asignatura'] ?? '');
+    String? areaId = item?['area']?.toString() ?? _areas.first['id']?.toString();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: Text(item == null ? 'Nueva asignatura' : 'Editar asignatura',
+              style: const TextStyle(color: kPrimary)),
+          content: SizedBox(
+            width: 320,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de la asignatura *',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: areaId,
+                  decoration: const InputDecoration(
+                    labelText: 'Área *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.category_outlined, color: kPrimary),
+                  ),
+                  items: _areas.map((a) => DropdownMenuItem(
+                    value: a['id'].toString(),
+                    child: Text(a['nombre_area'].toString()),
+                  )).toList(),
+                  onChanged: (v) => setS(() => areaId = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary, foregroundColor: Colors.white),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final nombre = ctrl.text.trim();
+    ctrl.dispose();
+    if (ok != true || nombre.isEmpty || areaId == null) return;
+    await _guardarAsignatura(
+        {'nombre_asignatura': nombre, 'area': areaId},
+        id: item?['id']?.toString());
+  }
+
+  Future<bool?> _confirmar() => showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('Confirmar eliminación'),
+      content: const Text('¿Estás seguro de que quieres eliminar este elemento?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar', style: TextStyle(color: kDanger))),
+      ],
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final auth        = context.watch<AuthProvider>();
+    final puedeEditar = auth.can(Perm.academicoGestionar);
+
+    if (_cargando) return const Center(child: CircularProgressIndicator(color: kPrimary));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(children: [
+            const Icon(Icons.category_outlined, size: 16, color: kTextMuted),
+            const SizedBox(width: 6),
+            Text(
+              '${_areas.length} área${_areas.length != 1 ? 's' : ''} · ${_asignaturas.length} asignatura${_asignaturas.length != 1 ? 's' : ''}',
+              style: const TextStyle(fontSize: 12, color: kTextMuted),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _cargar,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Actualizar', style: TextStyle(fontSize: 12)),
+            ),
+          ]),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Columna Áreas ────────────────────────────────────────────
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Text('ÁREAS',
+                            style: TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.bold,
+                                color: kTextMuted, letterSpacing: 1.2)),
+                        const Spacer(),
+                        if (puedeEditar)
+                          TextButton.icon(
+                            onPressed: () => _dialogArea(),
+                            icon: const Icon(Icons.add, size: 14),
+                            label: const Text('Nueva', style: TextStyle(fontSize: 12)),
+                          ),
+                      ]),
+                      const SizedBox(height: 8),
+                      if (_areas.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text('Sin áreas registradas',
+                              style: TextStyle(color: kTextMuted, fontSize: 13)),
+                        )
+                      else
+                        ..._areas.map((a) {
+                          final countAsig = _asignaturas
+                              .where((s) => s['area'].toString() == a['id'].toString())
+                              .length;
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              dense: true,
+                              leading: const CircleAvatar(
+                                radius: 14,
+                                backgroundColor: Color(0x1A007BFF),
+                                child: Icon(Icons.category_outlined,
+                                    color: kPrimary, size: 14),
+                              ),
+                              title: Text(a['nombre_area']?.toString() ?? '',
+                                  style: const TextStyle(
+                                      fontSize: 13, fontWeight: FontWeight.w600)),
+                              subtitle: Text('$countAsig asignatura${countAsig != 1 ? 's' : ''}',
+                                  style: const TextStyle(fontSize: 11)),
+                              trailing: puedeEditar
+                                  ? Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined,
+                                              color: kPrimary, size: 18),
+                                          onPressed: () => _dialogArea(a),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline,
+                                              color: kDanger, size: 18),
+                                          onPressed: () =>
+                                              _eliminarArea(a['id'].toString()),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                      ],
+                                    )
+                                  : null,
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // ── Columna Asignaturas ──────────────────────────────────────
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        const Text('ASIGNATURAS',
+                            style: TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.bold,
+                                color: kTextMuted, letterSpacing: 1.2)),
+                        const Spacer(),
+                        if (puedeEditar)
+                          TextButton.icon(
+                            onPressed: () => _dialogAsignatura(),
+                            icon: const Icon(Icons.add, size: 14),
+                            label: const Text('Nueva', style: TextStyle(fontSize: 12)),
+                          ),
+                      ]),
+                      const SizedBox(height: 8),
+                      if (_asignaturas.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text('Sin asignaturas registradas',
+                              style: TextStyle(color: kTextMuted, fontSize: 13)),
+                        )
+                      else
+                        ..._asignaturas.map((s) => Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: ListTile(
+                                dense: true,
+                                leading: const CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: Color(0x1A007BFF),
+                                  child: Icon(Icons.school_outlined,
+                                      color: kPrimary, size: 14),
+                                ),
+                                title: Text(s['nombre_asignatura']?.toString() ?? '',
+                                    style: const TextStyle(
+                                        fontSize: 13, fontWeight: FontWeight.w600)),
+                                subtitle: Text(
+                                    s['nombre_area']?.toString() ?? '',
+                                    style: const TextStyle(
+                                        fontSize: 11, color: kTextMuted)),
+                                trailing: puedeEditar
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit_outlined,
+                                                color: kPrimary, size: 18),
+                                            onPressed: () => _dialogAsignatura(s),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline,
+                                                color: kDanger, size: 18),
+                                            onPressed: () => _eliminarAsignatura(
+                                                s['id'].toString()),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                        ],
+                                      )
+                                    : null,
+                              ),
+                            )),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
