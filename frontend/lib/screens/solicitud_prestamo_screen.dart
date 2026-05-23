@@ -256,24 +256,68 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
 
   Widget _buildItemRow(int i) {
     final item = _items[i];
+    final nombre = item.insumoId == null
+        ? null
+        : _insumos
+            .where((x) => x['id']?.toString() == item.insumoId)
+            .map((x) => x['nombre_insumo']?.toString() ?? '')
+            .firstOrNull;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(children: [
         Expanded(
           flex: 3,
-          child: DropdownButtonFormField<String>(
-            value: item.insumoId,
-            decoration: _deco('Material', Icons.inventory_2_outlined),
-            items: _insumos.map<DropdownMenuItem<String>>((ins) =>
-              DropdownMenuItem(
-                value: ins['id']?.toString(),
-                child: Text(
-                  ins['nombre_insumo']?.toString() ?? '',
-                  overflow: TextOverflow.ellipsis,
+          child: FormField<String>(
+            initialValue: item.insumoId,
+            validator: (_) => item.insumoId == null ? 'Selecciona un material' : null,
+            builder: (state) => InkWell(
+              onTap: () async {
+                final sel = await showDialog<Map<String, dynamic>>(
+                  context: context,
+                  builder: (_) => _DialogMaterial(insumos: _insumos),
+                );
+                if (sel != null) {
+                  setState(() => item.insumoId = sel['id']?.toString());
+                  state.didChange(item.insumoId);
+                }
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: state.hasError ? Colors.red : const Color(0xFFAAAAAA)),
+                  borderRadius: BorderRadius.circular(4),
                 ),
-              )).toList(),
-            onChanged: (v) => setState(() => item.insumoId = v),
-            validator: (v) => v == null ? 'Selecciona un material' : null,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(children: [
+                      const Icon(Icons.inventory_2_outlined, color: kPrimary, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          nombre ?? 'Seleccionar material...',
+                          style: TextStyle(
+                            color: nombre != null ? Colors.black87 : Colors.grey,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const Icon(Icons.search, color: kTextMuted, size: 16),
+                    ]),
+                    if (state.hasError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(state.errorText!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -316,4 +360,79 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
         const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     isDense: true,
   );
+}
+
+// ── Diálogo de búsqueda de materiales (sin info interna de stock) ─────────────
+
+class _DialogMaterial extends StatefulWidget {
+  final List<Map<String, dynamic>> insumos;
+  const _DialogMaterial({required this.insumos});
+  @override
+  State<_DialogMaterial> createState() => _DialogMaterialState();
+}
+
+class _DialogMaterialState extends State<_DialogMaterial> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final filtrados = widget.insumos
+        .where((i) => (i['nombre_insumo']?.toString() ?? '')
+            .toLowerCase()
+            .contains(_query.toLowerCase()))
+        .toList();
+
+    return AlertDialog(
+      title: const Text('Seleccionar material',
+          style: TextStyle(color: kPrimary, fontSize: 16)),
+      contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      content: SizedBox(
+        width: 380,
+        height: 360,
+        child: Column(children: [
+          TextField(
+            autofocus: true,
+            onChanged: (v) => setState(() => _query = v),
+            decoration: const InputDecoration(
+              hintText: 'Buscar material...',
+              prefixIcon: Icon(Icons.search, color: kPrimary, size: 18),
+              border: OutlineInputBorder(),
+              focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: kPrimary)),
+              isDense: true,
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: filtrados.isEmpty
+                ? const Center(
+                    child: Text('Sin resultados',
+                        style: TextStyle(color: kTextMuted)))
+                : ListView.builder(
+                    itemCount: filtrados.length,
+                    itemBuilder: (_, i) {
+                      final ins = filtrados[i];
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.inventory_2_outlined,
+                            color: kPrimary, size: 20),
+                        title: Text(
+                            ins['nombre_insumo']?.toString() ?? '',
+                            style: const TextStyle(fontSize: 13)),
+                        onTap: () => Navigator.pop(context, ins),
+                      );
+                    },
+                  ),
+          ),
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar')),
+      ],
+    );
+  }
 }
