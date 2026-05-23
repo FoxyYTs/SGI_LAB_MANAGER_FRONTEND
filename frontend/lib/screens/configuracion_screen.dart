@@ -22,7 +22,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tab = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -59,8 +59,10 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
           unselectedLabelColor: kTextMuted,
           indicatorColor: kPrimary,
           tabs: const [
-            Tab(icon: Icon(Icons.place_outlined),      text: 'Ubicaciones'),
-            Tab(icon: Icon(Icons.straighten_outlined), text: 'Unidades'),
+            Tab(icon: Icon(Icons.place_outlined),        text: 'Ubicaciones'),
+            Tab(icon: Icon(Icons.straighten_outlined),   text: 'Unidades'),
+            Tab(icon: Icon(Icons.school_outlined),        text: 'Programas'),
+            Tab(icon: Icon(Icons.person_pin_outlined),    text: 'Docentes'),
           ],
         ),
       ),
@@ -69,6 +71,8 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
         children: const [
           _UbicacionesTab(),
           _UnidadesTab(),
+          _ProgramasTab(),
+          _DocentesTab(),
         ],
       ),
     );
@@ -329,6 +333,202 @@ class _UnidadesTab extends StatelessWidget {
           ),
           title: Text(item['nombre_unidad'],
               style: const TextStyle(fontWeight: FontWeight.w600)),
+          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Tab: Programas académicos
+// ─────────────────────────────────────────
+class _ProgramasTab extends StatelessWidget {
+  const _ProgramasTab();
+
+  Future<void> _dialog(Map? item, BuildContext ctx,
+      Future<void> Function(Map<String, dynamic>) onSave) async {
+    final ctrl = TextEditingController(text: item?['nombre'] ?? '');
+    await showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: Text(item == null ? 'Nuevo programa' : 'Editar programa'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            labelText: 'Nombre del programa *',
+            hintText: 'Ej: Ingeniería Informática',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await onSave({'nombre': ctrl.text.trim(), 'activo': true});
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _CrudList(
+      endpoint: 'academico/programas/',
+      titulo: 'Programas',
+      formDialog: _dialog,
+      itemBuilder: (item, onEdit, onDelete) => Card(
+        child: ListTile(
+          leading: const CircleAvatar(
+            backgroundColor: Color(0x1A007BFF),
+            child: Icon(Icons.school_outlined, color: kPrimary, size: 20),
+          ),
+          title: Text(item['nombre'] ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: (item['activo'] == false)
+              ? const Text('Inactivo', style: TextStyle(color: kDanger, fontSize: 12))
+              : null,
+          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Tab: Docentes
+// ─────────────────────────────────────────
+class _DocentesTab extends StatefulWidget {
+  const _DocentesTab();
+
+  @override
+  State<_DocentesTab> createState() => _DocentesTabState();
+}
+
+class _DocentesTabState extends State<_DocentesTab> {
+  List<Map<String, dynamic>> _programas = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarProgramas();
+  }
+
+  Future<void> _cargarProgramas() async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final r    = await dio.get('academico/programas/');
+      final d    = r.data;
+      if (mounted) {
+        setState(() => _programas = List<Map<String, dynamic>>.from(
+          d is List ? d : (d['results'] ?? [])));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _dialog(Map? item, BuildContext ctx,
+      Future<void> Function(Map<String, dynamic>) onSave) async {
+    final nomCtrl    = TextEditingController(text: item?['nombre_completo'] ?? '');
+    final correoCtrl = TextEditingController(text: item?['correo'] ?? '');
+    String? programaId = item?['programa']?.toString();
+
+    await showDialog(
+      context: ctx,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (sCtx, setSt) => AlertDialog(
+          title: Text(item == null ? 'Nuevo docente' : 'Editar docente'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nomCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre completo *',
+                    border: OutlineInputBorder(),
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: correoCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Correo institucional *',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: programaId,
+                  decoration: const InputDecoration(
+                    labelText: 'Programa *',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _programas.map((p) => DropdownMenuItem(
+                    value: p['id'].toString(),
+                    child: Text(p['nombre'] ?? '', style: const TextStyle(fontSize: 13)),
+                  )).toList(),
+                  onChanged: (v) => setSt(() => programaId = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+              onPressed: () async {
+                Navigator.pop(dialogCtx);
+                await onSave({
+                  'nombre_completo': nomCtrl.text.trim(),
+                  'correo':          correoCtrl.text.trim(),
+                  'programa':        programaId,
+                  'activo':          true,
+                });
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nomCtrl.dispose();
+    correoCtrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _CrudList(
+      endpoint: 'academico/docentes/',
+      titulo: 'Docentes',
+      formDialog: _dialog,
+      itemBuilder: (item, onEdit, onDelete) => Card(
+        child: ListTile(
+          leading: const CircleAvatar(
+            backgroundColor: Color(0x1A007BFF),
+            child: Icon(Icons.person_pin_outlined, color: kPrimary, size: 20),
+          ),
+          title: Text(item['nombre_completo'] ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item['correo'] ?? '', style: const TextStyle(fontSize: 12)),
+              if ((item['nombre_programa'] ?? '').isNotEmpty)
+                Text(item['nombre_programa'], style: const TextStyle(fontSize: 12, color: kTextMuted)),
+            ],
+          ),
+          isThreeLine: (item['nombre_programa'] ?? '').isNotEmpty,
           trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
         ),
       ),

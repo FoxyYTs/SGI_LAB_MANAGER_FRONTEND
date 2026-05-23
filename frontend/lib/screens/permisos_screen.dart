@@ -4,6 +4,7 @@ import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../providers/auth_provider.dart';
+import 'mi_perfil_screen.dart';
 
 class PermisosScreen extends StatefulWidget {
   const PermisosScreen({super.key});
@@ -256,6 +257,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   bool _loadingUsuarios = true;
   bool _loadingPermisos = false;
   bool _cambiandoRol    = false;
+  bool _toggling        = false;
 
   @override
   void initState() {
@@ -339,6 +341,89 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
     }
   }
 
+  Future<void> _toggleActivo(Map<String, dynamic> usuario) async {
+    final esActivo  = usuario['is_active'] as bool? ?? true;
+    final username  = usuario['username'] as String? ?? '';
+    final uid       = usuario['id'];
+
+    // Confirmación solo al desactivar
+    if (esActivo) {
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Desactivar cuenta'),
+          content: Text(
+              '¿Seguro que deseas desactivar la cuenta de "$username"?\n'
+              'El usuario no podrá iniciar sesión.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar', style: TextStyle(color: kTextMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kDanger),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Desactivar'),
+            ),
+          ],
+        ),
+      );
+      if (confirmar != true) return;
+    }
+
+    setState(() => _toggling = true);
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      final resp = await dio.patch('usuarios/toggle-activo/$uid/');
+      final nuevoEstado = resp.data['is_active'] as bool;
+      final mensaje     = resp.data['mensaje'] as String? ?? '';
+
+      setState(() {
+        final idx = _usuarios.indexWhere((u) => u['id'] == uid);
+        if (idx != -1) {
+          _usuarios[idx] = {..._usuarios[idx], 'is_active': nuevoEstado};
+        }
+        if (_seleccionado?['id'] == uid) {
+          _seleccionado = {..._seleccionado!, 'is_active': nuevoEstado};
+        }
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(mensaje.isNotEmpty ? mensaje : 'Estado actualizado'),
+          backgroundColor: nuevoEstado ? kSuccess : kDanger,
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text('Error al cambiar estado'),
+                backgroundColor: kDanger));
+      }
+    } finally {
+      if (mounted) setState(() => _toggling = false);
+    }
+  }
+
+  Future<void> _abrirEditarPerfil(Map<String, dynamic> usuario) async {
+    await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => EditarPerfilUsuarioDialog(usuario: usuario),
+    );
+    // Recargar lista para reflejar cambios de nombre
+    await _cargarUsuarios();
+    if (_seleccionado != null) {
+      final uid = _seleccionado!['id'];
+      final actualizado = _usuarios.firstWhere(
+          (u) => u['id'] == uid,
+          orElse: () => _seleccionado!);
+      if (mounted) setState(() => _seleccionado = actualizado);
+    }
+  }
+
   Future<void> _toggleExtra(String codigo, bool activo) async {
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
@@ -389,25 +474,120 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
           child: ListView.builder(
             itemCount: _usuarios.length,
             itemBuilder: (_, i) {
-              final u       = _usuarios[i];
-              final activo  = _seleccionado?['id'] == u['id'];
-              final rol     = u['perfil']?['rol'] ?? '';
-              return ListTile(
-                selected: activo,
-                selectedTileColor: kPrimary.withValues(alpha: 0.08),
-                leading: CircleAvatar(
-                  backgroundColor: activo ? kPrimary : kPrimary.withValues(alpha: 0.15),
-                  child: Text(
-                    (u['username'] as String).substring(0, 1).toUpperCase(),
-                    style: TextStyle(
-                        color: activo ? Colors.white : kPrimary,
-                        fontWeight: FontWeight.bold),
+              final u          = _usuarios[i];
+              final seleccionado = _seleccionado?['id'] == u['id'];
+              final rol        = u['perfil']?['rol'] ?? '';
+              final isActivo   = u['is_active'] as bool? ?? true;
+              final auth       = context.read<AuthProvider>();
+              final esMiUsuario = auth.username == (u['username'] as String? ?? '');
+
+              return Opacity(
+                opacity: isActivo ? 1.0 : 0.5,
+                child: ListTile(
+                  selected: seleccionado,
+                  selectedTileColor: kPrimary.withValues(alpha: 0.08),
+                  leading: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: seleccionado
+                            ? kPrimary
+                            : kPrimary.withValues(alpha: 0.15),
+                        child: Text(
+                          (u['username'] as String).substring(0, 1).toUpperCase(),
+                          style: TextStyle(
+                              color: seleccionado ? Colors.white : kPrimary,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (!isActivo)
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: const BoxDecoration(
+                              color: kDanger,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          u['username'],
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      if (!isActivo)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: kDanger.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'Inactivo',
+                            style: TextStyle(
+                                fontSize: 9,
+                                color: kDanger,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
+                  subtitle: Text(rol,
+                      style: const TextStyle(fontSize: 11, color: kTextMuted)),
+                  trailing: !esMiUsuario
+                      ? PopupMenuButton<String>(
+                          iconSize: 18,
+                          padding: EdgeInsets.zero,
+                          tooltip: 'Acciones',
+                          onSelected: (action) {
+                            if (action == 'toggle') _toggleActivo(u);
+                            if (action == 'editar') _abrirEditarPerfil(u);
+                          },
+                          itemBuilder: (_) => [
+                            PopupMenuItem(
+                              value: 'editar',
+                              child: Row(children: [
+                                const Icon(Icons.edit_outlined,
+                                    size: 16, color: kPrimary),
+                                const SizedBox(width: 8),
+                                const Text('Editar perfil',
+                                    style: TextStyle(fontSize: 13)),
+                              ]),
+                            ),
+                            PopupMenuItem(
+                              value: 'toggle',
+                              child: Row(children: [
+                                Icon(
+                                  isActivo
+                                      ? Icons.person_off_outlined
+                                      : Icons.person_outlined,
+                                  size: 16,
+                                  color: isActivo ? kDanger : kSuccess,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  isActivo ? 'Desactivar' : 'Activar',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: isActivo ? kDanger : kSuccess),
+                                ),
+                              ]),
+                            ),
+                          ],
+                        )
+                      : null,
+                  onTap: () => _cargarPermisosUsuario(u),
                 ),
-                title: Text(u['username'],
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                subtitle: Text(rol, style: const TextStyle(fontSize: 11, color: kTextMuted)),
-                onTap: () => _cargarPermisosUsuario(u),
               );
             },
           ),
@@ -428,11 +608,12 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   }
 
   Widget _buildPermisosPanel() {
-    final auth     = context.watch<AuthProvider>();
-    final nombre   = '${_seleccionado!['first_name'] ?? ''} ${_seleccionado!['last_name'] ?? ''}'.trim();
-    final username = _seleccionado!['username'] as String;
-    final rol      = (_seleccionado!['perfil']?['rol'] ?? '') as String;
+    final auth       = context.watch<AuthProvider>();
+    final nombre     = '${_seleccionado!['first_name'] ?? ''} ${_seleccionado!['last_name'] ?? ''}'.trim();
+    final username   = _seleccionado!['username'] as String;
+    final rol        = (_seleccionado!['perfil']?['rol'] ?? '') as String;
     final esMiUsuario = auth.username == username;
+    final isActivo   = _seleccionado!['is_active'] as bool? ?? true;
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -443,12 +624,52 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
           const SizedBox(width: 8),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(nombre.isEmpty ? username : nombre,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              Row(children: [
+                Text(nombre.isEmpty ? username : nombre,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                if (!isActivo) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: kDanger.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Inactivo',
+                      style: TextStyle(
+                          fontSize: 10, color: kDanger, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ]),
               Text('@$username',
                   style: const TextStyle(color: kTextMuted, fontSize: 12)),
             ]),
           ),
+          if (!esMiUsuario) ...[
+            IconButton(
+              tooltip: 'Editar perfil',
+              onPressed: () => _abrirEditarPerfil(_seleccionado!),
+              icon: const Icon(Icons.edit_outlined, size: 18, color: kPrimary),
+            ),
+            _toggling
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(color: kDanger, strokeWidth: 2))
+                : IconButton(
+                    tooltip: isActivo ? 'Desactivar cuenta' : 'Activar cuenta',
+                    onPressed: () => _toggleActivo(_seleccionado!),
+                    icon: Icon(
+                      isActivo
+                          ? Icons.person_off_outlined
+                          : Icons.person_outlined,
+                      size: 18,
+                      color: isActivo ? kDanger : kSuccess,
+                    ),
+                  ),
+          ],
         ]),
         const Divider(height: 24),
 
