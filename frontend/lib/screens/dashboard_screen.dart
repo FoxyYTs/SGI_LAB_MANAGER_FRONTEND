@@ -73,7 +73,7 @@ class _DashboardContentState extends State<DashboardContent> {
                     builder: (_) => const QrGeneratorDialog(),
                   ),
                   icon: const Icon(Icons.qr_code_2),
-                  label: const Text('QR Préstamo'),
+                  label: const Text('Códigos QR'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kPrimary,
                     foregroundColor: Colors.white,
