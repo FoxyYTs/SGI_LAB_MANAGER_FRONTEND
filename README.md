@@ -1,178 +1,118 @@
 # SGI LAB MANAGER — Frontend
 
-Aplicación multi-plataforma (Linux, Android, Web) para la gestión del laboratorio integrado del PCJIC Rionegro, Colombia. Desarrollada en **Flutter**.
+Sistema de Gestión de Inventarios para laboratorio académico. Aplicación multi-plataforma desarrollada en **Flutter**, que corre en Windows, Android y Web.
+
+> Proyecto desarrollado como solución integral para la administración de inventario, préstamos de equipos e insumos, seguridad química (SGA/GHS) y gestión académica de un laboratorio integrado.
 
 ---
 
-## Stack tecnológico
+## Tecnologías
 
-| Tecnología | Uso |
+| Tecnología | Rol |
 | --- | --- |
-| Flutter 3 / Dart | UI multi-plataforma |
-| Provider | Gestión de estado |
-| Dio | Cliente HTTP + interceptor JWT |
-| sqflite + sqflite_common_ffi | Base de datos local (SQLite) para modo offline |
-| connectivity_plus | Detección de red para sync offline |
+| Flutter / Dart | Framework UI multi-plataforma |
+| Provider | Gestión de estado reactivo |
+| Dio | Cliente HTTP con interceptor JWT |
+| sqflite + sqflite_common_ffi | Persistencia local (SQLite) para modo offline |
+| connectivity_plus | Detección de red y sincronización |
 | qr_flutter | Generación de códigos QR |
 | flutter_secure_storage | Almacenamiento seguro de tokens |
-| file_picker | Selección de archivos (PDF de FDS) |
-| url_launcher | Apertura de URLs externas |
+| file_picker | Selección de PDFs (fichas de seguridad) |
 
 ---
 
-## Estructura del proyecto
+## Funcionalidades principales
+
+### Gestión de inventario
+
+Control completo de insumos del laboratorio (Implementos, Vidriería, Químicos, Equipos). Incluye semáforo de stock visual (crítico / bajo / normal), registro de foto por URL y acceso al detalle completo de cada insumo.
+
+### Seguridad química — SGA / GHS
+
+Ficha de seguridad química por insumo: pictogramas GHS, rombo NFPA 704, frases de peligro y precaución, composición, primeros auxilios y datos de transporte. **Extracción automática de datos desde PDF** de Ficha de Datos de Seguridad usando inteligencia artificial (Google Gemini). Generación de etiqueta GHS en PDF y ficha para reporte Colmena ARL.
+
+### Préstamos y movimientos
+
+Flujo de préstamo con estados (Pendiente → Activo → Devuelto), con descuento y reintegro automático de stock. Bitácora completa de todos los movimientos del inventario.
+
+### Horario semanal
+
+Cuadrícula visual Lunes–Sábado × 6:00–21:00h con dos vistas: encargados de turno y asignaturas en práctica. Soporta fusión automática de bloques consecutivos de la misma materia.
+
+### Formularios públicos via QR
+
+Cuatro formularios accesibles sin login, cada uno con su propio código QR generado desde el Dashboard: solicitud de préstamo, registro de horas de monitor, registro de práctica docente y reporte de implemento roto.
+
+### Sistema de permisos por rol
+
+Roles diferenciados (Administrador, Laboratorista, Monitor, Docente, Estudiante). La interfaz adapta dinámicamente las opciones visibles según los permisos del usuario autenticado.
+
+### Modo offline
+
+En plataformas de escritorio y móvil, las operaciones fallidas por falta de red se encolan en SQLite local y se sincronizan automáticamente al recuperar la conexión.
+
+---
+
+## Arquitectura del código
 
 ```text
 frontend/lib/
-├── core/
-│   ├── api/
-│   │   └── api_client.dart          # Dio singleton, URL base, interceptor JWT
-│   ├── database/
-│   │   ├── local_db.dart            # Exportación condicional web / nativo
-│   │   ├── local_db_native.dart     # SQLite real (Linux / Android)
-│   │   └── local_db_web.dart        # Stub sin operaciones (Web)
-│   ├── sync/
-│   │   ├── sync_service.dart        # Exportación condicional web / nativo
-│   │   ├── sync_service_native.dart # Cola offline + retry automático
-│   │   └── sync_service_web.dart    # Stub (online = true siempre)
-│   ├── permissions.dart             # Constantes Perm.xxxx
-│   └── theme/
-│       └── colors.dart              # Paleta: kPrimary, kDanger, kSuccess…
-├── models/
-│   └── insumo_model.dart
-├── providers/
-│   ├── auth_provider.dart           # JWT, usuario, permisos
-│   └── inventario_provider.dart     # Lista de insumos con caché
-└── screens/
-    ├── login_screen.dart
-    ├── main_shell.dart              # Navegación: tabs compactos (desktop) / drawer (móvil)
-    ├── dashboard_screen.dart        # Estadísticas en tiempo real + tabla de críticos
-    ├── inventario_screen.dart       # Tabla con filtros por tipo de insumo
-    ├── insumo_detail_screen.dart    # Detalle, foto, SGA, últimos movimientos
-    ├── insumo_form_screen.dart      # Crear / editar insumo
-    ├── sga_screen.dart              # Ficha SGA: ver / editar / Colmena ARL / PDF
-    ├── movimientos_screen.dart      # Préstamos y devoluciones
-    ├── bitacora_screen.dart         # Historial de movimientos con filtros
-    ├── horario_screen.dart          # Cuadrícula Lun–Sáb × 6–21h con celdas fusionadas
-    ├── configuracion_screen.dart    # Ubicaciones y unidades de medida (CRUD)
-    ├── permisos_screen.dart         # Permisos por rol + cambio de rol
-    ├── solicitud_prestamo_screen.dart   # Formulario público (sin login) — QR Préstamo
-    ├── registro_horas_screen.dart       # Formulario público — QR Registro de horas monitor
-    ├── registro_practica_screen.dart    # Formulario público — QR Registro de práctica
-    └── reporte_rotura_screen.dart       # Formulario público — QR Reporte de rotura
+├── core/           # API client, base de datos local, sync offline, permisos, tema
+├── models/         # Modelos de datos Dart
+├── providers/      # Estado global (auth, inventario)
+└── screens/        # Pantallas de la aplicación
 ```
 
----
-
-## Módulos principales
-
-### Inventario
-
-Gestión completa de insumos del laboratorio (Implementos, Vidriería, Químicos, Equipos). Incluye semáforo de stock (🔴 crítico / 🟡 bajo / 🟢 normal), foto por URL, y navegación al detalle del insumo.
-
-### SGA / GHS
-
-Ficha de seguridad química: pictogramas GHS01–GHS09, rombo NFPA 704, frases H/P, datos de composición, primeros auxilios y transporte. Extracción automática desde PDF de FDS usando Google Gemini. Genera etiqueta GHS en PDF y ficha Colmena ARL.
-
-### Préstamos y Movimientos
-
-Flujo completo: solicitud → aprobación (con descuento de stock) → devolución (con reintegro de stock). Bitácora de todos los movimientos (ENTRADA, SALIDA, AJUSTE, ROTURA, CONSUMO_PRACTICA).
-
-### Horario Semanal
-
-Cuadrícula visual Lunes–Sábado × 6:00–21:00h. Dos vistas: **Encargados** (quién está de turno) y **Asignaturas** (qué práctica se realiza). Soporta fusión automática de bloques consecutivos de la misma asignatura.
-
-### Formularios Públicos (QR)
-
-Cuatro formularios sin login, accesibles desde códigos QR generados en el Dashboard:
-
-| Formulario | Ruta |
-| --- | --- |
-| Solicitud de Préstamo | `/solicitud` |
-| Registro de Horas Monitor | `/registro-horas` |
-| Registro de Práctica | `/registro-practica` |
-| Reporte de Rotura | `/reporte-rotura` |
-
-### Sistema de Permisos
-
-Los permisos se cargan al autenticar desde `/api/usuarios/mis-permisos/`. La UI muestra u oculta tabs y botones según `auth.can(Perm.xxxx)`.
-
-| Permiso | Descripción |
-| --- | --- |
-| `inventario.ver` | Ver listado de inventario |
-| `inventario.gestionar` | Crear / editar / eliminar insumos |
-| `prestamos.ver` | Ver préstamos |
-| `prestamos.gestionar` | Aprobar / rechazar / devolver |
-| `bitacora.ver` | Ver bitácora |
-| `academico.ver` | Ver horario semanal |
-| `academico.gestionar` | Editar horario (solo ADMIN y LAB) |
-| `configuracion.gestion` | Acceder a Configuración |
-| `configuracion.roles` | Gestionar permisos de roles |
-
-### Modo Offline
-
-En plataformas nativas (Linux/Android), las operaciones de escritura fallidas se encolan en SQLite local y se reintenta el envío al recuperar conexión. El indicador de red en la AppBar muestra el estado y los pendientes.
+La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) permite que las funciones de base de datos local y conectividad usen implementaciones reales en Windows/Android y stubs en Web, sin cambios en el resto del código.
 
 ---
 
-## Configuración y ejecución
+## Plataformas
+
+| Plataforma | Estado |
+| --- | --- |
+| Windows | Objetivo principal de producción |
+| Android | Soportado — build APK |
+| Web | Soportado — servido con nginx |
+| Linux | Entorno de desarrollo |
+
+---
+
+## Cómo ejecutar
 
 ### Prerequisitos
 
 - Flutter SDK `^3.x` con Dart `^3.11`
-- Backend corriendo en `http://localhost:8000` (ver repositorio Backend)
+- Backend de la aplicación corriendo localmente
 
-### URL base de la API
-
-Se configura en [frontend/lib/core/api/api_client.dart](frontend/lib/core/api/api_client.dart). En desarrollo apunta a `http://localhost:8000/api/`.
-
-### Correr en Linux (desarrollo)
+### Windows / Linux (escritorio)
 
 ```bash
 cd frontend
 flutter pub get
-flutter run -d linux
+flutter run -d windows   # o -d linux en entorno de desarrollo
 ```
 
-### Correr en Web
+### Web
 
 ```bash
 flutter run -d chrome
 ```
 
-### Build Android (release)
+### Build Android
 
 ```bash
 flutter build apk --release
-# El APK queda en build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### Build Web (para servir con nginx)
+### Build Web
 
 ```bash
 flutter build web
-# Los archivos quedan en build/web/
-# Copiar a la ruta configurada en nginx.conf del backend
 ```
-
-### Análisis estático
-
-```bash
-flutter analyze
-```
-
----
-
-## Plataformas soportadas
-
-| Plataforma | Estado |
-| --- | --- |
-| Linux desktop | Primaria de desarrollo |
-| Android | Soportado (build APK) |
-| Web | Soportado (nginx en Docker) |
 
 ---
 
 ## Repositorios relacionados
 
-- **Backend (Django)**: [SGI_LAB_MANAGER_BACKEND](https://github.com/FoxyYTs/SGI_LAB_MANAGER_BACKEND)
+- **Backend (Django REST Framework + PostgreSQL)**: [SGI_LAB_MANAGER_BACKEND](https://github.com/FoxyYTs/SGI_LAB_MANAGER_BACKEND)
