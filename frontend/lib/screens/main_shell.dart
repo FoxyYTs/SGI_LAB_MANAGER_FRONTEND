@@ -10,6 +10,7 @@ import 'movimientos_screen.dart';
 import 'bitacora_screen.dart';
 import 'horario_screen.dart';
 import 'configuracion_screen.dart';
+import 'informes_screen.dart';
 
 class _TabDef {
   final IconData icon;
@@ -37,6 +38,8 @@ class _MainShellState extends State<MainShell> {
       const _TabDef(Icons.history_outlined,       'Bitácora',      BitacoraContent()),
     if (auth.can(Perm.academicoVer))
       const _TabDef(Icons.calendar_month_outlined,'Horario',       HorarioScreen()),
+    if (auth.can(Perm.bitacoraVer))
+      const _TabDef(Icons.picture_as_pdf_outlined,'Informes',      InformesContent()),
     if (auth.can(Perm.configuracionGestion))
       const _TabDef(Icons.settings_outlined,      'Configuración', ConfiguracionScreen()),
   ];
@@ -113,6 +116,12 @@ class _MainShellState extends State<MainShell> {
                   style: const TextStyle(color: kTextMuted, fontSize: 13),
                 ),
               ),
+            ),
+            IconButton(
+              tooltip: 'Mi Perfil',
+              icon: const Icon(Icons.account_circle_outlined,
+                  size: 20, color: kTextMuted),
+              onPressed: () => Navigator.pushNamed(context, '/mi-perfil'),
             ),
             TextButton.icon(
               onPressed: () async {
@@ -254,6 +263,16 @@ class _MainShellState extends State<MainShell> {
                   },
                 )),
                 const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.account_circle_outlined,
+                      color: kPrimary, size: 22),
+                  title: const Text('Mi Perfil',
+                      style: TextStyle(fontSize: 14, color: kPrimary)),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, '/mi-perfil');
+                  },
+                ),
                 ListTile(
                   leading: const Icon(Icons.logout, color: kTextMuted, size: 22),
                   title: const Text('Cerrar sesión',

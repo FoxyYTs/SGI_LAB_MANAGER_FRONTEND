@@ -14,6 +14,7 @@ import 'screens/recuperar_pass_screen.dart';
 import 'screens/restablecer_pass_screen.dart';
 import 'screens/permisos_screen.dart';
 import 'screens/insumo_form_screen.dart';
+import 'screens/mi_perfil_screen.dart';
 import 'core/theme/colors.dart';
 import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
@@ -78,6 +79,7 @@ class MyApp extends StatelessWidget {
         '/restablecer-pass': (context) => const RestablecerPassScreen(),
         '/permisos': (context) => const PermisosScreen(),
         '/insumo-form': (context) => const InsumoFormScreen(),
+        '/mi-perfil': (context) => const MiPerfilScreen(),
       },
     );
   }
