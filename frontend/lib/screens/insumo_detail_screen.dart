@@ -52,6 +52,142 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     }
   }
 
+  Future<void> _reportarRotura(String nombre, String unidad) async {
+    final cantCtrl = TextEditingController();
+    final estudCtrl = TextEditingController();
+    final nitCtrl   = TextEditingController();
+    final obsCtrl   = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Row(children: [
+          const Icon(Icons.warning_amber_outlined, color: kDanger, size: 20),
+          const SizedBox(width: 8),
+          const Text('Reportar rotura / pérdida',
+              style: TextStyle(color: kDanger, fontSize: 15)),
+        ]),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Insumo: $nombre',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: cantCtrl,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Cantidad ($unidad) *',
+                  prefixIcon: const Icon(Icons.numbers, color: kDanger, size: 18),
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: estudCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre del estudiante (opcional)',
+                  prefixIcon:
+                      Icon(Icons.person_outline, color: kTextMuted, size: 18),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: nitCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'NIT / Cédula (opcional)',
+                  prefixIcon:
+                      Icon(Icons.badge_outlined, color: kTextMuted, size: 18),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: obsCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Observaciones (opcional)',
+                  prefixIcon:
+                      Icon(Icons.notes_outlined, color: kTextMuted, size: 18),
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: kDanger, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Registrar rotura'),
+          ),
+        ],
+      ),
+    );
+
+    final cantidad = double.tryParse(cantCtrl.text.trim()) ?? 0;
+    cantCtrl.dispose();
+
+    if (ok != true || cantidad <= 0) {
+      estudCtrl.dispose();
+      nitCtrl.dispose();
+      obsCtrl.dispose();
+      return;
+    }
+
+    // Componer observaciones con datos del estudiante si se proporcionaron
+    final partes = <String>[];
+    if (estudCtrl.text.trim().isNotEmpty) {
+      partes.add('Estudiante: ${estudCtrl.text.trim()}');
+    }
+    if (nitCtrl.text.trim().isNotEmpty) {
+      partes.add('NIT: ${nitCtrl.text.trim()}');
+    }
+    if (obsCtrl.text.trim().isNotEmpty) {
+      partes.add(obsCtrl.text.trim());
+    }
+    estudCtrl.dispose();
+    nitCtrl.dispose();
+    obsCtrl.dispose();
+
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      await dio.post('operaciones/bitacora/', data: {
+        'insumo':           widget.insumoId,
+        'tipo_movimiento':  'ROTURA',
+        'cantidad':         cantidad,
+        'observaciones':    partes.join(' | '),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Rotura registrada y stock actualizado.'),
+            backgroundColor: kSuccess));
+        _cargar();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error: $e'), backgroundColor: kDanger));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -239,6 +375,25 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             const SizedBox(height: 16),
             _buildDetalleMaterial(
                 Map<String, dynamic>.from(d['detalle_material'])),
+          ],
+
+          // ── Reportar rotura ─────────────────────────────────────────────
+          if (context.read<AuthProvider>().can(Perm.bitacoraGestionar)) ...[
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.warning_amber_outlined,
+                  color: kDanger, size: 18),
+              label: const Text('Reportar rotura / pérdida',
+                  style: TextStyle(color: kDanger)),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: kDanger),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+              ),
+              onPressed: () => _reportarRotura(
+                  d['nombre_insumo']?.toString() ?? widget.insumoNombre,
+                  unidad),
+            ),
           ],
 
           // ── Últimos movimientos ──────────────────────────────────────────

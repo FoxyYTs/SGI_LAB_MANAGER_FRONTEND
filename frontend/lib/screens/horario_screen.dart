@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
@@ -63,6 +64,255 @@ class _HorarioScreenState extends State<HorarioScreen>
           _TabGestion(),
         ],
       ),
+    );
+  }
+}
+
+// ── Diálogo: gestión de guías de una asignatura ───────────────────────────────
+
+class _GuiasDialog extends StatefulWidget {
+  final Map<String, dynamic> asignatura;
+  final bool puedeEditar;
+  const _GuiasDialog({required this.asignatura, required this.puedeEditar});
+  @override
+  State<_GuiasDialog> createState() => _GuiasDialogState();
+}
+
+class _GuiasDialogState extends State<_GuiasDialog> {
+  List<Map<String, dynamic>> _guias = [];
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    setState(() => _cargando = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final asigId = widget.asignatura['id'].toString();
+      final r = await dio.get('academico/guias/?asignatura=$asigId');
+      setState(() {
+        _guias = List<Map<String, dynamic>>.from(
+            r.data is List ? r.data : (r.data['results'] ?? []));
+        _cargando = false;
+      });
+    } catch (_) {
+      setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _guardar(Map<String, dynamic> data, {String? id}) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      if (id != null) {
+        await dio.patch('academico/guias/$id/', data: data);
+      } else {
+        await dio.post('academico/guias/', data: {
+          ...data,
+          'asignatura': widget.asignatura['id'],
+        });
+      }
+      await _cargar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _eliminar(String id) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Eliminar guía'),
+        content: const Text('¿Estás seguro? Se eliminará el registro de esta guía.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Eliminar', style: TextStyle(color: kDanger))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.delete('academico/guias/$id/');
+      await _cargar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _dialog([Map<String, dynamic>? item]) async {
+    final nomCtrl = TextEditingController(text: item?['nombre_guia'] ?? '');
+    final urlCtrl = TextEditingController(text: item?['url_guia'] ?? '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(item == null ? 'Nueva guía' : 'Editar guía',
+            style: const TextStyle(color: kPrimary)),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nomCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                    labelText: 'Nombre de la guía *',
+                    border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: urlCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'URL en Drive (opcional)',
+                  hintText: 'https://drive.google.com/...',
+                  prefixIcon: Icon(Icons.link, color: kPrimary),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    final nombre = nomCtrl.text.trim();
+    final url    = urlCtrl.text.trim();
+    nomCtrl.dispose();
+    urlCtrl.dispose();
+    if (ok != true || nombre.isEmpty) return;
+    await _guardar(
+        {'nombre_guia': nombre, 'url_guia': url.isEmpty ? null : url},
+        id: item?['id']?.toString());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final asigNombre = widget.asignatura['nombre_asignatura'] ?? '';
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(Icons.menu_book_outlined, color: kPrimary, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text('Guías — $asigNombre',
+              style: const TextStyle(color: kPrimary, fontSize: 15)),
+        ),
+        if (widget.puedeEditar)
+          IconButton(
+            icon: const Icon(Icons.add, color: kPrimary),
+            tooltip: 'Nueva guía',
+            onPressed: _dialog,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+      ]),
+      contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      content: SizedBox(
+        width: 420,
+        height: 360,
+        child: _cargando
+            ? const Center(child: CircularProgressIndicator(color: kPrimary))
+            : _guias.isEmpty
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.menu_book_outlined,
+                          size: 48, color: kTextMuted),
+                      const SizedBox(height: 8),
+                      const Text('Sin guías registradas',
+                          style: TextStyle(color: kTextMuted)),
+                      if (widget.puedeEditar) ...[
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: _dialog,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Agregar primera guía'),
+                        ),
+                      ],
+                    ],
+                  )
+                : ListView.separated(
+                    itemCount: _guias.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final g   = _guias[i];
+                      final url = g['url_guia']?.toString() ?? '';
+                      return ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.description_outlined,
+                            color: kPrimary, size: 20),
+                        title: Text(g['nombre_guia'] ?? '',
+                            style: const TextStyle(fontSize: 13)),
+                        subtitle: url.isNotEmpty
+                            ? Text(url,
+                                style: const TextStyle(
+                                    fontSize: 10, color: kTextMuted),
+                                overflow: TextOverflow.ellipsis)
+                            : const Text('Sin URL',
+                                style: TextStyle(
+                                    fontSize: 10, color: kTextMuted)),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (url.isNotEmpty)
+                              Tooltip(
+                                message: 'Abrir en Drive',
+                                child: IconButton(
+                                  icon: const Icon(Icons.open_in_new,
+                                      color: kPrimary, size: 18),
+                                  onPressed: () =>
+                                      launchUrl(Uri.parse(url)),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ),
+                            if (widget.puedeEditar) ...[
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined,
+                                    color: kPrimary, size: 18),
+                                onPressed: () => _dialog(g),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline,
+                                    color: kDanger, size: 18),
+                                onPressed: () =>
+                                    _eliminar(g['id'].toString()),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cerrar')),
+      ],
     );
   }
 }
@@ -942,29 +1192,52 @@ class _TabGestionState extends State<_TabGestion>
                                     s['nombre_area']?.toString() ?? '',
                                     style: const TextStyle(
                                         fontSize: 11, color: kTextMuted)),
-                                trailing: puedeEditar
-                                    ? Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit_outlined,
-                                                color: kPrimary, size: 18),
-                                            onPressed: () => _dialogAsignatura(s),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
+                                trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // Botón Guías
+                                      Tooltip(
+                                        message: 'Gestionar guías',
+                                        child: TextButton.icon(
+                                          onPressed: () => showDialog(
+                                            context: context,
+                                            builder: (_) => _GuiasDialog(
+                                              asignatura: s,
+                                              puedeEditar: puedeEditar,
+                                            ),
                                           ),
-                                          const SizedBox(width: 4),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete_outline,
-                                                color: kDanger, size: 18),
-                                            onPressed: () => _eliminarAsignatura(
-                                                s['id'].toString()),
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(),
+                                          icon: const Icon(Icons.menu_book_outlined,
+                                              size: 14, color: kPrimary),
+                                          label: Text(
+                                            'Guías ${s['total_guias'] != null ? '(${s['total_guias']})' : ''}',
+                                            style: const TextStyle(
+                                                fontSize: 11, color: kPrimary),
                                           ),
-                                        ],
-                                      )
-                                    : null,
+                                          style: TextButton.styleFrom(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6, vertical: 2)),
+                                        ),
+                                      ),
+                                      if (puedeEditar) ...[
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined,
+                                              color: kPrimary, size: 18),
+                                          onPressed: () => _dialogAsignatura(s),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline,
+                                              color: kDanger, size: 18),
+                                          onPressed: () => _eliminarAsignatura(
+                                              s['id'].toString()),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                               ),
                             )),
                     ],
