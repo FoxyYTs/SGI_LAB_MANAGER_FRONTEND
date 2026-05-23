@@ -11,9 +11,20 @@ import '../providers/auth_provider.dart';
 const _dias = ['Lunes', 'Martes', 'Miérc.', 'Jueves', 'Viernes', 'Sábado'];
 const _horas = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
 
-const double _colWidth   = 150;
+const double _colWidth   = 140;
 const double _labelWidth = 54;
-const double _rowHeight  = 62;
+const double _rowHeight  = 40;
+
+// ── Bloque fusionado de asignatura ────────────────────────────────────────────
+
+class _Bloque {
+  final int horaIdx;   // índice en _horas (0-based)
+  final int duracion;  // cantidad de horas consecutivas
+  // items de CADA hora del bloque: itemsByHora[k] = items de la hora horaIdx+k
+  final List<List<Map<String, dynamic>>> itemsByHora;
+
+  const _Bloque(this.horaIdx, this.duracion, this.itemsByHora);
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -39,29 +50,50 @@ class _HorarioScreenState extends State<HorarioScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBackground,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        title: const Text('Horario semanal',
-            style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold)),
-        elevation: 1,
-        bottom: TabBar(
-          controller: _tab,
-          labelColor: kPrimary,
-          unselectedLabelColor: kTextMuted,
-          indicatorColor: kPrimary,
-          tabs: const [
-            Tab(icon: Icon(Icons.person_pin_outlined),   text: 'Encargados'),
-            Tab(icon: Icon(Icons.school_outlined),        text: 'Asignaturas'),
-            Tab(icon: Icon(Icons.category_outlined),      text: 'Gestión'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tab,
-        children: const [
-          _TabEncargados(),
-          _TabAsignaturas(),
-          _TabGestion(),
+      body: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tab,
+              labelColor: kPrimary,
+              unselectedLabelColor: kTextMuted,
+              indicatorColor: kPrimary,
+              indicatorWeight: 2,
+              labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+              tabs: const [
+                Tab(height: 36, child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.person_pin_outlined, size: 15),
+                  SizedBox(width: 5),
+                  Text('Encargados',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
+                Tab(height: 36, child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.school_outlined, size: 15),
+                  SizedBox(width: 5),
+                  Text('Asignaturas',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
+                Tab(height: 36, child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.category_outlined, size: 15),
+                  SizedBox(width: 5),
+                  Text('Gestión',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: TabBarView(
+              controller: _tab,
+              children: const [
+                _TabEncargados(),
+                _TabAsignaturas(),
+                _TabGestion(),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -478,7 +510,15 @@ class _TabEncargadosState extends State<_TabEncargados>
         // Cabecera con días
         Row(children: [
           SizedBox(width: _labelWidth),
-          ..._dias.asMap().entries.map((e) => _diaHeader(e.key, e.value)),
+          ..._dias.map((d) => Container(
+            width: _colWidth,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            color: kPrimary,
+            alignment: Alignment.center,
+            child: Text(d,
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          )),
         ]),
         const Divider(height: 1, thickness: 1, color: Color(0xFFDEE2E6)),
         // Filas de horas
@@ -486,15 +526,6 @@ class _TabEncargadosState extends State<_TabEncargados>
       ],
     );
   }
-
-  Widget _diaHeader(int dia, String nombre) => Container(
-    width: _colWidth,
-    padding: const EdgeInsets.symmetric(vertical: 10),
-    decoration: const BoxDecoration(color: kPrimary),
-    alignment: Alignment.center,
-    child: Text(nombre,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-  );
 
   Widget _buildHoraRow(int hora, bool puedeEditar) {
     return IntrinsicHeight(
@@ -715,94 +746,265 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     );
   }
 
+  // ── Calcular bloques fusionados para un día ──────────────────────────────────
+
+  List<_Bloque> _computeBloques(int dia) {
+    final result = <_Bloque>[];
+    int i = 0;
+    while (i < _horas.length) {
+      final hora  = _horas[i];
+      final items = _grid[dia]?[hora] ?? [];
+      if (items.isEmpty) { i++; continue; }
+
+      if (items.length == 1) {
+        final item    = items[0];
+        final asigId  = item['asignatura']?.toString();
+        final docente = item['docente']?.toString() ?? '';
+        final grupo   = item['grupo']?.toString() ?? '';
+        int dur = 1;
+        final byHora = [List<Map<String, dynamic>>.from(items)];
+
+        while (i + dur < _horas.length) {
+          final next = _grid[dia]?[_horas[i + dur]] ?? [];
+          if (next.length == 1 &&
+              next[0]['asignatura']?.toString() == asigId &&
+              (next[0]['docente']?.toString() ?? '') == docente &&
+              (next[0]['grupo']?.toString() ?? '') == grupo) {
+            byHora.add(List<Map<String, dynamic>>.from(next));
+            dur++;
+          } else break;
+        }
+        result.add(_Bloque(i, dur, byHora));
+        i += dur;
+      } else {
+        result.add(_Bloque(i, 1, [List<Map<String, dynamic>>.from(items)]));
+        i++;
+      }
+    }
+    return result;
+  }
+
+  Future<void> _eliminarBloque(int dia, _Bloque b) async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.can(Perm.academicoGestionar)) return;
+    final dio = ApiClient.instance.authenticatedDio(auth.token);
+    for (int k = 0; k < b.duracion; k++) {
+      final hora = _horas[b.horaIdx + k];
+      for (final item in b.itemsByHora[k]) {
+        try {
+          await dio.delete('academico/horario-asignatura/${item['id']}/');
+          setState(() => _grid[dia]?[hora]?.removeWhere((e) => e['id'] == item['id']));
+        } catch (_) {}
+      }
+    }
+  }
+
+  // ── Grid con layout Stack (soporta celdas fusionadas) ────────────────────────
+
   Widget _buildGrid(bool puedeEditar) {
+    final totalH = _horas.length * _rowHeight;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Cabecera días
         Row(children: [
           SizedBox(width: _labelWidth),
-          ..._dias.asMap().entries.map((e) => _diaHeader(e.key, e.value)),
+          ..._dias.asMap().entries.map((e) => Container(
+            width: _colWidth,
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            color: kPrimary,
+            alignment: Alignment.center,
+            child: Text(_dias[e.key],
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          )),
         ]),
         const Divider(height: 1, thickness: 1, color: Color(0xFFDEE2E6)),
-        ..._horas.map((h) => _buildHoraRow(h, puedeEditar)),
+        // Cuerpo
+        SizedBox(
+          height: totalH.toDouble(),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Columna de horas
+              SizedBox(
+                width: _labelWidth,
+                child: Stack(
+                  children: _horas.asMap().entries.map((e) => Positioned(
+                    top: (e.key * _rowHeight).toDouble(),
+                    left: 0, right: 0,
+                    height: _rowHeight.toDouble(),
+                    child: Container(
+                      alignment: Alignment.topCenter,
+                      padding: const EdgeInsets.only(top: 5),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          right:  BorderSide(color: Color(0xFFDEE2E6)),
+                          bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                        ),
+                      ),
+                      child: Text(
+                        '${_horas[e.key].toString().padLeft(2, '0')}:00',
+                        style: const TextStyle(
+                            fontSize: 10, color: kTextMuted, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  )).toList(),
+                ),
+              ),
+              // Columnas por día
+              ...[0, 1, 2, 3, 4, 5].map((dia) => _buildDayCol(dia, puedeEditar)),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _diaHeader(int dia, String nombre) => Container(
-    width: _colWidth,
-    padding: const EdgeInsets.symmetric(vertical: 10),
-    decoration: const BoxDecoration(color: kPrimary),
-    alignment: Alignment.center,
-    child: Text(nombre,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-  );
+  Widget _buildDayCol(int dia, bool puedeEditar) {
+    final totalH  = _horas.length * _rowHeight;
+    final bloques  = _computeBloques(dia);
+    final occupied = {
+      for (final b in bloques)
+        for (int k = 0; k < b.duracion; k++) b.horaIdx + k,
+    };
 
-  Widget _buildHoraRow(int hora, bool puedeEditar) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return SizedBox(
+      width: _colWidth,
+      height: totalH.toDouble(),
+      child: Stack(
         children: [
-          Container(
-            width: _labelWidth,
-            alignment: Alignment.topCenter,
-            padding: const EdgeInsets.only(top: 8),
-            decoration: const BoxDecoration(
-              border: Border(right: BorderSide(color: Color(0xFFDEE2E6))),
-            ),
-            child: Text('${hora.toString().padLeft(2, '0')}:00',
-                style: const TextStyle(fontSize: 11, color: kTextMuted, fontWeight: FontWeight.w600)),
-          ),
-          ...[0,1,2,3,4,5].map((dia) {
-            final items = _grid[dia]?[hora] ?? [];
-            return GestureDetector(
-              onTap: puedeEditar ? () => _agregar(dia, hora) : null,
-              child: Container(
-                width: _colWidth,
-                constraints: const BoxConstraints(minHeight: _rowHeight),
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: dia.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
-                  border: const Border(
-                    right:  BorderSide(color: Color(0xFFDEE2E6)),
-                    bottom: BorderSide(color: Color(0xFFDEE2E6)),
+          // Fondo por hora (líneas de grilla + toque para agregar)
+          ...List.generate(_horas.length, (i) {
+            final empty = !occupied.contains(i);
+            return Positioned(
+              top: (i * _rowHeight).toDouble(),
+              left: 0, right: 0,
+              height: _rowHeight.toDouble(),
+              child: GestureDetector(
+                onTap: (puedeEditar && empty) ? () => _agregar(dia, _horas[i]) : null,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: dia.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
+                    border: const Border(
+                      right:  BorderSide(color: Color(0xFFDEE2E6)),
+                      bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                    ),
                   ),
-                ),
-                child: Wrap(
-                  spacing: 3, runSpacing: 3,
-                  children: [
-                    ...items.map((item) => _chipAsignatura(item, dia, hora, puedeEditar)),
-                    if (puedeEditar)
-                      InkWell(
-                        onTap: () => _agregar(dia, hora),
-                        borderRadius: BorderRadius.circular(10),
-                        child: const Padding(
-                          padding: EdgeInsets.all(2),
-                          child: Icon(Icons.add_circle_outline, size: 16, color: kTextMuted),
-                        ),
-                      ),
-                  ],
+                  child: (puedeEditar && empty)
+                      ? const Center(
+                          child: Icon(Icons.add_circle_outline,
+                              size: 13, color: Color(0xFFDDDDDD)))
+                      : null,
                 ),
               ),
             );
           }),
+          // Bloques de contenido (fusionados cuando hay horas consecutivas iguales)
+          ...bloques.map((b) => Positioned(
+            top:    (b.horaIdx * _rowHeight).toDouble() + 1,
+            left:   2,
+            right:  2,
+            height: (b.duracion * _rowHeight).toDouble() - 2,
+            child:  _buildBloqueWidget(b, dia, puedeEditar),
+          )),
         ],
       ),
     );
   }
 
-  Widget _chipAsignatura(Map<String, dynamic> item, int dia, int hora, bool puedeEditar) {
-    final nombre  = item['nombre_asignatura']?.toString() ?? '?';
-    final docente = item['docente']?.toString() ?? '';
-    final grupo   = item['grupo']?.toString() ?? '';
+  Widget _buildBloqueWidget(_Bloque b, int dia, bool puedeEditar) {
+    final items = b.itemsByHora[0];
+    if (items.length == 1) return _chipAsignatura(b, dia, puedeEditar);
+    // Múltiples asignaturas en la misma hora
+    return Wrap(
+      spacing: 2, runSpacing: 2,
+      children: items
+          .map((item) => _chipSingle(item, dia, _horas[b.horaIdx], puedeEditar))
+          .toList(),
+    );
+  }
+
+  // Chip para un bloque (posiblemente fusionado)
+  Widget _chipAsignatura(_Bloque b, int dia, bool puedeEditar) {
+    final item     = b.itemsByHora[0][0];
+    final nombre   = item['nombre_asignatura']?.toString() ?? '?';
+    final docente  = item['docente']?.toString() ?? '';
+    final grupo    = item['grupo']?.toString() ?? '';
     final subtitle = [if (docente.isNotEmpty) docente, if (grupo.isNotEmpty) grupo].join(' · ');
+    final isMulti  = b.duracion > 1;
+
+    return GestureDetector(
+      onLongPress: puedeEditar ? () => _eliminarBloque(dia, b) : null,
+      child: Tooltip(
+        message: '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}'
+            '${isMulti ? '\n${b.duracion} horas consecutivas' : ''}'
+            '\nMantén presionado para quitar',
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+          decoration: BoxDecoration(
+            color: kPrimary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: kPrimary.withValues(alpha: isMulti ? 0.5 : 0.3),
+              width: isMulti ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: Text(nombre,
+                      style: const TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold, color: kPrimary),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: isMulti ? 2 : 1),
+                ),
+                if (isMulti) ...[
+                  const SizedBox(width: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: kPrimary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text('${b.duracion}h',
+                        style: const TextStyle(
+                            fontSize: 8, color: kPrimary, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ]),
+              if (subtitle.isNotEmpty)
+                Text(subtitle,
+                    style: const TextStyle(fontSize: 9, color: kTextMuted),
+                    overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Chip individual (para horas con múltiples asignaturas simultáneas)
+  Widget _chipSingle(
+      Map<String, dynamic> item, int dia, int hora, bool puedeEditar) {
+    final nombre   = item['nombre_asignatura']?.toString() ?? '?';
+    final docente  = item['docente']?.toString() ?? '';
+    final grupo    = item['grupo']?.toString() ?? '';
+    final subtitle =
+        [if (docente.isNotEmpty) docente, if (grupo.isNotEmpty) grupo].join(' · ');
 
     return GestureDetector(
       onLongPress: puedeEditar ? () => _eliminar(dia, hora, item) : null,
       child: Tooltip(
-        message: '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}\nMantén presionado para quitar',
+        message:
+            '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}\nMantén presionado para quitar',
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           decoration: BoxDecoration(
             color: kPrimary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(4),
@@ -813,7 +1015,8 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(nombre,
-                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kPrimary),
+                  style: const TextStyle(
+                      fontSize: 10, fontWeight: FontWeight.bold, color: kPrimary),
                   overflow: TextOverflow.ellipsis),
               if (subtitle.isNotEmpty)
                 Text(subtitle,
