@@ -41,15 +41,27 @@ Cuadrícula visual Lunes–Sábado × 6:00–21:00h con dos vistas: encargados d
 
 ### Formularios públicos via QR
 
-Cuatro formularios accesibles sin login, cada uno con su propio código QR generado desde el Dashboard: solicitud de préstamo, registro de horas de monitor, registro de práctica docente y reporte de implemento roto.
+Cuatro formularios accesibles sin login, cada uno con su propio código QR: solicitud de préstamo, registro de horas de monitor (con descripción de actividades y duración), registro de práctica docente (selección de docente, asignatura, guía, horario de ingreso/salida) y reporte de implemento roto. Los formularios de práctica y horas soportan catálogos precargados para agilizar el llenado.
+
+### Generación de informes en PDF
+
+Pantalla de informes con seis tipos de reporte: inventario completo, préstamos, bitácora de movimientos, horas de monitor, prácticas docentes y deudores morosos. Cada informe admite filtros de fecha y queda registrado en auditoría.
+
+### Perfil de usuario
+
+Pantalla de perfil que permite al usuario autenticado ver y editar sus datos personales (nombre, identificación, teléfono) directamente desde la aplicación.
+
+### Gestión de catálogos académicos
+
+Pantalla de configuración con cinco pestañas: ubicaciones, unidades de medida, programas académicos, docentes (con asignación múltiple a programas y asignaturas) y guías de práctica (con gestión de insumos requeridos y apertura de PDF externo).
 
 ### Sistema de permisos por rol
 
-Roles diferenciados (Administrador, Laboratorista, Monitor, Docente, Estudiante). La interfaz adapta dinámicamente las opciones visibles según los permisos del usuario autenticado.
+Roles diferenciados (Administrador, Laboratorista, Monitor, Docente, Estudiante). La interfaz adapta dinámicamente las opciones visibles según los permisos del usuario autenticado. Pantalla de administración de permisos por rol con cambio de rol en tiempo real.
 
 ### Modo offline
 
-En plataformas de escritorio y móvil, las operaciones fallidas por falta de red se encolan en SQLite local y se sincronizan automáticamente al recuperar la conexión.
+En plataformas de escritorio y móvil, el inventario se cachea en SQLite local. Las operaciones fallidas por falta de red se encolan y se sincronizan automáticamente al recuperar la conexión.
 
 ---
 

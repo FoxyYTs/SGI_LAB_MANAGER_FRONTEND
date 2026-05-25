@@ -1,3 +1,8 @@
+/// Modelo de dominio para un insumo del inventario.
+///
+/// [fromJson] construye desde la respuesta de `GET /api/inventario/lista/` (InsumoListSerializer).
+/// [fromLocal] construye desde la tabla `insumos_cache` del SQLite local.
+/// [toLocal] serializa al formato de la tabla local para cacheo offline.
 class Insumo {
   final String id;
   final String nombre;

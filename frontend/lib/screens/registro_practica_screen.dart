@@ -155,15 +155,21 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
         'observaciones':    _obsCtrl.text.trim(),
       });
       setState(() => _enviado = true);
-    } catch (e) {
-      String msg = 'Error al registrar. Intenta de nuevo.';
-      try {
-        final data = (e as dynamic).response?.data;
-        if (data is Map) msg = data.values.first.toString();
-      } catch (_) {}
+    } on DioException catch (e) {
+      final String msg;
+      if (e.response?.statusCode == 429) {
+        msg = 'Se excedió la cantidad de registros que puedes hacer por hora. Por favor, intenta más tarde.';
+      } else {
+        final data = e.response?.data;
+        if (data is Map && data.isNotEmpty) {
+          msg = data.values.first.toString();
+        } else {
+          msg = 'Error al registrar. Intenta de nuevo.';
+        }
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: Colors.red[700]),
+          SnackBar(content: Text(msg), backgroundColor: kDanger),
         );
       }
     } finally {

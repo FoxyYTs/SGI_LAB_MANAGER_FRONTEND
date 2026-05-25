@@ -19,6 +19,11 @@ import 'core/theme/colors.dart';
 import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
 
+/// Punto de entrada de la aplicación SGI LAB MANAGER.
+///
+/// Inicializa SQLite (solo en plataformas nativas) antes de levantar los
+/// providers y la MaterialApp. Las rutas públicas (/solicitud, /registro-horas,
+/// etc.) son accesibles sin autenticación desde los formularios QR.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (!kIsWeb) await LocalDb.instance;
@@ -35,6 +40,7 @@ void main() async {
   );
 }
 
+/// Widget raíz de la aplicación. Configura el tema global y el router de rutas.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
