@@ -1,5 +1,12 @@
+/// Paleta de colores del sistema SGI LAB MANAGER.
+///
+/// Todos los widgets deben referenciar estas constantes en lugar de
+/// usar valores hexadecimales directos, para garantizar coherencia visual.
+library;
+
 import 'package:flutter/material.dart';
 
+/// Azul principal de la marca. Coincide con el Bootstrap `#007BFF`.
 const Color kPrimary = Color(0xFF007BFF);
 const Color kPrimaryDark = Color(0xFF0056B3);
 const Color kBackground = Color(0xFFF8F9FA);

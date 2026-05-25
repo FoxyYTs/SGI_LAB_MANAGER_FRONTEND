@@ -4,8 +4,22 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/api/api_client.dart';
 import '../core/sync/sync_service.dart';
 
+/// Proveedor de estado de autenticación y permisos del usuario.
+///
+/// Gestiona el ciclo de vida de la sesión JWT:
+/// - [login]: obtiene access + refresh tokens de `/api/token/` y carga permisos.
+/// - [cargarSesion]: restaura la sesión desde `FlutterSecureStorage` al iniciar.
+/// - [logout]: borra todos los datos de la sesión del almacenamiento seguro.
+///
+/// Los permisos se almacenan localmente (cache) y se recargan en cada login.
+/// El acceso a funciones de la UI usa [can] con las constantes de [Perm].
 class AuthProvider with ChangeNotifier {
-  final _storage = const FlutterSecureStorage();
+  final _storage = const FlutterSecureStorage(
+    webOptions: WebOptions(
+      dbName: 'sgi_lab_storage',
+      publicKey: 'sgi_lab_key',
+    ),
+  );
 
   String?      _token;
   String?      _refreshToken;
@@ -22,6 +36,8 @@ class AuthProvider with ChangeNotifier {
   /// Verifica si el usuario tiene un permiso concreto.
   bool can(String permiso) => _permisos.contains(permiso);
 
+  /// Restaura el estado de la sesión desde el almacenamiento seguro del dispositivo.
+  /// Llamado en el arranque de la app antes de mostrar cualquier pantalla.
   Future<void> cargarSesion() async {
     _token        = await _storage.read(key: 'token');
     if (_token != null) await SyncService.instance.init(_token);

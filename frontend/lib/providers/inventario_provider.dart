@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import '../models/insumo_model.dart';
 import '../repositories/insumo_repository.dart';
 
+/// Proveedor de estado para el listado de insumos del inventario.
+///
+/// Delega la obtención de datos a [InsumoRepository], que implementa
+/// la estrategia "servidor primero, caché offline como fallback".
+/// El campo [desdeCache] indica si la última carga provino del SQLite local
+/// (servidor no disponible) para que la UI pueda mostrarlo al usuario.
 class InventarioProvider with ChangeNotifier {
   final _repo = InsumoRepository();
 
@@ -15,6 +21,8 @@ class InventarioProvider with ChangeNotifier {
   bool         get desdeCache => _desdeCache;
   DateTime?    get lastSync   => _lastSync;
 
+  /// Carga el inventario desde el servidor (o caché si no hay red).
+  /// Actualiza [desdeCache] según si el timestamp de sync cambió.
   Future<void> fetchInsumos(String? token) async {
     _cargando = true;
     notifyListeners();

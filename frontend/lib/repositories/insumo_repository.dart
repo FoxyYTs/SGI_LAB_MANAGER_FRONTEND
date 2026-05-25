@@ -3,6 +3,11 @@ import '../core/api/api_client.dart';
 import '../core/database/local_db.dart';
 import '../models/insumo_model.dart';
 
+/// Repositorio de insumos con estrategia "servidor primero, caché offline".
+///
+/// En plataformas nativas (Linux/Windows/Android), cachea la respuesta del
+/// servidor en SQLite. Si el servidor no responde, devuelve los datos del
+/// caché local. En web, no hay caché y un error devuelve lista vacía.
 class InsumoRepository {
   static const _entity = 'insumos';
 
