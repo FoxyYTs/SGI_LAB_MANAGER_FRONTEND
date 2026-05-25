@@ -39,6 +39,10 @@ class _InformesContentState extends State<InformesContent> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width;
+    // 1 columna < 500, 2 columnas < 900, 3 columnas en adelante
+    final crossCount = width < 500 ? 1 : (width < 900 ? 2 : 3);
+
     return Scaffold(
       backgroundColor: kBackground,
       body: _cargando
@@ -46,26 +50,52 @@ class _InformesContentState extends State<InformesContent> {
           : RefreshIndicator(
               color: kPrimary,
               onRefresh: _cargar,
-              child: SingleChildScrollView(
+              child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Generación de Informes',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold, color: kPrimary)),
-                    const SizedBox(height: 4),
-                    const Text('Descarga informes en PDF. Puedes filtrar por rango de fechas.',
-                        style: TextStyle(fontSize: 13, color: Colors.black54)),
-                    const SizedBox(height: 20),
-                    ..._tiposInforme.map((t) => _InformeTile(
-                          tipo: t,
-                          ultimo: _ultimosInformes[t.codigo],
-                          onDescargado: _cargar,
-                        )),
-                  ],
-                ),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Generación de Informes',
+                              style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: kPrimary)),
+                          const SizedBox(height: 4),
+                          const Text(
+                              'Descarga informes en PDF. Puedes filtrar por rango de fechas.',
+                              style: TextStyle(fontSize: 13, color: Colors.black54)),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    sliver: SliverGrid(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final t = _tiposInforme[index];
+                          return _InformeTile(
+                            tipo: t,
+                            ultimo: _ultimosInformes[t.codigo],
+                            onDescargado: _cargar,
+                          );
+                        },
+                        childCount: _tiposInforme.length,
+                      ),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossCount,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: crossCount == 1 ? 2.2 : 1.35,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
     );
@@ -242,67 +272,83 @@ class _InformeTileState extends State<_InformeTile> {
     final ultimaVez = _formatUltimo(widget.ultimo?['generado_en']?.toString());
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      elevation: 1,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: kPrimary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Cabecera: icono + título ───────────────────────────────
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: kPrimary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(widget.tipo.icon, color: kPrimary, size: 22),
               ),
-              child: Icon(widget.tipo.icon, color: kPrimary, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.tipo.label,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text('Último: $ultimaVez',
-                  style: const TextStyle(color: Colors.black45, fontSize: 11)),
-            ])),
-          ]),
-
-          if (widget.tipo.conFechas) ...[
-            const SizedBox(height: 12),
-            Row(children: [
-              Expanded(child: _FechaBtn(
-                label: _desde != null ? 'Desde: ${_label(_desde!)}' : 'Desde (opcional)',
-                onTap: () => _seleccionarFecha(true),
-                onClear: _desde != null ? () => setState(() => _desde = null) : null,
-              )),
-              const SizedBox(width: 8),
-              Expanded(child: _FechaBtn(
-                label: _hasta != null ? 'Hasta: ${_label(_hasta!)}' : 'Hasta (opcional)',
-                onTap: () => _seleccionarFecha(false),
-                onClear: _hasta != null ? () => setState(() => _hasta = null) : null,
+              const SizedBox(width: 10),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.tipo.label,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 2),
+                  Text('Último: $ultimaVez',
+                      style: const TextStyle(color: Colors.black38, fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
               )),
             ]),
-          ],
 
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _descargando ? null : _descargar,
-              icon: _descargando
-                  ? const SizedBox(width: 14, height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.picture_as_pdf_outlined, size: 16),
-              label: Text(_descargando ? 'Generando…' : 'Descargar PDF'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                textStyle: const TextStyle(fontSize: 13),
+            const Spacer(),
+
+            // ── Filtros de fecha (si aplica) ──────────────────────────
+            if (widget.tipo.conFechas) ...[
+              Row(children: [
+                Expanded(child: _FechaBtn(
+                  label: _desde != null ? _label(_desde!) : 'Desde',
+                  onTap: () => _seleccionarFecha(true),
+                  onClear: _desde != null ? () => setState(() => _desde = null) : null,
+                )),
+                const SizedBox(width: 6),
+                Expanded(child: _FechaBtn(
+                  label: _hasta != null ? _label(_hasta!) : 'Hasta',
+                  onTap: () => _seleccionarFecha(false),
+                  onClear: _hasta != null ? () => setState(() => _hasta = null) : null,
+                )),
+              ]),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Botón de descarga ─────────────────────────────────────
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _descargando ? null : _descargar,
+                icon: _descargando
+                    ? const SizedBox(width: 13, height: 13,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.picture_as_pdf_outlined, size: 15),
+                label: Text(_descargando ? 'Generando…' : 'Descargar PDF'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 9),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
               ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
