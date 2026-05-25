@@ -403,7 +403,7 @@ class _ProgramasTab extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────
-// Tab: Docentes
+// Tab: Docentes  (N:M con Programas y Asignaturas)
 // ─────────────────────────────────────────
 class _DocentesTab extends StatefulWidget {
   const _DocentesTab();
@@ -413,23 +413,30 @@ class _DocentesTab extends StatefulWidget {
 }
 
 class _DocentesTabState extends State<_DocentesTab> {
-  List<Map<String, dynamic>> _programas = [];
+  List<Map<String, dynamic>> _programas   = [];
+  List<Map<String, dynamic>> _asignaturas = [];
 
   @override
   void initState() {
     super.initState();
-    _cargarProgramas();
+    _cargarCatalogos();
   }
 
-  Future<void> _cargarProgramas() async {
+  Future<void> _cargarCatalogos() async {
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final r    = await dio.get('academico/programas/');
-      final d    = r.data;
+      final results = await Future.wait([
+        dio.get('academico/programas/'),
+        dio.get('academico/asignaturas/'),
+      ]);
       if (mounted) {
-        setState(() => _programas = List<Map<String, dynamic>>.from(
-          d is List ? d : (d['results'] ?? [])));
+        final dp = results[0].data;
+        final da = results[1].data;
+        setState(() {
+          _programas   = List<Map<String, dynamic>>.from(dp is List ? dp : (dp['results'] ?? []));
+          _asignaturas = List<Map<String, dynamic>>.from(da is List ? da : (da['results'] ?? []));
+        });
       }
     } catch (_) {}
   }
@@ -438,61 +445,97 @@ class _DocentesTabState extends State<_DocentesTab> {
       Future<void> Function(Map<String, dynamic>) onSave) async {
     final nomCtrl    = TextEditingController(text: item?['nombre_completo'] ?? '');
     final correoCtrl = TextEditingController(text: item?['correo'] ?? '');
-    String? programaId = item?['programa']?.toString();
+
+    // Inicializar selecciones múltiples desde el item existente
+    final selProgramas = <String>{
+      ...((item?['programas'] as List? ?? []).map((e) => e.toString())),
+    };
+    final selAsignaturas = <String>{
+      ...((item?['asignaturas'] as List? ?? []).map((e) => e.toString())),
+    };
 
     await showDialog(
       context: ctx,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (sCtx, setSt) => AlertDialog(
-          title: Text(item == null ? 'Nuevo docente' : 'Editar docente'),
+          title: Text(item == null ? 'Nuevo docente' : 'Editar docente',
+              style: const TextStyle(color: kPrimary, fontSize: 16)),
           content: SizedBox(
-            width: 360,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nomCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre completo *',
-                    border: OutlineInputBorder(),
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nomCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nombre completo *',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    autofocus: true,
                   ),
-                  autofocus: true,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: correoCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Correo institucional *',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: correoCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Correo institucional *',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: programaId,
-                  decoration: const InputDecoration(
-                    labelText: 'Programa *',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 16),
+
+                  // ── Programas (multi-select con chips) ──────────────
+                  const Text('Programas',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  _MultiSelectChips(
+                    opciones: _programas,
+                    idKey: 'id',
+                    labelKey: 'nombre',
+                    seleccionados: selProgramas,
+                    onChanged: (ids) => setSt(() {
+                      selProgramas.clear();
+                      selProgramas.addAll(ids);
+                    }),
                   ),
-                  items: _programas.map((p) => DropdownMenuItem(
-                    value: p['id'].toString(),
-                    child: Text(p['nombre'] ?? '', style: const TextStyle(fontSize: 13)),
-                  )).toList(),
-                  onChanged: (v) => setSt(() => programaId = v),
-                ),
-              ],
+                  const SizedBox(height: 16),
+
+                  // ── Asignaturas (multi-select con chips) ────────────
+                  const Text('Asignaturas',
+                      style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  _MultiSelectChips(
+                    opciones: _asignaturas,
+                    idKey: 'id',
+                    labelKey: 'nombre_asignatura',
+                    seleccionados: selAsignaturas,
+                    onChanged: (ids) => setSt(() {
+                      selAsignaturas.clear();
+                      selAsignaturas.addAll(ids);
+                    }),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancelar')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary, foregroundColor: Colors.white),
               onPressed: () async {
                 Navigator.pop(dialogCtx);
                 await onSave({
                   'nombre_completo': nomCtrl.text.trim(),
                   'correo':          correoCtrl.text.trim(),
-                  'programa':        programaId,
+                  'programas':       selProgramas.toList(),
+                  'asignaturas':     selAsignaturas.toList(),
                   'activo':          true,
                 });
               },
@@ -512,26 +555,91 @@ class _DocentesTabState extends State<_DocentesTab> {
       endpoint: 'academico/docentes/',
       titulo: 'Docentes',
       formDialog: _dialog,
-      itemBuilder: (item, onEdit, onDelete) => Card(
-        child: ListTile(
-          leading: const CircleAvatar(
-            backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.person_pin_outlined, color: kPrimary, size: 20),
+      itemBuilder: (item, onEdit, onDelete) {
+        final programasNombres = (item['programas_nombres'] as List? ?? [])
+            .map((e) => e.toString()).join(', ');
+        final asignaturasNombres = (item['asignaturas_nombres'] as List? ?? [])
+            .map((e) => e.toString()).join(', ');
+        return Card(
+          child: ListTile(
+            leading: const CircleAvatar(
+              backgroundColor: Color(0x1A007BFF),
+              child: Icon(Icons.person_pin_outlined, color: kPrimary, size: 20),
+            ),
+            title: Text(item['nombre_completo'] ?? '',
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item['correo'] ?? '', style: const TextStyle(fontSize: 12)),
+                if (programasNombres.isNotEmpty)
+                  Text(programasNombres,
+                      style: const TextStyle(fontSize: 11, color: kPrimary),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (asignaturasNombres.isNotEmpty)
+                  Text(asignaturasNombres,
+                      style: const TextStyle(fontSize: 11, color: kTextMuted),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+            isThreeLine: programasNombres.isNotEmpty || asignaturasNombres.isNotEmpty,
+            trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
           ),
-          title: Text(item['nombre_completo'] ?? '',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item['correo'] ?? '', style: const TextStyle(fontSize: 12)),
-              if ((item['nombre_programa'] ?? '').isNotEmpty)
-                Text(item['nombre_programa'], style: const TextStyle(fontSize: 12, color: kTextMuted)),
-            ],
-          ),
-          isThreeLine: (item['nombre_programa'] ?? '').isNotEmpty,
-          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
-        ),
-      ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Widget de selección múltiple con chips
+// ─────────────────────────────────────────
+class _MultiSelectChips extends StatelessWidget {
+  final List<Map<String, dynamic>> opciones;
+  final String idKey;
+  final String labelKey;
+  final Set<String> seleccionados;
+  final void Function(Set<String>) onChanged;
+
+  const _MultiSelectChips({
+    required this.opciones,
+    required this.idKey,
+    required this.labelKey,
+    required this.seleccionados,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (opciones.isEmpty) {
+      return const Text('Sin opciones disponibles',
+          style: TextStyle(color: kTextMuted, fontSize: 12));
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      children: opciones.map((op) {
+        final id      = op[idKey].toString();
+        final label   = op[labelKey]?.toString() ?? id;
+        final activo  = seleccionados.contains(id);
+        return FilterChip(
+          label: Text(label, style: TextStyle(
+              fontSize: 12,
+              color: activo ? Colors.white : Colors.black87)),
+          selected: activo,
+          onSelected: (_) {
+            final nuevo = Set<String>.from(seleccionados);
+            if (activo) { nuevo.remove(id); } else { nuevo.add(id); }
+            onChanged(nuevo);
+          },
+          selectedColor: kPrimary,
+          checkmarkColor: Colors.white,
+          backgroundColor: const Color(0xFFF0F0F0),
+          side: BorderSide(color: activo ? kPrimary : const Color(0xFFCCCCCC)),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        );
+      }).toList(),
     );
   }
 }
