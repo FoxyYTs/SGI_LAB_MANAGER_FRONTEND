@@ -23,7 +23,7 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 5, vsync: this);
+    _tab = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -65,6 +65,8 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
             Tab(icon: Icon(Icons.school_outlined),        text: 'Programas'),
             Tab(icon: Icon(Icons.person_pin_outlined),    text: 'Docentes'),
             Tab(icon: Icon(Icons.menu_book_outlined),     text: 'Guías'),
+            Tab(icon: Icon(Icons.category_outlined),      text: 'Áreas'),
+            Tab(icon: Icon(Icons.science_outlined),       text: 'Asignaturas'),
           ],
         ),
       ),
@@ -76,6 +78,8 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
           _ProgramasTab(),
           _DocentesTab(),
           _GuiasTab(),
+          _AreasTab(),
+          _AsignaturasTab(),
         ],
       ),
     );
@@ -935,6 +939,209 @@ class _GuiasTabState extends State<_GuiasTab> {
           ),
         );
       },
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Tab: Áreas de asignatura
+// ─────────────────────────────────────────
+class _AreasTab extends StatelessWidget {
+  const _AreasTab();
+
+  Future<void> _dialog(Map? item, BuildContext ctx,
+      Future<void> Function(Map<String, dynamic>) onSave) async {
+    final ctrl = TextEditingController(text: item?['nombre_area'] ?? '');
+    await showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        title: Text(item == null ? 'Nueva área' : 'Editar área'),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            labelText: 'Nombre del área *',
+            hintText: 'Ej: Química Orgánica, Biología Celular',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await onSave({'nombre_area': ctrl.text.trim()});
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _CrudList(
+      endpoint: 'academico/areas/',
+      titulo: 'Áreas',
+      formDialog: _dialog,
+      itemBuilder: (item, onEdit, onDelete) => Card(
+        child: ListTile(
+          leading: const CircleAvatar(
+            backgroundColor: Color(0x1A007BFF),
+            child: Icon(Icons.category_outlined, color: kPrimary, size: 20),
+          ),
+          title: Text(item['nombre_area'] ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: () {
+            final total = item['total_asignaturas'];
+            if (total == null) return null;
+            return Text('$total asignatura${total == 1 ? '' : 's'}',
+                style: const TextStyle(fontSize: 12, color: kTextMuted));
+          }(),
+          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Tab: Asignaturas
+// ─────────────────────────────────────────
+class _AsignaturasTab extends StatefulWidget {
+  const _AsignaturasTab();
+
+  @override
+  State<_AsignaturasTab> createState() => _AsignaturasTabState();
+}
+
+class _AsignaturasTabState extends State<_AsignaturasTab> {
+  List<Map<String, dynamic>> _areas = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarAreas();
+  }
+
+  Future<void> _cargarAreas() async {
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final resp = await dio.get('academico/areas/');
+      if (mounted) {
+        final d = resp.data;
+        setState(() {
+          _areas = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _dialog(Map? item, BuildContext ctx,
+      Future<void> Function(Map<String, dynamic>) onSave) async {
+    final ctrl = TextEditingController(text: item?['nombre_asignatura'] ?? '');
+    String? selArea = item?['area']?.toString();
+
+    await showDialog(
+      context: ctx,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (sCtx, setSt) => AlertDialog(
+          title: Text(item == null ? 'Nueva asignatura' : 'Editar asignatura',
+              style: const TextStyle(color: kPrimary, fontSize: 16)),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre de la asignatura *',
+                    hintText: 'Ej: Química General I',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  autofocus: true,
+                ),
+                const SizedBox(height: 12),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Área *',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  child: DropdownButton<String>(
+                    value: selArea,
+                    isExpanded: true,
+                    underline: const SizedBox(),
+                    isDense: true,
+                    hint: const Text('Selecciona un área',
+                        style: TextStyle(fontSize: 14, color: kTextMuted)),
+                    items: _areas.map((a) => DropdownMenuItem(
+                      value: a['id'].toString(),
+                      child: Text(a['nombre_area'] ?? '',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14)),
+                    )).toList(),
+                    onChanged: (v) => setSt(() => selArea = v),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: const Text('Cancelar')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary, foregroundColor: Colors.white),
+              onPressed: () async {
+                Navigator.pop(dialogCtx);
+                await onSave({
+                  'nombre_asignatura': ctrl.text.trim(),
+                  'area':              selArea,
+                });
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    ctrl.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _CrudList(
+      endpoint: 'academico/asignaturas/',
+      titulo: 'Asignaturas',
+      formDialog: _dialog,
+      itemBuilder: (item, onEdit, onDelete) => Card(
+        child: ListTile(
+          leading: const CircleAvatar(
+            backgroundColor: Color(0x1A007BFF),
+            child: Icon(Icons.science_outlined, color: kPrimary, size: 20),
+          ),
+          title: Text(item['nombre_asignatura'] ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: () {
+            final area  = item['nombre_area'] ?? '';
+            final guias = item['total_guias'];
+            if (area.isEmpty) return null;
+            return Text(
+              guias != null ? '$area · $guias guía${guias == 1 ? '' : 's'}' : area,
+              style: const TextStyle(fontSize: 12, color: kTextMuted),
+            );
+          }(),
+          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
+        ),
+      ),
     );
   }
 }
