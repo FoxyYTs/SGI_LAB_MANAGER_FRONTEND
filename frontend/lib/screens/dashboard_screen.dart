@@ -61,7 +61,7 @@ class _DashboardContentState extends State<DashboardContent> {
                       ),
                       const SizedBox(height: 6),
                       const Text(
-                        'SGI LAB MANAGER — Laboratorio Integrado',
+                        'SGI LAB MANAGER — Laboratorios de Ciencias Basicas Poli Rionegro',
                         style: TextStyle(fontSize: 14, color: kTextMuted),
                       ),
                     ],

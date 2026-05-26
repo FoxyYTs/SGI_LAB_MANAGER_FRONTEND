@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 /// URL completa del servidor (sin /api/ — se agrega automáticamente).
-/// Producción: --dart-define=SERVER_URL=https://api.sgilabmanager.duckdns.org
+/// Producción: --dart-define=SERVER_URL=https://apisgi.foxyyts.qzz.io
 const _kServerUrl = String.fromEnvironment('SERVER_URL', defaultValue: '');
 
 /// IP del servidor para builds móviles/desktop en red local.

@@ -2,7 +2,7 @@
 
 Sistema de Gestión de Inventarios para laboratorio académico. Aplicación multi-plataforma desarrollada en **Flutter**, que corre en Windows, Android y Web.
 
-> Proyecto desarrollado como solución integral para la administración de inventario, préstamos de equipos e insumos, seguridad química (SGA/GHS) y gestión académica de un laboratorio integrado.
+> Proyecto desarrollado como solución integral para la administración de inventario, préstamos de equipos e insumos, seguridad química (SGA/GHS) y gestión académica de los Laboratorios de Ciencias Basicas Poli Rionegro (PCJIC).
 
 ---
 
