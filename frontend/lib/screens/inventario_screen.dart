@@ -92,44 +92,74 @@ class _InventarioContentState extends State<InventarioContent> {
 
         final esQuimico = _filtroTipo == 'Químico';
 
+        return LayoutBuilder(builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 650;
+        final pad = isMobile ? 14.0 : 24.0;
         return Stack(children: [
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(pad),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Encabezado ───────────────────────────────────────────────
-                Row(children: [
-                  Text(
-                    esQuimico ? 'Inventario de Químicos' : 'Inventario',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: 260,
-                    child: TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Buscar...',
-                        prefixIcon: const Icon(Icons.search, color: kPrimary),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                        focusedBorder: const OutlineInputBorder(
-                            borderSide: BorderSide(color: kPrimary)),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                      onChanged: (v) => setState(() => _searchQuery = v),
+                if (isMobile) ...[
+                  Row(children: [
+                    Expanded(child: Text(
+                      esQuimico ? 'Inventario de Químicos' : 'Inventario',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    )),
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: kPrimary),
+                      tooltip: 'Actualizar',
+                      onPressed: () => provider.fetchInsumos(auth.token),
                     ),
+                  ]),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar...',
+                      prefixIcon: const Icon(Icons.search, color: kPrimary),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                      focusedBorder: const OutlineInputBorder(
+                          borderSide: BorderSide(color: kPrimary)),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onChanged: (v) => setState(() => _searchQuery = v),
                   ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: () => provider.fetchInsumos(auth.token),
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: const Text('Actualizar'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kPrimary, foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
-                  ),
-                ]),
+                ] else
+                  Row(children: [
+                    Text(
+                      esQuimico ? 'Inventario de Químicos' : 'Inventario',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      width: 260,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar...',
+                          prefixIcon: const Icon(Icons.search, color: kPrimary),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                          focusedBorder: const OutlineInputBorder(
+                              borderSide: BorderSide(color: kPrimary)),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        onChanged: (v) => setState(() => _searchQuery = v),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: () => provider.fetchInsumos(auth.token),
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Actualizar'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kPrimary, foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
+                    ),
+                  ]),
                 const SizedBox(height: 12),
 
                 // ── Chips de filtro por tipo ──────────────────────────────────
@@ -177,9 +207,16 @@ class _InventarioContentState extends State<InventarioContent> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: SingleChildScrollView(
-                              child: esQuimico
-                                  ? _buildTablaQuimicos(filtrados, context)
-                                  : _buildTablaGeneral(filtrados, context),
+                              scrollDirection: isMobile ? Axis.horizontal : Axis.vertical,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(minWidth: isMobile ? 500 : 0),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.vertical,
+                                  child: esQuimico
+                                      ? _buildTablaQuimicos(filtrados, context)
+                                      : _buildTablaGeneral(filtrados, context),
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -223,6 +260,7 @@ class _InventarioContentState extends State<InventarioContent> {
               ),
             ),
         ]);
+        }); // LayoutBuilder
       },
     );
   }
