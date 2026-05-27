@@ -235,12 +235,12 @@ class _InventarioContentState extends State<InventarioContent> {
     return Table(
       columnWidths: {
         0: const FlexColumnWidth(3),
-        1: const FlexColumnWidth(1.5),
-        2: const FlexColumnWidth(1.5),
-        3: const FlexColumnWidth(1.2),
-        4: const FlexColumnWidth(1.2),
-        5: const FixedColumnWidth(70),
-        if (showSga) 6: const FixedColumnWidth(56),
+        1: const FlexColumnWidth(1.4),
+        2: const FlexColumnWidth(1.4),
+        3: const FlexColumnWidth(0.9),
+        4: const FlexColumnWidth(0.9),
+        5: const FixedColumnWidth(58),
+        if (showSga) 6: const FixedColumnWidth(48),
       },
       border: const TableBorder(
           horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
@@ -290,12 +290,12 @@ class _InventarioContentState extends State<InventarioContent> {
     return Table(
       columnWidths: const {
         0: FlexColumnWidth(3),
-        1: FlexColumnWidth(1.5),
-        2: FlexColumnWidth(1.2),
-        3: FlexColumnWidth(1.2),
-        4: FixedColumnWidth(70),
-        5: FixedColumnWidth(60),
-        6: FixedColumnWidth(56),
+        1: FlexColumnWidth(1.4),
+        2: FlexColumnWidth(0.9),
+        3: FlexColumnWidth(0.9),
+        4: FixedColumnWidth(58),
+        5: FixedColumnWidth(48),
+        6: FixedColumnWidth(48),
       },
       border: const TableBorder(
           horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
@@ -347,7 +347,7 @@ class _InventarioContentState extends State<InventarioContent> {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   TableRow _headerRow(List<String> cols, List<String> keys) {
-    const padding = EdgeInsets.symmetric(horizontal: 8, vertical: 12);
+    const padding = EdgeInsets.symmetric(horizontal: 8, vertical: 8);
     return TableRow(
       decoration: const BoxDecoration(color: kPrimary),
       children: List.generate(cols.length, (i) {
@@ -386,7 +386,7 @@ class _InventarioContentState extends State<InventarioContent> {
 
   Widget _cell(String text, {bool bold = false, VoidCallback? onTap}) {
     final content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       child: Text(text,
           style: TextStyle(
             fontWeight: bold ? FontWeight.w600 : FontWeight.normal,
@@ -400,7 +400,7 @@ class _InventarioContentState extends State<InventarioContent> {
   }
 
   Widget _semaforo(String s) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
     child: Center(
       child: Container(
         width: 14, height: 14,

@@ -39,63 +39,73 @@ class _InformesContentState extends State<InformesContent> {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
-    // 1 columna < 500, 2 columnas < 900, 3 columnas en adelante
-    final crossCount = width < 500 ? 1 : (width < 900 ? 2 : 3);
-
     return Scaffold(
       backgroundColor: kBackground,
       body: _cargando
           ? const Center(child: CircularProgressIndicator(color: kPrimary))
-          : RefreshIndicator(
-              color: kPrimary,
-              onRefresh: _cargar,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Generación de Informes',
-                              style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: kPrimary)),
-                          const SizedBox(height: 4),
-                          const Text(
-                              'Descarga informes en PDF. Puedes filtrar por rango de fechas.',
-                              style: TextStyle(fontSize: 13, color: Colors.black54)),
-                          const SizedBox(height: 12),
+          : Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                // En pantallas anchas (desktop) el grid no supera 1100 px.
+                constraints: const BoxConstraints(maxWidth: 1100),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final w = constraints.maxWidth;
+                    final crossCount = w < 500 ? 1 : (w < 720 ? 2 : 3);
+                    return RefreshIndicator(
+                      color: kPrimary,
+                      onRefresh: _cargar,
+                      child: CustomScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Generación de Informes',
+                                      style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: kPrimary)),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                      'Descarga informes en PDF o Excel. Puedes filtrar por rango de fechas.',
+                                      style: TextStyle(fontSize: 13, color: Colors.black54)),
+                                  const SizedBox(height: 12),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                            sliver: SliverGrid(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final t = _tiposInforme[index];
+                                  return _InformeTile(
+                                    tipo: t,
+                                    ultimo: _ultimosInformes[t.codigo],
+                                    onDescargado: _cargar,
+                                  );
+                                },
+                                childCount: _tiposInforme.length,
+                              ),
+                              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: crossCount,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                                // Tarjetas más compactas en multi-columna
+                                childAspectRatio: crossCount == 1 ? 2.2 : 1.65,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    sliver: SliverGrid(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final t = _tiposInforme[index];
-                          return _InformeTile(
-                            tipo: t,
-                            ultimo: _ultimosInformes[t.codigo],
-                            onDescargado: _cargar,
-                          );
-                        },
-                        childCount: _tiposInforme.length,
-                      ),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossCount,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: crossCount == 1 ? 2.2 : 1.35,
-                      ),
-                    ),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
             ),
     );
