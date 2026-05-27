@@ -108,12 +108,14 @@ class _TipoInforme {
   final String codigo;
   final String label;
   final String endpoint;
+  final String? endpointExcel;
   final IconData icon;
   final bool conFechas;
   const _TipoInforme({
     required this.codigo,
     required this.label,
     required this.endpoint,
+    this.endpointExcel,
     required this.icon,
     this.conFechas = true,
   });
@@ -121,41 +123,47 @@ class _TipoInforme {
 
 const _tiposInforme = [
   _TipoInforme(
-    codigo:    'INVENTARIO',
-    label:     'Inventario',
-    endpoint:  'academico/informes/inventario/',
-    icon:      Icons.inventory_2_outlined,
-    conFechas: false,
+    codigo:        'INVENTARIO',
+    label:         'Inventario',
+    endpoint:      'academico/informes/inventario/',
+    endpointExcel: 'academico/informes/inventario-excel/',
+    icon:          Icons.inventory_2_outlined,
+    conFechas:     false,
   ),
   _TipoInforme(
-    codigo:   'PRESTAMOS',
-    label:    'Préstamos',
-    endpoint: 'academico/informes/prestamos/',
-    icon:     Icons.swap_horiz_outlined,
+    codigo:        'PRESTAMOS',
+    label:         'Préstamos',
+    endpoint:      'academico/informes/prestamos/',
+    endpointExcel: 'academico/informes/prestamos-excel/',
+    icon:          Icons.swap_horiz_outlined,
   ),
   _TipoInforme(
-    codigo:   'BITACORA',
-    label:    'Bitácora de movimientos',
-    endpoint: 'academico/informes/bitacora/',
-    icon:     Icons.history_outlined,
+    codigo:        'BITACORA',
+    label:         'Bitácora de movimientos',
+    endpoint:      'academico/informes/bitacora/',
+    endpointExcel: 'academico/informes/bitacora-excel/',
+    icon:          Icons.history_outlined,
   ),
   _TipoInforme(
-    codigo:   'HORAS_MONITOR',
-    label:    'Horas de monitor',
-    endpoint: 'academico/informes/horas-monitor/',
-    icon:     Icons.timer_outlined,
+    codigo:        'HORAS_MONITOR',
+    label:         'Horas de monitor',
+    endpoint:      'academico/informes/horas-monitor/',
+    endpointExcel: 'academico/informes/horas-monitor-excel/',
+    icon:          Icons.timer_outlined,
   ),
   _TipoInforme(
-    codigo:   'PRACTICAS',
-    label:    'Prácticas de laboratorio',
-    endpoint: 'academico/informes/practicas/',
-    icon:     Icons.science_outlined,
+    codigo:        'PRACTICAS',
+    label:         'Prácticas de laboratorio',
+    endpoint:      'academico/informes/practicas/',
+    endpointExcel: 'academico/informes/practicas-excel/',
+    icon:          Icons.science_outlined,
   ),
   _TipoInforme(
-    codigo:   'DEUDORES',
-    label:    'Deudores morosos',
-    endpoint: 'academico/informes/deudores/',
-    icon:     Icons.report_outlined,
+    codigo:        'DEUDORES',
+    label:         'Deudores morosos',
+    endpoint:      'academico/informes/deudores/',
+    endpointExcel: 'academico/informes/deudores-excel/',
+    icon:          Icons.report_outlined,
   ),
 ];
 
@@ -179,7 +187,8 @@ class _InformeTile extends StatefulWidget {
 class _InformeTileState extends State<_InformeTile> {
   DateTime? _desde;
   DateTime? _hasta;
-  bool _descargando = false;
+  bool _descargando      = false;
+  bool _descargandoExcel = false;
 
   Future<void> _seleccionarFecha(bool esDesde) async {
     final initial = esDesde
@@ -218,27 +227,30 @@ class _InformeTileState extends State<_InformeTile> {
     }
   }
 
-  Future<void> _descargar() async {
-    final auth = context.read<AuthProvider>();
-    setState(() => _descargando = true);
-    try {
-      final params = <String, dynamic>{};
-      if (widget.tipo.conFechas) {
-        if (_desde != null) params['fecha_desde'] = _iso(_desde!);
-        if (_hasta  != null) params['fecha_hasta'] = _iso(_hasta!);
-      }
+  Map<String, dynamic> get _params {
+    final p = <String, dynamic>{};
+    if (widget.tipo.conFechas) {
+      if (_desde != null) p['fecha_desde'] = _iso(_desde!);
+      if (_hasta  != null) p['fecha_hasta'] = _iso(_hasta!);
+    }
+    return p;
+  }
 
-      final dio = ApiClient.instance.authenticatedDio(auth.token!);
+  Future<void> _descargarArchivo(String endpoint, String extension, void Function(bool) setLoading) async {
+    final auth = context.read<AuthProvider>();
+    setLoading(true);
+    try {
+      final params = _params;
+      final dio    = ApiClient.instance.authenticatedDio(auth.token!);
       final response = await dio.get<List<int>>(
-        widget.tipo.endpoint,
+        endpoint,
         queryParameters: params.isNotEmpty ? params : null,
         options: Options(responseType: ResponseType.bytes),
       );
 
       final bytes = response.data!;
-      final tmp   = Directory.systemTemp;
-      final fname = '${widget.tipo.codigo.toLowerCase()}_${_iso(DateTime.now())}.pdf';
-      final file  = File('${tmp.path}/$fname');
+      final fname = '${widget.tipo.codigo.toLowerCase()}_${_iso(DateTime.now())}.$extension';
+      final file  = File('${Directory.systemTemp.path}/$fname');
       await file.writeAsBytes(bytes);
 
       final uri = Uri.file(file.path);
@@ -246,10 +258,9 @@ class _InformeTileState extends State<_InformeTile> {
         await launchUrl(uri);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Archivo guardado en: ${file.path}')),
+          SnackBar(content: Text('Guardado en: ${file.path}')),
         );
       }
-
       widget.onDescargado();
     } catch (e) {
       if (mounted) {
@@ -263,9 +274,17 @@ class _InformeTileState extends State<_InformeTile> {
         );
       }
     } finally {
-      if (mounted) setState(() => _descargando = false);
+      if (mounted) setLoading(false);
     }
   }
+
+  Future<void> _descargar() => _descargarArchivo(
+        widget.tipo.endpoint, 'pdf',
+        (v) => setState(() => _descargando = v));
+
+  Future<void> _descargarExcel() => _descargarArchivo(
+        widget.tipo.endpointExcel!, 'xlsx',
+        (v) => setState(() => _descargandoExcel = v));
 
   @override
   Widget build(BuildContext context) {
@@ -328,25 +347,46 @@ class _InformeTileState extends State<_InformeTile> {
               const SizedBox(height: 8),
             ],
 
-            // ── Botón de descarga ─────────────────────────────────────
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _descargando ? null : _descargar,
-                icon: _descargando
-                    ? const SizedBox(width: 13, height: 13,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.picture_as_pdf_outlined, size: 15),
-                label: Text(_descargando ? 'Generando…' : 'Descargar PDF'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 9),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                  textStyle: const TextStyle(fontSize: 12),
+            // ── Botones de descarga ───────────────────────────────────
+            Row(children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _descargando ? null : _descargar,
+                  icon: _descargando
+                      ? const SizedBox(width: 12, height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.picture_as_pdf_outlined, size: 14),
+                  label: Text(_descargando ? '…' : 'PDF',
+                      style: const TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
                 ),
               ),
-            ),
+              if (widget.tipo.endpointExcel != null) ...[
+                const SizedBox(width: 6),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _descargandoExcel ? null : _descargarExcel,
+                    icon: _descargandoExcel
+                        ? const SizedBox(width: 12, height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.table_chart_outlined, size: 14),
+                    label: Text(_descargandoExcel ? '…' : 'Excel',
+                        style: const TextStyle(fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF217346),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                ),
+              ],
+            ]),
           ],
         ),
       ),

@@ -4,6 +4,9 @@ import '../providers/auth_provider.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/sync/sync_service.dart';
+import '../services/monitor_reminder_service.dart';
+import '../services/update_service.dart';
+import '../widgets/update_dialog.dart';
 import 'dashboard_screen.dart';
 import 'inventario_screen.dart';
 import 'movimientos_screen.dart';
@@ -27,6 +30,50 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _idx = 0;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _reminderIniciado = false;
+  bool _updateChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _actualizarReminder();
+      _verificarActualizacion();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _actualizarReminder();
+  }
+
+  Future<void> _verificarActualizacion() async {
+    if (_updateChecked || !mounted) return;
+    _updateChecked = true;
+    final info = await UpdateService.verificarActualizacion();
+    if (info != null && mounted) {
+      await mostrarDialogoActualizacion(context, info);
+    }
+  }
+
+  void _actualizarReminder() {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.rol == 'MONITOR' && !_reminderIniciado) {
+      _reminderIniciado = true;
+      MonitorReminderService.iniciar(context, auth);
+    } else if (auth.rol != 'MONITOR' && _reminderIniciado) {
+      _reminderIniciado = false;
+      MonitorReminderService.detener();
+    }
+  }
+
+  @override
+  void dispose() {
+    MonitorReminderService.detener();
+    super.dispose();
+  }
 
   List<_TabDef> _tabs(AuthProvider auth) => [
     const _TabDef(Icons.home_outlined,            'Inicio',        DashboardContent()),

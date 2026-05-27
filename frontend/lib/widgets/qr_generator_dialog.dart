@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import '../utils/qr_saver.dart';
-import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+
+const _kFrontendUrl = String.fromEnvironment('FRONTEND_URL', defaultValue: '');
 
 class QrGeneratorDialog extends StatefulWidget {
   const QrGeneratorDialog({super.key});
@@ -64,8 +66,16 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
   }
 
   static String _buildUrl(String route) {
-    final host = Uri.parse(ApiClient.instance.baseUrl).host;
-    return 'http://$host:8080/#$route';
+    if (kIsWeb) {
+      return '${Uri.base.origin}/#$route';
+    }
+    if (_kFrontendUrl.isNotEmpty) {
+      final base = _kFrontendUrl.endsWith('/')
+          ? _kFrontendUrl.substring(0, _kFrontendUrl.length - 1)
+          : _kFrontendUrl;
+      return '$base/#$route';
+    }
+    return 'http://localhost:8080/#$route';
   }
 
   @override
