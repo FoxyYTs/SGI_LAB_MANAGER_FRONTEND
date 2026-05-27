@@ -1,6 +1,6 @@
 # SGI LAB MANAGER — Frontend
 
-Sistema de Gestión de Inventarios para laboratorio académico. Aplicación multi-plataforma desarrollada en **Flutter**, que corre en Windows, Android y Web.
+Sistema de Gestión de Inventarios para laboratorio académico. Aplicación multi-plataforma desarrollada en **Flutter**, que corre en Linux (desarrollo), Android y Web.
 
 > Proyecto desarrollado como solución integral para la administración de inventario, préstamos de equipos e insumos, seguridad química (SGA/GHS) y gestión académica de los Laboratorios de Ciencias Basicas Poli Rionegro (PCJIC).
 
@@ -43,9 +43,13 @@ Cuadrícula visual Lunes–Sábado × 6:00–21:00h con dos vistas: encargados d
 
 Cuatro formularios accesibles sin login, cada uno con su propio código QR: solicitud de préstamo, registro de horas de monitor (con descripción de actividades y duración), registro de práctica docente (selección de docente, asignatura, guía, horario de ingreso/salida) y reporte de implemento roto. Los formularios de práctica y horas soportan catálogos precargados para agilizar el llenado.
 
-### Generación de informes en PDF
+### Generación de informes en PDF y Excel
 
-Pantalla de informes con seis tipos de reporte: inventario completo, préstamos, bitácora de movimientos, horas de monitor, prácticas docentes y deudores morosos. Cada informe admite filtros de fecha y queda registrado en auditoría.
+Pantalla de informes con seis tipos de reporte: inventario completo, préstamos, bitácora de movimientos, horas de monitor, prácticas docentes y deudores morosos. Cada tipo ofrece dos botones de descarga: **PDF** (ReportLab) y **Excel** (color verde `#217346`). Cada informe admite filtros de fecha y queda registrado en auditoría.
+
+### Notificaciones de horario para monitores
+
+Cuando un monitor llega al final de su bloque de turno registrado, la aplicación muestra automáticamente un diálogo recordatorio. El servicio (`MonitorReminderService`) consulta el horario del usuario autenticado y programa un temporizador local para la hora de fin de cada bloque consecutivo.
 
 ### Perfil de usuario
 
@@ -53,7 +57,7 @@ Pantalla de perfil que permite al usuario autenticado ver y editar sus datos per
 
 ### Gestión de catálogos académicos
 
-Pantalla de configuración con cinco pestañas: ubicaciones, unidades de medida, programas académicos, docentes (con asignación múltiple a programas y asignaturas) y guías de práctica (con gestión de insumos requeridos y apertura de PDF externo).
+Pantalla de configuración con siete pestañas: ubicaciones, unidades de medida, programas académicos, docentes (con asignación múltiple a programas y asignaturas), guías de práctica (con gestión de insumos requeridos y apertura de PDF externo), áreas académicas y asignaturas.
 
 ### Sistema de permisos por rol
 
@@ -62,6 +66,18 @@ Roles diferenciados (Administrador, Laboratorista, Monitor, Docente, Estudiante)
 ### Modo offline
 
 En plataformas de escritorio y móvil, el inventario se cachea en SQLite local. Las operaciones fallidas por falta de red se encolan y se sincronizan automáticamente al recuperar la conexión.
+
+---
+
+## Seguridad
+
+### Persistencia de sesión
+
+La sesión se restaura al arrancar la app sin necesidad de volver a iniciar sesión. En plataformas nativas (Linux, Android) la sesión es permanente hasta que el usuario cierre sesión manualmente. En **web**, la sesión expira automáticamente a medianoche del día en que se inició, evitando que sesiones queden activas indefinidamente en equipos compartidos.
+
+### Verificación de versión mínima
+
+Los clientes móvil y de escritorio envían una cabecera `X-App-Version` en cada petición. Si la versión instalada es inferior a la mínima configurada en el servidor, la API responde con HTTP **426 Upgrade Required** y la aplicación navega automáticamente a una pantalla de actualización (`ActualizacionRequeridaScreen`) que bloquea el uso hasta que el usuario actualice. Los clientes web están exentos de esta verificación.
 
 ---
 
@@ -75,7 +91,7 @@ frontend/lib/
 └── screens/        # Pantallas de la aplicación
 ```
 
-La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) permite que las funciones de base de datos local y conectividad usen implementaciones reales en Windows/Android y stubs en Web, sin cambios en el resto del código.
+La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) permite que las funciones de base de datos local y conectividad usen implementaciones reales en Linux/Android y stubs en Web, sin cambios en el resto del código.
 
 ---
 
@@ -83,7 +99,6 @@ La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) per
 
 | Plataforma | Estado |
 | --- | --- |
-| Windows | Objetivo principal de producción |
 | Android | Soportado — build APK |
 | Web | Soportado — servido con nginx |
 | Linux | Entorno de desarrollo |
@@ -97,12 +112,12 @@ La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) per
 - Flutter SDK `^3.x` con Dart `^3.11`
 - Backend de la aplicación corriendo localmente
 
-### Windows / Linux (escritorio)
+### Linux (escritorio — desarrollo)
 
 ```bash
 cd frontend
 flutter pub get
-flutter run -d windows   # o -d linux en entorno de desarrollo
+flutter run -d linux
 ```
 
 ### Web
@@ -122,9 +137,3 @@ flutter build apk --release
 ```bash
 flutter build web
 ```
-
----
-
-## Repositorios relacionados
-
-- **Backend (Django REST Framework + PostgreSQL)**: [SGI_LAB_MANAGER_BACKEND](https://github.com/FoxyYTs/SGI_LAB_MANAGER_BACKEND)

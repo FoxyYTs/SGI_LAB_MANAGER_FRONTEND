@@ -15,23 +15,37 @@ import 'screens/restablecer_pass_screen.dart';
 import 'screens/permisos_screen.dart';
 import 'screens/insumo_form_screen.dart';
 import 'screens/mi_perfil_screen.dart';
+import 'screens/actualizacion_requerida_screen.dart';
 import 'core/theme/colors.dart';
 import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
+import 'core/navigation_service.dart';
 
-/// Punto de entrada de la aplicación SGI LAB MANAGER.
-///
-/// Inicializa SQLite (solo en plataformas nativas) antes de levantar los
-/// providers y la MaterialApp. Las rutas públicas (/solicitud, /registro-horas,
-/// etc.) son accesibles sin autenticación desde los formularios QR.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (!kIsWeb) await LocalDb.instance;
+
+  // Captura errores de Flutter no manejados (widgets, frames) en release.
+  FlutterError.onError = (details) {
+    debugPrint('[FlutterError] ${details.exceptionAsString()}');
+  };
+
+  if (!kIsWeb) {
+    try {
+      await LocalDb.instance;
+    } catch (e) {
+      debugPrint('[main] Error inicializando DB local: $e');
+    }
+  }
+
+  // Restaurar sesión guardada ANTES de levantar la UI, para que cualquier
+  // ruta que Flutter sirva al inicio ya tenga el estado de auth correcto.
+  final auth = AuthProvider();
+  await auth.cargarSesion(); // tiene try-catch interno
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider(create: (_) => InventarioProvider()),
         ChangeNotifierProvider.value(value: SyncService.instance),
       ],
@@ -40,13 +54,13 @@ void main() async {
   );
 }
 
-/// Widget raíz de la aplicación. Configura el tema global y el router de rutas.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'SGI LAB Manager',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -73,20 +87,61 @@ class MyApp extends StatelessWidget {
           indicatorColor: kPrimary,
         ),
       ),
-      home: const LoginScreen(),
+      // home: si el usuario ya está autenticado muestra el shell; si no, el login.
+      home: const _AuthGate(),
       routes: {
-        '/dashboard': (context) => const MainShell(),
-        '/solicitud':          (context) => const SolicitudPrestamoScreen(),
-        '/registro-horas':    (context) => const RegistroHorasScreen(),
-        '/registro-practica': (context) => const RegistroPracticaScreen(),
-        '/reporte-rotura':    (context) => const ReporteRoturaScreen(),
-        '/registro': (context) => const RegistroScreen(),
-        '/recuperar-pass': (context) => const RecuperarPassScreen(),
-        '/restablecer-pass': (context) => const RestablecerPassScreen(),
-        '/permisos': (context) => const PermisosScreen(),
-        '/insumo-form': (context) => const InsumoFormScreen(),
-        '/mi-perfil': (context) => const MiPerfilScreen(),
+        // ── Rutas protegidas (requieren sesión) ───────────────────────────────
+        '/dashboard':   (ctx) => const _Guard(child: MainShell()),
+        '/permisos':    (ctx) => const _Guard(child: PermisosScreen()),
+        '/insumo-form': (ctx) => const _Guard(child: InsumoFormScreen()),
+        '/mi-perfil':   (ctx) => const _Guard(child: MiPerfilScreen()),
+        '/actualizacion-requerida': (ctx) => const ActualizacionRequeridaScreen(),
+        // ── Rutas públicas (accesibles sin login) ─────────────────────────────
+        '/solicitud':          (ctx) => const SolicitudPrestamoScreen(),
+        '/registro-horas':     (ctx) => const RegistroHorasScreen(),
+        '/registro-practica':  (ctx) => const RegistroPracticaScreen(),
+        '/reporte-rotura':     (ctx) => const ReporteRoturaScreen(),
+        '/registro':           (ctx) => const RegistroScreen(),
+        '/recuperar-pass':     (ctx) => const RecuperarPassScreen(),
+        '/restablecer-pass':   (ctx) => const RestablecerPassScreen(),
       },
     );
+  }
+}
+
+/// Decide qué mostrar en la ruta raíz según el estado de autenticación.
+/// Al ser reactivo (context.watch), cambia automáticamente cuando el usuario
+/// inicia o cierra sesión.
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (auth.isAuthenticated) return const MainShell();
+    return const LoginScreen();
+  }
+}
+
+/// Guard para rutas protegidas. Si el usuario no está autenticado lo redirige
+/// al inicio (donde _AuthGate muestra el login).
+class _Guard extends StatelessWidget {
+  final Widget child;
+  const _Guard({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) Navigator.pushReplacementNamed(context, '/');
+      });
+      // Spinner breve mientras se redirige
+      return const Scaffold(
+        backgroundColor: kBackground,
+        body: Center(child: CircularProgressIndicator(color: kPrimary)),
+      );
+    }
+    return child;
   }
 }

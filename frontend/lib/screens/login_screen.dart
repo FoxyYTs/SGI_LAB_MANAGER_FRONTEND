@@ -27,17 +27,18 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    final success = await auth.login(_userController.text.trim(), _passController.text);
+    final error = await auth.login(_userController.text.trim(), _passController.text);
 
     if (mounted) {
       setState(() => _isLoading = false);
-      if (success) {
+      if (error == null) {
         Navigator.pushReplacementNamed(context, '/dashboard');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Usuario o contraseña incorrectos'),
+          SnackBar(
+            content: Text(error),
             backgroundColor: kDanger,
+            duration: const Duration(seconds: 8),
           ),
         );
       }
