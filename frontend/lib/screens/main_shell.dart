@@ -30,6 +30,7 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _idx = 0;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _configKey   = GlobalKey<ConfiguracionScreenState>();
   bool _reminderIniciado = false;
   bool _updateChecked = false;
 
@@ -88,7 +89,7 @@ class _MainShellState extends State<MainShell> {
     if (auth.can(Perm.bitacoraVer))
       const _TabDef(Icons.picture_as_pdf_outlined,'Informes',      InformesContent()),
     if (auth.can(Perm.configuracionGestion))
-      const _TabDef(Icons.settings_outlined,      'Configuración', ConfiguracionScreen()),
+      _TabDef(Icons.settings_outlined, 'Configuración', ConfiguracionScreen(key: _configKey)),
   ];
 
   Widget _syncIndicator(SyncService sync) {
@@ -287,28 +288,33 @@ class _MainShellState extends State<MainShell> {
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
-                ...tabs.asMap().entries.map((e) => ListTile(
-                  leading: Icon(
-                    e.value.icon,
-                    color: idx == e.key ? kPrimary : kTextMuted,
-                    size: 22,
-                  ),
-                  title: Text(
-                    e.value.label,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight:
-                          idx == e.key ? FontWeight.bold : FontWeight.normal,
-                      color: idx == e.key ? kPrimary : Colors.black87,
+                ...tabs.asMap().entries.map((e) {
+                  if (e.value.label == 'Configuración') {
+                    return _buildConfigExpansionTile(context, e.key, idx);
+                  }
+                  return ListTile(
+                    leading: Icon(
+                      e.value.icon,
+                      color: idx == e.key ? kPrimary : kTextMuted,
+                      size: 22,
                     ),
-                  ),
-                  selected: idx == e.key,
-                  selectedTileColor: kPrimary.withValues(alpha: 0.08),
-                  onTap: () {
-                    setState(() => _idx = e.key);
-                    Navigator.pop(context);
-                  },
-                )),
+                    title: Text(
+                      e.value.label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight:
+                            idx == e.key ? FontWeight.bold : FontWeight.normal,
+                        color: idx == e.key ? kPrimary : Colors.black87,
+                      ),
+                    ),
+                    selected: idx == e.key,
+                    selectedTileColor: kPrimary.withValues(alpha: 0.08),
+                    onTap: () {
+                      setState(() => _idx = e.key);
+                      Navigator.pop(context);
+                    },
+                  );
+                }),
                 const Divider(),
                 ListTile(
                   leading: const Icon(Icons.account_circle_outlined,
@@ -335,6 +341,53 @@ class _MainShellState extends State<MainShell> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildConfigExpansionTile(BuildContext context, int tabKey, int currentIdx) {
+    final isSelected = currentIdx == tabKey;
+    return ExpansionTile(
+      leading: Icon(Icons.settings_outlined,
+          color: isSelected ? kPrimary : kTextMuted, size: 22),
+      title: Text(
+        'Configuración',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? kPrimary : Colors.black87,
+        ),
+      ),
+      initiallyExpanded: isSelected,
+      tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+      childrenPadding: EdgeInsets.zero,
+      onExpansionChanged: (_) {
+        if (!isSelected) setState(() => _idx = tabKey);
+      },
+      children: [
+        _configSubItem(context, 'Ubicaciones', Icons.place_outlined,       0, tabKey),
+        _configSubItem(context, 'Unidades',    Icons.straighten_outlined,  1, tabKey),
+        _configSubItem(context, 'Programas',   Icons.school_outlined,      2, tabKey),
+        _configSubItem(context, 'Docentes',    Icons.person_pin_outlined,  3, tabKey),
+        _configSubItem(context, 'Guías',       Icons.menu_book_outlined,   4, tabKey),
+        _configSubItem(context, 'Áreas',       Icons.category_outlined,    5, tabKey),
+        _configSubItem(context, 'Asignaturas', Icons.science_outlined,     6, tabKey),
+      ],
+    );
+  }
+
+  Widget _configSubItem(
+      BuildContext context, String label, IconData icon, int subIdx, int mainTabKey) {
+    return ListTile(
+      contentPadding: const EdgeInsets.only(left: 56, right: 16),
+      leading: Icon(icon, color: kPrimary, size: 18),
+      title: Text(label, style: const TextStyle(fontSize: 13)),
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      onTap: () {
+        setState(() => _idx = mainTabKey);
+        _configKey.currentState?.jumpToTab(subIdx);
+        Navigator.pop(context);
+      },
     );
   }
 }

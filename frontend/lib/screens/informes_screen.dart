@@ -1,9 +1,8 @@
-import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/download_helper.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -260,16 +259,9 @@ class _InformeTileState extends State<_InformeTile> {
 
       final bytes = response.data!;
       final fname = '${widget.tipo.codigo.toLowerCase()}_${_iso(DateTime.now())}.$extension';
-      final file  = File('${Directory.systemTemp.path}/$fname');
-      await file.writeAsBytes(bytes);
-
-      final uri = Uri.file(file.path);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Guardado en: ${file.path}')),
-        );
+      final msg = await saveAndOpenFile(bytes, fname);
+      if (msg != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
       }
       widget.onDescargado();
     } catch (e) {

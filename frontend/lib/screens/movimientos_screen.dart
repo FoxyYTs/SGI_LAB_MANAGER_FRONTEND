@@ -95,17 +95,19 @@ class _MovimientosContentState extends State<MovimientosContent> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    return LayoutBuilder(builder: (context, constraints) {
+    final pad = constraints.maxWidth < 650 ? 14.0 : 24.0;
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(pad),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Encabezado ───────────────────────────────────────────────────
           Row(children: [
-            const Text('Movimientos y Préstamos',
+            const Expanded(child: Text('Movimientos y Préstamos',
                 style: TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.bold)),
-            const Spacer(),
+                    fontSize: 22, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis)),
             IconButton(
               icon: const Icon(Icons.refresh, color: kPrimary),
               tooltip: 'Actualizar',
@@ -163,6 +165,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
         ],
       ),
     );
+    });
   }
 
   Widget _buildEmpty() => Center(

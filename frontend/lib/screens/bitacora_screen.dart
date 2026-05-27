@@ -72,16 +72,20 @@ class _BitacoraContentState extends State<BitacoraContent> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final pad = constraints.maxWidth < 650 ? 14.0 : 24.0;
+        return Padding(
+      padding: EdgeInsets.all(pad),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Encabezado ────────────────────────────────────────────────
           Row(children: [
-            const Text('Bitácora de movimientos',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const Spacer(),
+            const Expanded(child: Text('Bitácora de movimientos',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 8),
             ElevatedButton.icon(
               onPressed: _cargar,
               icon: const Icon(Icons.refresh, size: 18),
@@ -156,6 +160,8 @@ class _BitacoraContentState extends State<BitacoraContent> {
           ),
         ],
       ),
+    );
+      },
     );
   }
 

@@ -13,12 +13,17 @@ class ConfiguracionScreen extends StatefulWidget {
   const ConfiguracionScreen({super.key});
 
   @override
-  State<ConfiguracionScreen> createState() => _ConfiguracionScreenState();
+  State<ConfiguracionScreen> createState() => ConfiguracionScreenState();
 }
 
-class _ConfiguracionScreenState extends State<ConfiguracionScreen>
+class ConfiguracionScreenState extends State<ConfiguracionScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tab;
+
+  void jumpToTab(int index) {
+    if (!mounted) return;
+    _tab.animateTo(index.clamp(0, 6));
+  }
 
   @override
   void initState() {
@@ -56,6 +61,8 @@ class _ConfiguracionScreenState extends State<ConfiguracionScreen>
         ],
         bottom: TabBar(
           controller: _tab,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           labelColor: kPrimary,
           unselectedLabelColor: kTextMuted,
           indicatorColor: kPrimary,
@@ -184,9 +191,9 @@ class _CrudListState extends State<_CrudList> {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               itemCount: _items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, __) => const SizedBox(height: 4),
               itemBuilder: (ctx, i) {
                 final item = _items[i];
                 final id   = item['id'].toString();
@@ -270,9 +277,13 @@ class _UbicacionesTab extends StatelessWidget {
       formDialog: _dialog,
       itemBuilder: (item, onEdit, onDelete) => Card(
         child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           leading: const CircleAvatar(
+            radius: 16,
             backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.place_outlined, color: kPrimary, size: 20),
+            child: Icon(Icons.place_outlined, color: kPrimary, size: 18),
           ),
           title: Text(item['codigo_ubicacion'],
               style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -334,9 +345,13 @@ class _UnidadesTab extends StatelessWidget {
       formDialog: _dialog,
       itemBuilder: (item, onEdit, onDelete) => Card(
         child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           leading: const CircleAvatar(
+            radius: 16,
             backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.straighten_outlined, color: kPrimary, size: 20),
+            child: Icon(Icons.straighten_outlined, color: kPrimary, size: 18),
           ),
           title: Text(item['nombre_unidad'],
               style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -393,9 +408,13 @@ class _ProgramasTab extends StatelessWidget {
       formDialog: _dialog,
       itemBuilder: (item, onEdit, onDelete) => Card(
         child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           leading: const CircleAvatar(
+            radius: 16,
             backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.school_outlined, color: kPrimary, size: 20),
+            child: Icon(Icons.school_outlined, color: kPrimary, size: 18),
           ),
           title: Text(item['nombre'] ?? '',
               style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -569,9 +588,13 @@ class _DocentesTabState extends State<_DocentesTab> {
             .map((e) => e.toString()).join(', ');
         return Card(
           child: ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
             leading: const CircleAvatar(
+              radius: 16,
               backgroundColor: Color(0x1A007BFF),
-              child: Icon(Icons.person_pin_outlined, color: kPrimary, size: 20),
+              child: Icon(Icons.person_pin_outlined, color: kPrimary, size: 18),
             ),
             title: Text(item['nombre_completo'] ?? '',
                 style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -899,9 +922,13 @@ class _GuiasTabState extends State<_GuiasTab> {
         final url    = (item['url_guia'] ?? '').toString();
         return Card(
           child: ListTile(
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
             leading: const CircleAvatar(
+              radius: 16,
               backgroundColor: Color(0x1A007BFF),
-              child: Icon(Icons.menu_book_outlined, color: kPrimary, size: 20),
+              child: Icon(Icons.menu_book_outlined, color: kPrimary, size: 18),
             ),
             title: Text(nombre,
                 style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -989,9 +1016,13 @@ class _AreasTab extends StatelessWidget {
       formDialog: _dialog,
       itemBuilder: (item, onEdit, onDelete) => Card(
         child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           leading: const CircleAvatar(
+            radius: 16,
             backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.category_outlined, color: kPrimary, size: 20),
+            child: Icon(Icons.category_outlined, color: kPrimary, size: 18),
           ),
           title: Text(item['nombre_area'] ?? '',
               style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -1124,9 +1155,13 @@ class _AsignaturasTabState extends State<_AsignaturasTab> {
       formDialog: _dialog,
       itemBuilder: (item, onEdit, onDelete) => Card(
         child: ListTile(
+          dense: true,
+          visualDensity: VisualDensity.compact,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
           leading: const CircleAvatar(
+            radius: 16,
             backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.science_outlined, color: kPrimary, size: 20),
+            child: Icon(Icons.science_outlined, color: kPrimary, size: 18),
           ),
           title: Text(item['nombre_asignatura'] ?? '',
               style: const TextStyle(fontWeight: FontWeight.w600)),
