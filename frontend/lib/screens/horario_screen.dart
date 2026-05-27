@@ -1307,14 +1307,16 @@ class _TabGestionState extends State<_TabGestion>
                               .where((s) => s['area'].toString() == a['id'].toString())
                               .length;
                           return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
+                            margin: const EdgeInsets.only(bottom: 4),
                             child: ListTile(
                               dense: true,
+                              visualDensity: VisualDensity.compact,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
                               leading: const CircleAvatar(
-                                radius: 14,
+                                radius: 13,
                                 backgroundColor: Color(0x1A007BFF),
                                 child: Icon(Icons.category_outlined,
-                                    color: kPrimary, size: 14),
+                                    color: kPrimary, size: 13),
                               ),
                               title: Text(a['nombre_area']?.toString() ?? '',
                                   style: const TextStyle(
@@ -1379,14 +1381,16 @@ class _TabGestionState extends State<_TabGestion>
                         )
                       else
                         ..._asignaturas.map((s) => Card(
-                              margin: const EdgeInsets.only(bottom: 8),
+                              margin: const EdgeInsets.only(bottom: 4),
                               child: ListTile(
                                 dense: true,
+                                visualDensity: VisualDensity.compact,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
                                 leading: const CircleAvatar(
-                                  radius: 14,
+                                  radius: 13,
                                   backgroundColor: Color(0x1A007BFF),
                                   child: Icon(Icons.school_outlined,
-                                      color: kPrimary, size: 14),
+                                      color: kPrimary, size: 13),
                                 ),
                                 title: Text(s['nombre_asignatura']?.toString() ?? '',
                                     style: const TextStyle(

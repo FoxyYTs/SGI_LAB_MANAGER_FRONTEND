@@ -33,14 +33,18 @@ class ApiClient {
       baseUrl = '$root/api/';
     } else {
       String host;
+      String scheme;
       if (_kServerIp.isNotEmpty) {
-        host = _kServerIp;
+        host   = _kServerIp;
+        scheme = 'http';
       } else if (kIsWeb) {
-        host = Uri.base.host;
+        host   = Uri.base.host;
+        scheme = Uri.base.scheme;   // hereda http/https de la página (evita mixed-content)
       } else {
-        host = 'localhost';
+        host   = 'localhost';
+        scheme = 'http';
       }
-      baseUrl = 'http://$host:8000/api/';
+      baseUrl = '$scheme://$host:8000/api/';
     }
 
     _dio = Dio(BaseOptions(
