@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
@@ -20,12 +22,14 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   final _telefonoCtrl  = TextEditingController();
   final _semestreCtrl  = TextEditingController();
 
-  String? _programaSeleccionado; // UUID
+  String? _programaSeleccionado;
   List<Map<String, dynamic>> _programas = [];
 
   bool _loading    = true;
   bool _guardando  = false;
+  bool _subiendoFoto = false;
   String? _rol;
+  String? _fotoUrl;
 
   @override
   void initState() {
@@ -51,7 +55,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     try {
       final results = await Future.wait([
         dio.get('usuarios/perfil/'),
-        dio.get('academico/programas/'),
+        dio.get('academico/programas-publico/'),
       ]);
 
       final perfil   = results[0].data as Map<String, dynamic>;
@@ -70,6 +74,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
         _semestreCtrl.text    = (p['semestre'] ?? '').toString();
         _programaSeleccionado = p['programa'] as String?;
         _rol                  = p['rol'] as String?;
+        _fotoUrl              = p['foto_url'] as String?;
         _programas            = programas;
         _loading              = false;
       });
@@ -133,6 +138,55 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     }
   }
 
+  Future<void> _seleccionarFoto() async {
+    final auth = context.read<AuthProvider>();
+
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    setState(() => _subiendoFoto = true);
+
+    final dio = ApiClient.instance.authenticatedDio(auth.token);
+
+    try {
+      final formData = FormData.fromMap({
+        'foto': MultipartFile.fromBytes(
+          bytes,
+          filename: file.name,
+        ),
+      });
+      final resp = await dio.patch('usuarios/perfil/', data: formData);
+      final perfil = (resp.data as Map<String, dynamic>)['perfil'] as Map<String, dynamic>? ?? {};
+      if (mounted) {
+        setState(() => _fotoUrl = perfil['foto_url'] as String?);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Foto actualizada'),
+            backgroundColor: kSuccess,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al subir foto: $e'),
+            backgroundColor: kDanger,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _subiendoFoto = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -162,16 +216,50 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                         Center(
                           child: Column(
                             children: [
-                              CircleAvatar(
-                                radius: 36,
-                                backgroundColor: kPrimary.withValues(alpha: 0.15),
-                                child: const Icon(
-                                  Icons.person,
-                                  size: 40,
-                                  color: kPrimary,
+                              GestureDetector(
+                                onTap: _subiendoFoto ? null : _seleccionarFoto,
+                                child: Stack(
+                                  alignment: Alignment.bottomRight,
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 42,
+                                      backgroundColor: kPrimary.withValues(alpha: 0.15),
+                                      backgroundImage: _fotoUrl != null
+                                          ? NetworkImage(_fotoUrl!)
+                                          : null,
+                                      child: _subiendoFoto
+                                          ? const SizedBox(
+                                              width: 28,
+                                              height: 28,
+                                              child: CircularProgressIndicator(
+                                                  color: kPrimary, strokeWidth: 2.5),
+                                            )
+                                          : (_fotoUrl == null
+                                              ? const Icon(Icons.person,
+                                                  size: 44, color: kPrimary)
+                                              : null),
+                                    ),
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: kPrimary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: Colors.white, width: 2),
+                                      ),
+                                      padding: const EdgeInsets.all(4),
+                                      child: const Icon(Icons.camera_alt,
+                                          color: Colors.white, size: 14),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Toca para cambiar foto',
+                                style: TextStyle(
+                                    fontSize: 11, color: kTextMuted),
+                              ),
+                              const SizedBox(height: 6),
                               if (_rol != null)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -246,6 +334,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
                         // Programa
                         DropdownButtonFormField<String>(
+                          // ignore: deprecated_member_use
                           value: _programaSeleccionado,
                           decoration: _inputDec('Programa académico', Icons.school_outlined),
                           isExpanded: true,
@@ -267,7 +356,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // Semestre (solo relevante para monitores, pero visible para todos)
+                        // Semestre
                         TextFormField(
                           controller: _semestreCtrl,
                           keyboardType: TextInputType.number,
@@ -399,7 +488,7 @@ class _EditarPerfilUsuarioDialogState
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
-      final resp  = await dio.get('academico/programas/');
+      final resp  = await dio.get('academico/programas-publico/');
       final data  = resp.data;
       final lista = List<Map<String, dynamic>>.from(
           data is List ? data : (data['results'] ?? []));
@@ -549,6 +638,7 @@ class _EditarPerfilUsuarioDialogState
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
+                        // ignore: deprecated_member_use
                         value: _programaSeleccionado,
                         decoration: _inputDec(
                             'Programa', Icons.school_outlined),
