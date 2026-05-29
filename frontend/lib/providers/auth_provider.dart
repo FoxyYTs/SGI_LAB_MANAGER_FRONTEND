@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/api/api_client.dart';
 import '../core/sync/sync_service.dart';
 import '../core/log_service.dart';
+import '../services/notification_service.dart';
+import '../services/background_tasks.dart';
 
 /// Proveedor de estado de autenticación y permisos del usuario.
 ///
@@ -110,6 +112,13 @@ class AuthProvider with ChangeNotifier {
       await SyncService.instance.init(_token);
       if (kIsWeb) _programarCierreMedianoche();
 
+      // Activar notificaciones push locales tras login exitoso
+      if (!kIsWeb) {
+        await NotificationService.init();
+        await NotificationService.requestPermission();
+        await registerBackgroundTasks();
+      }
+
       notifyListeners();
       return null;
     } on DioException catch (e) {
@@ -151,6 +160,10 @@ class AuthProvider with ChangeNotifier {
   Future<void> logout() async {
     _medianochTimer?.cancel();
     _medianochTimer = null;
+
+    // Cancelar tareas de fondo al cerrar sesión
+    if (!kIsWeb) await cancelBackgroundTasks();
+
     try {
       await _storage.deleteAll();
     } catch (e) {

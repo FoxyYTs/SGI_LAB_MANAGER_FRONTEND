@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:workmanager/workmanager.dart';
 import 'providers/auth_provider.dart';
 import 'providers/inventario_provider.dart';
 import 'screens/login_screen.dart';
@@ -21,6 +22,8 @@ import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
 import 'core/navigation_service.dart';
 import 'core/log_service.dart';
+import 'services/notification_service.dart';
+import 'services/background_tasks.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +51,10 @@ void main() async {
     } catch (e, s) {
       LogService.logError('LocalDb.instance', e, s);
     }
+
+    // Inicializar Workmanager con el dispatcher de fondo
+    await Workmanager().initialize(backgroundDispatcher, isInDebugMode: false);
+    LogService.log('Workmanager inicializado');
   }
 
   // Restaurar sesión guardada ANTES de levantar la UI.
@@ -59,6 +66,13 @@ void main() async {
   // Inicializar conectividad aunque no haya sesión (para detectar online/offline en login).
   if (!kIsWeb && !auth.isAuthenticated) {
     await SyncService.instance.init(null);
+  }
+
+  // Si hay sesión activa, inicializar notificaciones y registrar tareas de fondo
+  if (!kIsWeb && auth.isAuthenticated) {
+    await NotificationService.init();
+    await NotificationService.requestPermission();
+    await registerBackgroundTasks();
   }
 
   LogService.log('Iniciando UI...');
