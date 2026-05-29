@@ -20,28 +20,43 @@ import 'core/theme/colors.dart';
 import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
 import 'core/navigation_service.dart';
+import 'core/log_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Captura errores de Flutter no manejados (widgets, frames) en release.
+  // Inicializar log en archivo si FILE_LOG=true.
+  await LogService.init();
+  LogService.log('main() iniciado');
+
+  // Captura errores de widgets/frames de Flutter.
   FlutterError.onError = (details) {
-    debugPrint('[FlutterError] ${details.exceptionAsString()}');
+    LogService.logError('FlutterError', details.exception, details.stack);
+  };
+
+  // Captura errores asíncronos no manejados (fuera del árbol de widgets).
+  PlatformDispatcher.instance.onError = (error, stack) {
+    LogService.logError('PlatformDispatcher', error, stack);
+    return true; // true = el error fue manejado, no aborta la app
   };
 
   if (!kIsWeb) {
     try {
+      LogService.log('Inicializando base de datos local...');
       await LocalDb.instance;
-    } catch (e) {
-      debugPrint('[main] Error inicializando DB local: $e');
+      LogService.log('Base de datos local OK');
+    } catch (e, s) {
+      LogService.logError('LocalDb.instance', e, s);
     }
   }
 
-  // Restaurar sesión guardada ANTES de levantar la UI, para que cualquier
-  // ruta que Flutter sirva al inicio ya tenga el estado de auth correcto.
+  // Restaurar sesión guardada ANTES de levantar la UI.
+  LogService.log('Cargando sesión guardada...');
   final auth = AuthProvider();
-  await auth.cargarSesion(); // tiene try-catch interno
+  await auth.cargarSesion();
+  LogService.log('Sesión cargada — autenticado: ${auth.isAuthenticated}, rol: ${auth.rol}');
 
+  LogService.log('Iniciando UI...');
   runApp(
     MultiProvider(
       providers: [

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../core/theme/colors.dart';
+import '../core/log_service.dart';
+import '../core/api/api_client.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -48,6 +50,22 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: LogService.enabled
+          ? Container(
+              color: LogService.devMode
+                  ? const Color(0xFF8B0000)
+                  : const Color(0xFFFF6B00),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                LogService.devMode
+                    ? 'DEV MODE  ·  ${ApiClient.instance.baseUrl}'
+                        '\nLog: ${LogService.logPath ?? "inicializando…"}'
+                    : 'DIAGNÓSTICO  ·  Log: ${LogService.logPath ?? "inicializando…"}',
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
+            )
+          : null,
       body: Container(
         width: double.infinity,
         height: double.infinity,

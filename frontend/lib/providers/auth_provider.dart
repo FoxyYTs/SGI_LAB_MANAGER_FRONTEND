@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../core/api/api_client.dart';
 import '../core/sync/sync_service.dart';
+import '../core/log_service.dart';
 
 /// Proveedor de estado de autenticación y permisos del usuario.
 ///
@@ -115,13 +116,16 @@ class AuthProvider with ChangeNotifier {
       return null;
     } on DioException catch (e) {
       final code = e.response?.statusCode;
-      debugPrint('DioException en login: type=${e.type} status=$code msg=${e.message}');
-      if (code == 401) return 'Error 401: usuario o contraseña incorrectos';
-      if (code != null) return 'Error HTTP $code: ${e.message ?? e.type.name}';
-      return 'Error red (${e.type.name}): ${e.message ?? "sin detalles"}';
+      LogService.log('Login error: status=$code type=${e.type.name} msg=${e.message}');
+      final friendly = _mensajeAmigable(e);
+      if (LogService.devMode) {
+        return '$friendly\n\n[DEV] HTTP ${code ?? "—"} · ${e.type.name}\n${e.message ?? ""}';
+      }
+      return friendly;
     } catch (e) {
-      debugPrint('Error inesperado en login: $e');
-      return 'Error inesperado: $e';
+      LogService.log('Login error inesperado: $e');
+      if (LogService.devMode) return 'Error inesperado\n\n[DEV] $e';
+      return 'Error inesperado. Intenta de nuevo.';
     }
   }
 
@@ -159,6 +163,40 @@ class AuthProvider with ChangeNotifier {
     _username = null;
     _permisos = {};
     notifyListeners();
+  }
+
+  static String _mensajeAmigable(DioException e) {
+    final code = e.response?.statusCode;
+
+    // Errores de autenticación
+    if (code == 401) return 'Usuario o contraseña incorrectos.';
+    if (code == 403) return 'No tienes permiso para acceder.';
+
+    // Servidor caído o no disponible (Cloudflare + HTTP clásicos)
+    if (code == 530 || code == 521 || code == 522 || code == 523 || code == 524) {
+      return 'El servidor no está disponible.\nVerifica que el backend esté encendido e intenta de nuevo.';
+    }
+    if (code == 502 || code == 503 || code == 504) {
+      return 'El servidor no está respondiendo.\nIntenta en unos momentos.';
+    }
+    if (code == 500) {
+      return 'Error interno del servidor.\nContacta al administrador si el problema persiste.';
+    }
+    if (code != null) {
+      return 'Error del servidor (código $code).\nIntenta más tarde.';
+    }
+
+    // Errores de red
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'Tiempo de espera agotado.\nVerifica tu conexión a internet.';
+      case DioExceptionType.connectionError:
+        return 'No se pudo conectar al servidor.\nVerifica tu red o que el servidor esté activo.';
+      default:
+        return 'Error de conexión.\nVerifica tu internet e intenta de nuevo.';
+    }
   }
 
   /// Programa un Timer que cierra la sesión web justo a la siguiente medianoche.

@@ -53,7 +53,7 @@ Cuando un monitor llega al final de su bloque de turno registrado, la aplicació
 
 ### Perfil de usuario
 
-Pantalla de perfil que permite al usuario autenticado ver y editar sus datos personales (nombre, identificación, teléfono) directamente desde la aplicación.
+Pantalla de perfil que permite al usuario autenticado ver y editar sus datos personales (nombre, identificación, teléfono) directamente desde la aplicación. Incluye **carga de foto de perfil** desde el dispositivo (subida multipart al servidor).
 
 ### Gestión de catálogos académicos
 
@@ -130,6 +130,16 @@ flutter run -d chrome
 
 ```bash
 flutter build apk --release
+```
+
+### Build Android (diagnóstico)
+
+Para obtener logs detallados y mensajes de error técnicos en la UI, compilar con el flag `DEV_MODE`:
+
+```bash
+flutter build apk --release \
+  --dart-define=DEV_MODE=true \
+  --dart-define=SERVER_URL=https://tu-backend.example.com
 ```
 
 ### Build Web

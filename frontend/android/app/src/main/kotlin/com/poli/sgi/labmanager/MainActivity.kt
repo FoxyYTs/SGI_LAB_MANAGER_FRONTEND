@@ -1,4 +1,4 @@
-package com.example.frontend
+package com.poli.sgi.labmanager
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -259,10 +259,30 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   bool _cambiandoRol    = false;
   bool _toggling        = false;
 
+  final TextEditingController _busquedaCtrl = TextEditingController();
+  String _query = '';
+
   @override
   void initState() {
     super.initState();
     _cargarUsuarios();
+    _busquedaCtrl.addListener(() => setState(() => _query = _busquedaCtrl.text.toLowerCase()));
+  }
+
+  @override
+  void dispose() {
+    _busquedaCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _usuariosFiltrados {
+    if (_query.isEmpty) return _usuarios;
+    return _usuarios.where((u) {
+      final username = (u['username'] as String? ?? '').toLowerCase();
+      final email    = (u['email']    as String? ?? '').toLowerCase();
+      final nombre   = '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'.toLowerCase();
+      return username.contains(_query) || email.contains(_query) || nombre.contains(_query);
+    }).toList();
   }
 
   Future<void> _cargarUsuarios() async {
@@ -471,10 +491,51 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
           decoration: const BoxDecoration(
             border: Border(right: BorderSide(color: Color(0xFFDEE2E6))),
           ),
-          child: ListView.builder(
-            itemCount: _usuarios.length,
-            itemBuilder: (_, i) {
-              final u          = _usuarios[i];
+          child: Column(
+            children: [
+              // Barra de búsqueda
+              Padding(
+                padding: const EdgeInsets.all(8),
+                child: TextField(
+                  controller: _busquedaCtrl,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar usuario...',
+                    hintStyle: const TextStyle(fontSize: 13, color: kTextMuted),
+                    prefixIcon: const Icon(Icons.search, size: 18, color: kTextMuted),
+                    suffixIcon: _query.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16, color: kTextMuted),
+                            onPressed: () => _busquedaCtrl.clear(),
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                    ),
+                  ),
+                ),
+              ),
+              if (_usuariosFiltrados.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Sin resultados', style: TextStyle(color: kTextMuted, fontSize: 12)),
+                )
+              else
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _usuariosFiltrados.length,
+                  itemBuilder: (_, i) {
+                    final u = _usuariosFiltrados[i];
               final seleccionado = _seleccionado?['id'] == u['id'];
               final rol        = u['perfil']?['rol'] ?? '';
               final isActivo   = u['is_active'] as bool? ?? true;
@@ -590,6 +651,9 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                 ),
               );
             },
+                ),
+              ),
+            ],
           ),
         ),
 
