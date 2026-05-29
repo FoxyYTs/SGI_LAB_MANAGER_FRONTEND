@@ -171,6 +171,7 @@ class _GuiasDialogState extends State<_GuiasDialog> {
       ),
     );
     if (ok != true) return;
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
@@ -1088,6 +1089,7 @@ class _TabGestionState extends State<_TabGestion>
 
   Future<void> _eliminarArea(String id) async {
     if (await _confirmar() != true) return;
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
@@ -1152,6 +1154,7 @@ class _TabGestionState extends State<_TabGestion>
 
   Future<void> _eliminarAsignatura(String id) async {
     if (await _confirmar() != true) return;
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
@@ -1193,7 +1196,7 @@ class _TabGestionState extends State<_TabGestion>
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: areaId,
+                  initialValue: areaId,
                   decoration: const InputDecoration(
                     labelText: 'Área *',
                     border: OutlineInputBorder(),
@@ -1530,7 +1533,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              value: _asignaturaId,
+              initialValue: _asignaturaId,
               decoration: const InputDecoration(
                 labelText: 'Asignatura *',
                 prefixIcon: Icon(Icons.school_outlined, color: kPrimary),

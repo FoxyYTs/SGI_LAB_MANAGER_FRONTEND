@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+import '../core/cache/cache_service.dart';
 import '../providers/auth_provider.dart';
 
 class BitacoraContent extends StatefulWidget {
@@ -13,8 +14,10 @@ class BitacoraContent extends StatefulWidget {
 
 class _BitacoraContentState extends State<BitacoraContent> {
   List<Map<String, dynamic>> _movimientos = [];
-  bool   _cargando  = true;
-  String _filtroTipo = 'Todos';
+  bool      _cargando   = true;
+  bool      _desdeCache = false;
+  DateTime? _cachedAt;
+  String    _filtroTipo = 'Todos';
 
   static const _tipos = [
     'Todos', 'ENTRADA', 'SALIDA', 'AJUSTE', 'ROTURA', 'CONSUMO_PRACTICA',
@@ -34,21 +37,35 @@ class _BitacoraContentState extends State<BitacoraContent> {
     Future.microtask(_cargar);
   }
 
+  String get _cacheKey => 'bitacora_$_filtroTipo';
+
   Future<void> _cargar() async {
     setState(() => _cargando = true);
     try {
-      final auth = context.read<AuthProvider>();
-      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final auth   = context.read<AuthProvider>();
+      final dio    = ApiClient.instance.authenticatedDio(auth.token);
       final params = _filtroTipo == 'Todos' ? '' : '?tipo=$_filtroTipo';
-      final r = await dio.get('operaciones/bitacora/$params');
-      final data = r.data;
-      setState(() {
-        _movimientos = List<Map<String, dynamic>>.from(
-            data is List ? data : (data['results'] ?? []));
-        _cargando = false;
+      final r      = await dio.get('operaciones/bitacora/$params');
+      final data   = r.data;
+      final lista  = List<Map<String, dynamic>>.from(
+          data is List ? data : (data['results'] ?? []));
+      await CacheService.instance.set(_cacheKey, lista);
+      if (mounted) setState(() {
+        _movimientos = lista;
+        _desdeCache  = false;
+        _cachedAt    = null;
+        _cargando    = false;
       });
     } catch (_) {
-      setState(() => _cargando = false);
+      final cached = await CacheService.instance.get(_cacheKey);
+      if (mounted) setState(() {
+        _movimientos = cached != null
+            ? List<Map<String, dynamic>>.from(cached.data as List)
+            : [];
+        _desdeCache  = cached != null;
+        _cachedAt    = cached?.cachedAt;
+        _cargando    = false;
+      });
     }
   }
 
@@ -80,6 +97,27 @@ class _BitacoraContentState extends State<BitacoraContent> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Banner caché ──────────────────────────────────────────────
+          if (_desdeCache) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kSemaforoAmarillo),
+              ),
+              child: Row(children: [
+                const Icon(Icons.history, color: Color(0xFFE65100), size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'Datos guardados (${_cachedAt != null ? CacheService.formatEdad(_cachedAt!) : "—"})',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 10),
+          ],
           // ── Encabezado ────────────────────────────────────────────────
           Row(children: [
             const Expanded(child: Text('Bitácora de movimientos',

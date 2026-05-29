@@ -391,6 +391,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
       if (confirmar != true) return;
     }
 
+    if (!mounted) return;
     setState(() => _toggling = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);

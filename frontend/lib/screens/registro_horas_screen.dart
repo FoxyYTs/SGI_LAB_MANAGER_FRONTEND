@@ -192,7 +192,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
               style: TextStyle(color: Colors.red))
         else
           DropdownButtonFormField<Map<String, dynamic>>(
-            value: _monitorSel,
+            initialValue: _monitorSel,
             decoration: _deco('Selecciona tu nombre *', Icons.person_outline),
             items: _monitores.map((m) => DropdownMenuItem(
               value: m,

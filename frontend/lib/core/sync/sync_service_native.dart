@@ -138,6 +138,12 @@ class SyncService extends ChangeNotifier {
       case 'AJUSTE_STOCK':
         final id = p.remove('insumo_id');
         await dio.patch('inventario/lista/$id/', data: p);
+      case 'APROBAR_PRESTAMO':
+        final id = p['prestamo_id'];
+        await dio.post('operaciones/prestamos/$id/aprobar/');
+      case 'RECHAZAR_PRESTAMO':
+        final id = p['prestamo_id'];
+        await dio.post('operaciones/prestamos/$id/rechazar/');
       default:
         throw Exception('Operación desconocida: $op');
     }

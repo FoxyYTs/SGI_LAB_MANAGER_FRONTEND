@@ -56,6 +56,11 @@ void main() async {
   await auth.cargarSesion();
   LogService.log('Sesión cargada — autenticado: ${auth.isAuthenticated}, rol: ${auth.rol}');
 
+  // Inicializar conectividad aunque no haya sesión (para detectar online/offline en login).
+  if (!kIsWeb && !auth.isAuthenticated) {
+    await SyncService.instance.init(null);
+  }
+
   LogService.log('Iniciando UI...');
   runApp(
     MultiProvider(

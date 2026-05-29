@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
+import '../core/cache/cache_service.dart';
+import '../core/sync/sync_service.dart';
 import '../providers/auth_provider.dart';
 import '../providers/inventario_provider.dart';
 import '../models/insumo_model.dart';
@@ -15,14 +18,19 @@ class MovimientosContent extends StatefulWidget {
 }
 
 class _MovimientosContentState extends State<MovimientosContent> {
-  List<Map<String, dynamic>> _prestamos = [];
-  bool _cargando = true;
-  bool _mostrarForm = false;
+  static const _cacheKey = 'prestamos';
+
+  List<Map<String, dynamic>> _prestamos   = [];
+  bool      _cargando    = true;
+  bool      _mostrarForm = false;
+  bool      _desdeCache  = false;
+  DateTime? _cachedAt;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() {
+      if (!mounted) return;
       final auth = Provider.of<AuthProvider>(context, listen: false);
       Provider.of<InventarioProvider>(context, listen: false)
           .fetchInsumos(auth.token);
@@ -34,23 +42,37 @@ class _MovimientosContentState extends State<MovimientosContent> {
     setState(() => _cargando = true);
     try {
       final auth = context.read<AuthProvider>();
-      final dio = ApiClient.instance.authenticatedDio(auth.token);
-      final r = await dio.get('operaciones/prestamos/');
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final r    = await dio.get('operaciones/prestamos/');
       final data = r.data;
-      setState(() {
-        _prestamos = List<Map<String, dynamic>>.from(
+      final lista = List<Map<String, dynamic>>.from(
           data is List ? data : (data['results'] ?? []));
-        _cargando = false;
-      });
+      await CacheService.instance.set(_cacheKey, lista);
+      if (mounted) setState(() { _prestamos = lista; _desdeCache = false; _cachedAt = null; _cargando = false; });
     } catch (_) {
-      setState(() => _cargando = false);
+      final cached = await CacheService.instance.get(_cacheKey);
+      if (mounted) setState(() {
+        _prestamos  = cached != null
+            ? List<Map<String, dynamic>>.from(cached.data as List)
+            : [];
+        _desdeCache = cached != null;
+        _cachedAt   = cached?.cachedAt;
+        _cargando   = false;
+      });
     }
   }
 
+  bool get _estaOnline => kIsWeb || SyncService.instance.online;
+
   Future<void> _aprobar(String id) async {
+    if (!_estaOnline) {
+      await SyncService.instance.encolar('APROBAR_PRESTAMO', {'prestamo_id': id});
+      _showInfo('Sin conexión — la aprobación se enviará cuando vuelva la red.');
+      return;
+    }
     try {
       final auth = context.read<AuthProvider>();
-      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
       await dio.post('operaciones/prestamos/$id/aprobar/');
       _fetchPrestamos();
     } catch (e) {
@@ -70,15 +92,21 @@ class _MovimientosContentState extends State<MovimientosContent> {
               child: const Text('Cancelar')),
           TextButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Rechazar',
-                  style: TextStyle(color: kDanger))),
+              child: const Text('Rechazar', style: TextStyle(color: kDanger))),
         ],
       ),
     );
     if (ok != true) return;
+    if (!mounted) return;
+
+    if (!_estaOnline) {
+      await SyncService.instance.encolar('RECHAZAR_PRESTAMO', {'prestamo_id': id});
+      _showInfo('Sin conexión — el rechazo se enviará cuando vuelva la red.');
+      return;
+    }
     try {
       final auth = context.read<AuthProvider>();
-      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
       await dio.post('operaciones/prestamos/$id/rechazar/');
       _fetchPrestamos();
     } catch (e) {
@@ -92,6 +120,20 @@ class _MovimientosContentState extends State<MovimientosContent> {
       SnackBar(content: Text(msg), backgroundColor: kDanger));
   }
 
+  void _showInfo(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(children: [
+          const Icon(Icons.sync, color: Colors.white, size: 16),
+          const SizedBox(width: 8),
+          Expanded(child: Text(msg)),
+        ]),
+        backgroundColor: const Color(0xFFE65100),
+        duration: const Duration(seconds: 5),
+      ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -102,29 +144,47 @@ class _MovimientosContentState extends State<MovimientosContent> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Banner caché ─────────────────────────────────────────────────
+          if (_desdeCache) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: kSemaforoAmarillo),
+              ),
+              child: Row(children: [
+                const Icon(Icons.wifi_off, color: Color(0xFFE65100), size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(
+                  'Datos guardados (${_cachedAt != null ? CacheService.formatEdad(_cachedAt!) : "—"}) — aprobar/rechazar se encolará',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)),
+                )),
+              ]),
+            ),
+            const SizedBox(height: 10),
+          ],
           // ── Encabezado ───────────────────────────────────────────────────
           Row(children: [
             const Expanded(child: Text('Movimientos y Préstamos',
-                style: TextStyle(
-                    fontSize: 22, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis)),
             IconButton(
-              icon: const Icon(Icons.refresh, color: kPrimary),
+              icon: const Icon(Icons.refresh, color: kPrimary, size: 20),
               tooltip: 'Actualizar',
               onPressed: _fetchPrestamos,
             ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
+            FilledButton.icon(
               onPressed: () => setState(() => _mostrarForm = !_mostrarForm),
-              icon: Icon(_mostrarForm ? Icons.close : Icons.add, size: 18),
-              label: Text(_mostrarForm
-                  ? 'Cancelar'
-                  : 'Registrar Préstamo'),
-              style: ElevatedButton.styleFrom(
+              icon: Icon(_mostrarForm ? Icons.close : Icons.add, size: 16),
+              label: Text(_mostrarForm ? 'Cancelar' : 'Nuevo',
+                  style: const TextStyle(fontSize: 13)),
+              style: FilledButton.styleFrom(
                 backgroundColor: _mostrarForm ? kTextMuted : kPrimary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6)),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ]),
@@ -599,99 +659,89 @@ class _PrestamoCard extends StatelessWidget {
 
   static const _estadoColors = {
     'PENDIENTE': kWarning,
-    'ACTIVO':    kSuccess,
-    'DEVUELTO':  kTextMuted,
+    'ACTIVO':    kPrimary,
+    'DEVUELTO':  kSemaforoVerde,
     'RECHAZADO': kDanger,
   };
 
+  static const _estadoBg = {
+    'PENDIENTE': Color(0xFFFFF8E1),
+    'ACTIVO':    Color(0xFFE3F2FD),
+    'DEVUELTO':  Color(0xFFE8F5E9),
+    'RECHAZADO': Color(0xFFFFEBEE),
+  };
+
   static const _estadoLabels = {
-    'PENDIENTE': 'Pendiente aprobación',
-    'ACTIVO':    'Activo',
-    'DEVUELTO':  'Devuelto',
-    'RECHAZADO': 'Rechazado',
+    'PENDIENTE': 'PENDIENTE',
+    'ACTIVO':    'ACTIVO',
+    'DEVUELTO':  'DEVUELTO',
+    'RECHAZADO': 'RECHAZADO',
   };
 
   @override
   Widget build(BuildContext context) {
-    final id     = prestamo['id']?.toString() ?? '';
-    final estado = prestamo['estado']?.toString() ?? '';
-    final color  = _estadoColors[estado] ?? kTextMuted;
-    final label  = _estadoLabels[estado] ?? estado;
-    final detalles = (prestamo['detalles'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    final fecha = (prestamo['fecha_solicitud']?.toString() ?? '')
+    final id       = prestamo['id']?.toString() ?? '';
+    final estado   = prestamo['estado']?.toString() ?? '';
+    final color    = _estadoColors[estado] ?? kTextMuted;
+    final bgColor  = _estadoBg[estado] ?? const Color(0xFFF5F5F5);
+    final label    = _estadoLabels[estado] ?? estado;
+    final detalles = (prestamo['detalles'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final fecha    = (prestamo['fecha_solicitud']?.toString() ?? '')
         .replaceFirst('T', ' ')
         .substring(0, 16);
 
-    return Card(
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      elevation: 1,
+      shadowColor: Colors.black12,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Encabezado
+            // ── Encabezado: ID + chip estado ──
             Row(children: [
-              Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(
-                    prestamo['nombre_estudiante']?.toString() ?? '—',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 15),
-                  ),
-                  Text(
-                    'NIT: ${prestamo['nit_estudiante'] ?? '—'}  ·  $fecha',
-                    style: const TextStyle(
-                        color: kTextMuted, fontSize: 12),
-                  ),
-                ]),
-              ),
+              Text('Préstamo #$id',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: color),
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(label,
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold)),
+                    style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
               ),
             ]),
-            const SizedBox(height: 10),
+            const SizedBox(height: 4),
+            // ── Info del solicitante ──
+            Text(prestamo['nombre_estudiante']?.toString() ?? '—',
+                style: const TextStyle(color: kTextMuted, fontSize: 13)),
+            Text(fecha,
+                style: const TextStyle(color: kTextMuted, fontSize: 11)),
+            const SizedBox(height: 8),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
 
-            // Ítems
+            // ── Ítems ──
             ...detalles.map((d) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(children: [
-                    const Icon(Icons.circle, size: 6, color: kTextMuted),
+                    const Icon(Icons.circle, size: 5, color: kTextMuted),
                     const SizedBox(width: 8),
-                    Expanded(
-                        child: Text(
-                      d['nombre_insumo']?.toString() ?? '?',
-                      style: const TextStyle(fontSize: 13),
-                    )),
-                    Text(
-                      'x${d['cantidad_prestada']}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13),
-                    ),
+                    Expanded(child: Text(d['nombre_insumo']?.toString() ?? '?',
+                        style: const TextStyle(fontSize: 13))),
+                    Text('×${d['cantidad_prestada']}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     if ((d['pendiente_devolucion'] != null &&
-                        double.tryParse(
-                                d['pendiente_devolucion'].toString()) !=
+                        double.tryParse(d['pendiente_devolucion'].toString()) !=
                             d['cantidad_prestada']))
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
-                        child: Text(
-                          '(pend. ${d['pendiente_devolucion']})',
-                          style: const TextStyle(
-                              color: kWarning, fontSize: 11),
-                        ),
+                        child: Text('(pend. ${d['pendiente_devolucion']})',
+                            style: const TextStyle(color: kWarning, fontSize: 11)),
                       ),
                   ]),
                 )),
@@ -699,56 +749,49 @@ class _PrestamoCard extends StatelessWidget {
             if (prestamo['observaciones']?.toString().isNotEmpty == true)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  prestamo['observaciones'].toString(),
-                  style: const TextStyle(
-                      color: kTextMuted, fontSize: 12,
-                      fontStyle: FontStyle.italic),
-                ),
+                child: Text(prestamo['observaciones'].toString(),
+                    style: const TextStyle(
+                        color: kTextMuted, fontSize: 12, fontStyle: FontStyle.italic)),
               ),
 
-            // Acciones
+            // ── Acciones ──
             if (puedeGestionar && (estado == 'PENDIENTE' || estado == 'ACTIVO')) ...[
               const SizedBox(height: 10),
-              const Divider(height: 1),
-              const SizedBox(height: 8),
               Row(children: [
                 if (estado == 'PENDIENTE') ...[
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.check, size: 16,
-                        color: kSuccess),
-                    label: const Text('Aprobar',
-                        style: TextStyle(color: kSuccess)),
-                    style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: kSuccess),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6)),
-                    onPressed: () => onAprobar(id),
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: kDanger,
+                          side: const BorderSide(color: kDanger),
+                          padding: const EdgeInsets.symmetric(vertical: 8)),
+                      onPressed: () => onRechazar(id),
+                      child: const Text('Rechazar', style: TextStyle(fontSize: 13)),
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.close, size: 16,
-                        color: kDanger),
-                    label: const Text('Rechazar',
-                        style: TextStyle(color: kDanger)),
-                    style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: kDanger),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6)),
-                    onPressed: () => onRechazar(id),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimary, foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 8)),
+                      onPressed: () => onAprobar(id),
+                      child: const Text('Aprobar', style: TextStyle(fontSize: 13)),
+                    ),
                   ),
                 ],
                 if (estado == 'ACTIVO')
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.assignment_return_outlined,
-                        size: 16, color: kPrimary),
-                    label: const Text('Registrar devolución',
-                        style: TextStyle(color: kPrimary)),
-                    style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: kPrimary),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6)),
-                    onPressed: () => _abrirDevolucion(context, detalles),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.assignment_return_outlined, size: 16),
+                      label: const Text('Registrar devolución', style: TextStyle(fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: kSemaforoVerde, foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 8)),
+                      onPressed: () => _abrirDevolucion(context, detalles),
+                    ),
                   ),
               ]),
             ],

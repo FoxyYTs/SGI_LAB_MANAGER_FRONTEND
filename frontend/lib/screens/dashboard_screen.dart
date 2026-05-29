@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+import '../core/cache/cache_service.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/qr_generator_dialog.dart';
 
@@ -11,8 +12,12 @@ class DashboardContent extends StatefulWidget {
 }
 
 class _DashboardContentState extends State<DashboardContent> {
+  static const _cacheKey = 'dashboard';
+
   Map<String, dynamic>? _data;
-  bool _cargando = true;
+  bool      _cargando   = true;
+  bool      _desdeCache = false;
+  DateTime? _cachedAt;
 
   @override
   void initState() {
@@ -26,9 +31,17 @@ class _DashboardContentState extends State<DashboardContent> {
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
       final r = await dio.get('academico/dashboard/');
-      setState(() { _data = Map<String, dynamic>.from(r.data); _cargando = false; });
+      final data = Map<String, dynamic>.from(r.data);
+      await CacheService.instance.set(_cacheKey, data);
+      if (mounted) setState(() { _data = data; _desdeCache = false; _cachedAt = null; _cargando = false; });
     } catch (_) {
-      setState(() => _cargando = false);
+      final cached = await CacheService.instance.get(_cacheKey);
+      if (mounted) setState(() {
+        _data       = cached != null ? Map<String, dynamic>.from(cached.data as Map) : null;
+        _desdeCache = cached != null;
+        _cachedAt   = cached?.cachedAt;
+        _cargando   = false;
+      });
     }
   }
 
@@ -47,6 +60,9 @@ class _DashboardContentState extends State<DashboardContent> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (_desdeCache)
+                    _CacheBanner(cachedAt: _cachedAt, onRefresh: _cargar),
+                  if (_desdeCache) SizedBox(height: isMobile ? 10 : 14),
                   _buildJumbotron(auth, isMobile),
                   SizedBox(height: isMobile ? 14 : 20),
                   if (_cargando)
@@ -131,9 +147,17 @@ class _DashboardContentState extends State<DashboardContent> {
   // ── Tarjetas de estadísticas ───────────────────────────────────────────────
 
   Widget _buildStatCards(double availableWidth, bool isMobile) {
-    // Columnas: 2 en móvil estrecho, 3 en tablet, 5 en desktop
-    final crossCount = availableWidth < 420 ? 2 : (availableWidth < 700 ? 3 : 5);
-    final aspectRatio = crossCount == 5 ? 2.0 : (crossCount == 3 ? 1.8 : 1.6);
+    final crossCount = isMobile ? 2 : (availableWidth < 900 ? 4 : 5);
+    final aspectRatio = isMobile ? 1.5 : 1.9;
+
+    final cards = [
+      _statCard(Icons.warning_amber_rounded,  'Insumos críticos',   '${_data!['stock_critico']        ?? 0}', kSemaforoRojo,    const Color(0xFFFFEBEE)),
+      _statCard(Icons.info_outline,           'Insumos bajos',      '${_data!['stock_bajo']           ?? 0}', const Color(0xFFE65100), const Color(0xFFFFF3E0)),
+      _statCard(Icons.swap_horiz_outlined,    'Préstamos activos',  '${_data!['prestamos_activos']    ?? 0}', kPrimary,         const Color(0xFFE3F2FD)),
+      _statCard(Icons.hourglass_top_outlined, 'Por aprobar',        '${_data!['prestamos_pendientes'] ?? 0}', const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+      if (!isMobile)
+        _statCard(Icons.inventory_2_outlined, 'Total insumos',      '${_data!['total_insumos']        ?? 0}', kPrimary,         const Color(0xFFE8F5E9)),
+    ];
 
     return GridView.count(
       crossAxisCount: crossCount,
@@ -142,34 +166,27 @@ class _DashboardContentState extends State<DashboardContent> {
       childAspectRatio: aspectRatio,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      children: [
-        _statCard(Icons.inventory_2_outlined,   'Total insumos',      '${_data!['total_insumos']        ?? 0}', kPrimary),
-        _statCard(Icons.warning_amber_rounded,  'Stock crítico',      '${_data!['stock_critico']        ?? 0}', kSemaforoRojo),
-        _statCard(Icons.info_outline,           'Stock bajo',         '${_data!['stock_bajo']           ?? 0}', kSemaforoAmarillo),
-        _statCard(Icons.swap_horiz_outlined,    'Préstamos activos',  '${_data!['prestamos_activos']    ?? 0}', kSuccess),
-        _statCard(Icons.hourglass_top_outlined, 'Por aprobar',        '${_data!['prestamos_pendientes'] ?? 0}', kWarning),
-      ],
+      children: cards,
     );
   }
 
-  Widget _statCard(IconData icon, String label, String value, Color color) =>
+  Widget _statCard(IconData icon, String label, String value, Color color, Color bgColor) =>
       Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
-          border: Border(left: BorderSide(color: color, width: 4)),
+          color: bgColor,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 2))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 6),
-            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 2),
-            Text(label, style: const TextStyle(color: kTextMuted, fontSize: 10),
+            Icon(icon, color: color, size: 20),
+            const Spacer(),
+            Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color, height: 1)),
+            const SizedBox(height: 4),
+            Text(label, style: TextStyle(color: color.withValues(alpha: 0.75), fontSize: 11, fontWeight: FontWeight.w500),
                 maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
         ),
@@ -290,4 +307,36 @@ class _DashboardContentState extends State<DashboardContent> {
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
     )).toList(),
   );
+}
+
+class _CacheBanner extends StatelessWidget {
+  final DateTime? cachedAt;
+  final VoidCallback onRefresh;
+  const _CacheBanner({required this.cachedAt, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    final edad = cachedAt != null ? CacheService.formatEdad(cachedAt!) : 'desconocido';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: kSemaforoAmarillo),
+      ),
+      child: Row(children: [
+        const Icon(Icons.history, color: Color(0xFFE65100), size: 16),
+        const SizedBox(width: 8),
+        Expanded(child: Text(
+          'Mostrando datos guardados ($edad)',
+          style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)),
+        )),
+        GestureDetector(
+          onTap: onRefresh,
+          child: const Icon(Icons.refresh, color: Color(0xFFE65100), size: 16),
+        ),
+      ]),
+    );
+  }
 }

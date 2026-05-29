@@ -36,12 +36,13 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
       fileName: 'qr_horas_sgi.svg',
     ),
     _QrForm(
-      title:    'Registro de Práctica',
-      route:    '/registro-practica',
-      icon:     Icons.science_outlined,
-      color:    Color(0xFF7B61FF),
-      desc:     'Registro de prácticas por docentes.',
-      fileName: 'qr_practica_sgi.svg',
+      title:       'Registro de Práctica',
+      route:       '/registro-practica',
+      externalUrl: 'https://forms.gle/HQsUXGpVa6u2dJVR7',
+      icon:        Icons.science_outlined,
+      color:       Color(0xFF7B61FF),
+      desc:        'Registro de prácticas por docentes (Google Forms).',
+      fileName:    'qr_practica_sgi.svg',
     ),
     _QrForm(
       title:    'Reporte de Rotura',
@@ -114,7 +115,7 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
               child: TabBarView(
                 controller: _tab,
                 children: _forms.map((f) {
-                  final url = _buildUrl(f.route);
+                  final url = f.externalUrl ?? _buildUrl(f.route);
                   return _QrTab(form: f, url: url);
                 }).toList(),
               ),
@@ -134,7 +135,7 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
                   ElevatedButton.icon(
                     onPressed: () async {
                       final f = _forms[_tab.index];
-                      final url = _buildUrl(f.route);
+                      final url = f.externalUrl ?? _buildUrl(f.route);
                       final svgString = Barcode.qrCode().toSvg(url, width: 200, height: 200);
                       await guardarQrComoSvg(svgString, fileName: f.fileName);
                       if (context.mounted) {
@@ -185,7 +186,8 @@ class _QrTab extends StatelessWidget {
               version: QrVersions.auto,
               size: 200.0,
               gapless: false,
-              foregroundColor: form.color,
+              eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: form.color),
+              dataModuleStyle: QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: form.color),
             ),
           ),
           const SizedBox(height: 12),
@@ -203,6 +205,7 @@ class _QrTab extends StatelessWidget {
 class _QrForm {
   final String title;
   final String route;
+  final String? externalUrl;
   final IconData icon;
   final Color color;
   final String desc;
@@ -211,6 +214,7 @@ class _QrForm {
   const _QrForm({
     required this.title,
     required this.route,
+    this.externalUrl,
     required this.icon,
     required this.color,
     required this.desc,

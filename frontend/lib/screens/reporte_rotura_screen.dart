@@ -225,7 +225,7 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
         const SizedBox(height: 10),
         if (!_cargando && _programas.isNotEmpty)
           DropdownButtonFormField<Map<String, dynamic>>(
-            value: _programaSel,
+            initialValue: _programaSel,
             decoration: _deco('Programa académico *', Icons.school_outlined),
             items: _programas.map((p) => DropdownMenuItem(
               value: p,
@@ -238,7 +238,7 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
         const SizedBox(height: 10),
         if (!_cargando && _asignaturas.isNotEmpty)
           DropdownButtonFormField<Map<String, dynamic>>(
-            value: _asignaturaSel,
+            initialValue: _asignaturaSel,
             decoration: _deco('Asignatura (opcional)', Icons.menu_book_outlined),
             items: [
               const DropdownMenuItem(value: null, child: Text('No aplica / No recuerdo')),

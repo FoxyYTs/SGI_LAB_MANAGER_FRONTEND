@@ -204,7 +204,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
           const SizedBox.shrink()
         else
           DropdownButtonFormField<String>(
-            value: _programaId,
+            initialValue: _programaId,
             decoration: _deco('Programa académico *', Icons.school_outlined),
             items: _programas.map((p) => DropdownMenuItem(
               value: p['id'].toString(),
