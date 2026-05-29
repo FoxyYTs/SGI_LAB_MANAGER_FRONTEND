@@ -130,7 +130,12 @@ class _MainShellState extends State<MainShell> {
     return _buildDesktop(context, auth, sync, tabs);
   }
 
-  // ── Desktop: compact horizontal tab bar ─────────────────────────────────────
+  // ── Desktop: sidebar lateral + topbar (estilo Stitch) ───────────────────────
+
+  static const _kSidebarBg     = Color(0xFFEBF5FE);
+  static const _kSidebarBorder = Color(0xFFA1B4C5);
+  static const _kOnSurface     = Color(0xFF223542);
+  static const _kActiveItemBg  = Color(0xFFD4E8FF);
 
   Widget _buildDesktop(
     BuildContext context,
@@ -138,73 +143,287 @@ class _MainShellState extends State<MainShell> {
     SyncService sync,
     List<_TabDef> tabs,
   ) {
-    return DefaultTabController(
-      length: tabs.length,
-      child: Scaffold(
-        backgroundColor: kBackground,
-        appBar: AppBar(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-          elevation: 2,
-          shadowColor: Colors.black26,
-          toolbarHeight: 46,
-          automaticallyImplyLeading: false,
-          title: const Text(
-            'LAB MANAGER',
-            style: TextStyle(fontWeight: FontWeight.bold, color: kPrimary, fontSize: 17),
+    final idx = _idx.clamp(0, tabs.length - 1);
+    return Scaffold(
+      backgroundColor: kBackground,
+      body: Row(children: [
+        _buildSidebar(context, auth, sync, tabs, idx),
+        Expanded(
+          child: Column(children: [
+            _buildDesktopTopBar(context, auth, sync),
+            Expanded(
+              child: IndexedStack(
+                index: idx,
+                children: tabs.map((t) => t.content).toList(),
+              ),
+            ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildSidebar(BuildContext context, AuthProvider auth, SyncService sync,
+      List<_TabDef> tabs, int idx) {
+    return Container(
+      width: 256,
+      decoration: const BoxDecoration(
+        color: _kSidebarBg,
+        border: Border(right: BorderSide(color: _kSidebarBorder)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Cabecera
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 22, 20, 14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Laboratorio PCJIC',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: _kOnSurface)),
+            SizedBox(height: 2),
+            Text('Rionegro, Antioquia',
+                style: TextStyle(fontSize: 12, color: kTextMuted)),
+          ]),
+        ),
+        const Divider(height: 1, color: _kSidebarBorder),
+        const SizedBox(height: 6),
+
+        // Banner offline
+        if (!sync.online)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFB71C1C).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFB71C1C).withValues(alpha: 0.35)),
+            ),
+            child: const Row(children: [
+              Icon(Icons.wifi_off, size: 13, color: Color(0xFFB71C1C)),
+              SizedBox(width: 6),
+              Text('Sin conexión',
+                  style: TextStyle(fontSize: 11, color: Color(0xFFB71C1C), fontWeight: FontWeight.bold)),
+            ]),
           ),
-          actions: [
-            _syncIndicator(sync),
-            const SizedBox(width: 4),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Center(
-                child: Text(
-                  auth.username ?? '',
-                  style: const TextStyle(color: kTextMuted, fontSize: 13),
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Mi Perfil',
-              icon: const Icon(Icons.account_circle_outlined,
-                  size: 20, color: kTextMuted),
-              onPressed: () => Navigator.pushNamed(context, '/mi-perfil'),
-            ),
-            TextButton.icon(
-              onPressed: () async {
-                await auth.logout();
-                if (context.mounted) Navigator.pushReplacementNamed(context, '/');
-              },
-              icon: const Icon(Icons.logout, size: 15, color: kTextMuted),
-              label: const Text('Salir', style: TextStyle(color: kTextMuted, fontSize: 13)),
-            ),
-            const SizedBox(width: 4),
-          ],
-          bottom: TabBar(
-            labelColor: kPrimary,
-            unselectedLabelColor: kTextMuted,
-            indicatorColor: kPrimary,
-            indicatorWeight: 2,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 14),
-            tabs: tabs.map((t) => Tab(
-              height: 36,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(t.icon, size: 15),
-                  const SizedBox(width: 5),
-                  Text(t.label,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            )).toList(),
+
+        // Nav items
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            children: tabs.asMap().entries.map((e) {
+              final isActive = idx == e.key;
+              if (e.value.label == 'Configuración') {
+                return _buildSidebarConfig(context, e.key, idx, isActive);
+              }
+              return _buildSidebarItem(e.value.icon, e.value.label, e.key, isActive);
+            }).toList(),
           ),
         ),
-        body: TabBarView(
-          children: tabs.map((t) => t.content).toList(),
+
+        // Sync pending
+        if (sync.online && sync.pending > 0)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: kSemaforoAmarillo.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(children: [
+                sync.syncing
+                    ? const SizedBox(width: 12, height: 12,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: kWarning))
+                    : const Icon(Icons.sync, size: 13, color: kWarning),
+                const SizedBox(width: 6),
+                Text('${sync.pending} pendiente${sync.pending > 1 ? 's' : ''}',
+                    style: const TextStyle(fontSize: 11, color: kWarning, fontWeight: FontWeight.bold)),
+              ]),
+            ),
+          ),
+
+        // Logout
+        const Divider(height: 1, color: _kSidebarBorder),
+        _buildSidebarLogout(context, auth),
+        const SizedBox(height: 8),
+      ]),
+    );
+  }
+
+  Widget _buildSidebarItem(IconData icon, String label, int itemIdx, bool isActive) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() => _idx = itemIdx),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isActive ? _kActiveItemBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(children: [
+            Icon(icon, size: 20, color: isActive ? kPrimary : kTextMuted),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(
+              fontSize: 14,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+              color: isActive ? kPrimary : _kOnSurface,
+            )),
+          ]),
         ),
       ),
+    );
+  }
+
+  Widget _buildSidebarConfig(BuildContext context, int mainIdx, int currentIdx, bool isActive) {
+    const subs = [
+      ('Ubicaciones', Icons.place_outlined,     0),
+      ('Unidades',    Icons.straighten_outlined, 1),
+      ('Programas',   Icons.school_outlined,     2),
+      ('Docentes',    Icons.person_pin_outlined,  3),
+      ('Guías',       Icons.menu_book_outlined,   4),
+      ('Áreas',       Icons.category_outlined,    5),
+      ('Asignaturas', Icons.science_outlined,     6),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: EdgeInsets.zero,
+          shape: const Border(),
+          collapsedShape: const Border(),
+          leading: Icon(Icons.settings_outlined, size: 20,
+              color: isActive ? kPrimary : kTextMuted),
+          title: Text('Configuración', style: TextStyle(
+            fontSize: 14,
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            color: isActive ? kPrimary : _kOnSurface,
+          )),
+          backgroundColor: isActive ? _kActiveItemBg : Colors.transparent,
+          collapsedBackgroundColor: Colors.transparent,
+          initiallyExpanded: isActive,
+          onExpansionChanged: (_) {
+            if (!isActive) setState(() => _idx = mainIdx);
+          },
+          children: subs.map((s) => ListTile(
+            contentPadding: const EdgeInsets.only(left: 52, right: 12),
+            dense: true,
+            visualDensity: VisualDensity.compact,
+            leading: Icon(s.$2, size: 16, color: kPrimary),
+            title: Text(s.$1, style: const TextStyle(fontSize: 13)),
+            onTap: () {
+              setState(() => _idx = mainIdx);
+              _configKey.currentState?.jumpToTab(s.$3);
+            },
+          )).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebarLogout(BuildContext context, AuthProvider auth) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () async {
+          await auth.logout();
+          if (!mounted) return;
+          Navigator.pushReplacementNamed(context, '/');
+        },
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(children: [
+            Icon(Icons.logout, size: 20, color: kTextMuted),
+            SizedBox(width: 12),
+            Text('Cerrar Sesión', style: TextStyle(fontSize: 14, color: kTextMuted)),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopTopBar(BuildContext context, AuthProvider auth, SyncService sync) {
+    final initial = (auth.username ?? 'U').substring(0, 1).toUpperCase();
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: _kSidebarBorder)),
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 1))],
+      ),
+      child: Row(children: [
+        const Text('SGI LAB MANAGER',
+            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15,
+                letterSpacing: 0.8, color: _kOnSurface)),
+        const SizedBox(width: 20),
+        // Buscador pill
+        Expanded(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: TextField(
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Buscar insumos, equipos...',
+                hintStyle: const TextStyle(color: kTextMuted, fontSize: 13),
+                prefixIcon: const Icon(Icons.search, size: 18, color: kTextMuted),
+                filled: true,
+                fillColor: _kSidebarBg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(999),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                isDense: true,
+              ),
+            ),
+          ),
+        ),
+        const Spacer(),
+        // Iconos acción
+        IconButton(
+          icon: const Icon(Icons.notifications_outlined, size: 20),
+          color: kPrimary,
+          tooltip: 'Notificaciones',
+          onPressed: () {},
+        ),
+        IconButton(
+          icon: const Icon(Icons.help_outline, size: 20),
+          color: kPrimary,
+          tooltip: 'Ayuda',
+          onPressed: () {},
+        ),
+        Container(height: 28, width: 1, color: _kSidebarBorder,
+            margin: const EdgeInsets.symmetric(horizontal: 8)),
+        // Usuario + avatar
+        GestureDetector(
+          onTap: () => Navigator.pushNamed(context, '/mi-perfil'),
+          child: Row(children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(auth.username ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.bold,
+                        fontSize: 13, color: _kOnSurface)),
+                if (auth.rol != null)
+                  Text(auth.rol!,
+                      style: const TextStyle(fontSize: 10, color: kTextMuted)),
+              ],
+            ),
+            const SizedBox(width: 10),
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: kPrimary.withValues(alpha: 0.15),
+              child: Text(initial,
+                  style: const TextStyle(color: kPrimary,
+                      fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+          ]),
+        ),
+      ]),
     );
   }
 
