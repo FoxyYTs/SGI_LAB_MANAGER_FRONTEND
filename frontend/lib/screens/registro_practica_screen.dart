@@ -245,7 +245,7 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
         else ...[
           if (_docentes.isNotEmpty)
             DropdownButtonFormField<Map<String, dynamic>>(
-              value: _docenteSel,
+              initialValue: _docenteSel,
               decoration: _deco('Docente *', Icons.person_outline),
               items: _docentes.map((d) => DropdownMenuItem(
                 value: d,
@@ -274,7 +274,7 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
         if (!_cargando) ...[
           if (_programas.isNotEmpty)
             DropdownButtonFormField<Map<String, dynamic>>(
-              value: _programaSel,
+              initialValue: _programaSel,
               decoration: _deco('Programa académico *', Icons.school_outlined),
               items: _programas.map((p) => DropdownMenuItem(
                 value: p,
@@ -288,7 +288,7 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
 
           if (_asignaturas.isNotEmpty)
             DropdownButtonFormField<Map<String, dynamic>>(
-              value: _asignaturaSel,
+              initialValue: _asignaturaSel,
               decoration: _deco('Asignatura *', Icons.menu_book_outlined),
               items: _asignaturas.map((a) => DropdownMenuItem(
                 value: a,
@@ -309,7 +309,7 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
             )
           else if (_asignaturaSel != null)
             DropdownButtonFormField<Map<String, dynamic>>(
-              value: _guiaSel,
+              initialValue: _guiaSel,
               decoration: _deco('Guía (opcional)', Icons.description_outlined),
               items: [
                 const DropdownMenuItem(value: null, child: Text('Sin guía específica')),

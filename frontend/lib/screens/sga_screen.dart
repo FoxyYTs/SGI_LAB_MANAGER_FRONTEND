@@ -338,7 +338,7 @@ class _DatosSgaTab extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color, width: 1.5),
       ),
@@ -383,7 +383,7 @@ class _DatosSgaTab extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border.all(color: color, width: 2),
             borderRadius: BorderRadius.circular(8),
-            color: color.withOpacity(0.07),
+            color: color.withValues(alpha: 0.07),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -583,7 +583,7 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
 
             _seccion('Sección 2 — Peligros'),
             DropdownButtonFormField<String>(
-              value: _c['palabra_advertencia']!.text.isEmpty
+              initialValue: _c['palabra_advertencia']!.text.isEmpty
                   ? null : _c['palabra_advertencia']!.text,
               decoration: _deco('Palabra de advertencia'),
               items: ['PELIGRO', 'ATENCIÓN'].map((v) =>
@@ -613,7 +613,7 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
 
             _seccion('Sección 9 — Propiedades físicas'),
             DropdownButtonFormField<String>(
-              value: _c['estado_fisico']!.text.isEmpty
+              initialValue: _c['estado_fisico']!.text.isEmpty
                   ? null : _c['estado_fisico']!.text,
               decoration: _deco('Estado físico'),
               items: ['SÓLIDO', 'LÍQUIDO', 'GASEOSO', 'PASTA', 'GEL'].map((v) =>
@@ -643,7 +643,7 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
             SwitchListTile(
               title: const Text('Corrosivo (W especial)'),
               value: _nfpaCorrosivo,
-              activeColor: kPrimary,
+              activeThumbColor: kPrimary,
               onChanged: (v) => setState(() => _nfpaCorrosivo = v),
               contentPadding: EdgeInsets.zero,
               dense: true,
@@ -712,7 +712,7 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
 
   Widget _nfpaDropdown(String label, int? value, void Function(int?) onChanged) =>
     DropdownButtonFormField<int?>(
-      value: value,
+      initialValue: value,
       decoration: _deco(label),
       items: [
         const DropdownMenuItem(value: null, child: Text('–')),
@@ -754,9 +754,9 @@ class _ColmenaTab extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: kPrimary.withOpacity(0.08),
+              color: kPrimary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: kPrimary.withOpacity(0.3)),
+              border: Border.all(color: kPrimary.withValues(alpha: 0.3)),
             ),
             child: const Row(
               children: [

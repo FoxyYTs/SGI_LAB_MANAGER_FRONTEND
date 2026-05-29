@@ -165,6 +165,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     nitCtrl.dispose();
     obsCtrl.dispose();
 
+    if (!mounted) return;
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);

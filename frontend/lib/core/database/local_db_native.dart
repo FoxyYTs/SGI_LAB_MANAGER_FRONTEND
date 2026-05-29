@@ -16,10 +16,10 @@ class LocalDb {
       databaseFactory = databaseFactoryFfi;
     }
     final path = join(await getDatabasesPath(), 'sgi_lab.db');
-    return openDatabase(path, version: 1, onCreate: _create);
+    return openDatabase(path, version: 2, onCreate: _create, onUpgrade: _upgrade);
   }
 
-  static Future<void> _create(Database db, int _) async {
+  static Future<void> _create(Database db, int version) async {
     await db.execute('''
       CREATE TABLE insumos_cache (
         id         TEXT PRIMARY KEY,
@@ -53,5 +53,25 @@ class LocalDb {
         last_sync INTEGER NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE json_cache (
+        clave     TEXT PRIMARY KEY,
+        data      TEXT NOT NULL,
+        cached_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> _upgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS json_cache (
+          clave     TEXT PRIMARY KEY,
+          data      TEXT NOT NULL,
+          cached_at INTEGER NOT NULL
+        )
+      ''');
+    }
   }
 }

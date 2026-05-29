@@ -239,10 +239,54 @@ class _MainShellState extends State<MainShell> {
         ],
       ),
       drawer: _buildDrawer(context, auth, tabs, idx),
-      body: IndexedStack(
-        index: idx,
-        children: tabs.map((t) => t.content).toList(),
-      ),
+      body: Column(children: [
+        // ── Banner offline persistente ────────────────────────────────
+        if (!sync.online)
+          Material(
+            color: const Color(0xFFB71C1C),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(children: [
+                const Icon(Icons.wifi_off, color: Colors.white, size: 15),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Sin conexión — mostrando datos guardados',
+                    style: TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ]),
+            ),
+          )
+        else if (sync.pending > 0)
+          Material(
+            color: const Color(0xFFF57F17),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Row(children: [
+                sync.syncing
+                    ? const SizedBox(
+                        width: 13, height: 13,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.sync, color: Colors.white, size: 15),
+                const SizedBox(width: 8),
+                Text(
+                  sync.syncing
+                      ? 'Sincronizando ${sync.pending} operación(es)...'
+                      : '${sync.pending} operación(es) pendiente(s) de sincronizar',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ]),
+            ),
+          ),
+        // ── Contenido principal ──────────────────────────────────────
+        Expanded(
+          child: IndexedStack(
+            index: idx,
+            children: tabs.map((t) => t.content).toList(),
+          ),
+        ),
+      ]),
     );
   }
 
@@ -333,7 +377,8 @@ class _MainShellState extends State<MainShell> {
                   onTap: () async {
                     Navigator.pop(context);
                     await auth.logout();
-                    if (mounted) Navigator.pushReplacementNamed(context, '/');
+                    if (!mounted) return;
+                    Navigator.pushReplacementNamed(context, '/');
                   },
                 ),
               ],

@@ -29,6 +29,7 @@ class _InventarioContentState extends State<InventarioContent> {
   void initState() {
     super.initState();
     Future.microtask(() {
+      if (!mounted) return;
       final auth = Provider.of<AuthProvider>(context, listen: false);
       Provider.of<InventarioProvider>(context, listen: false).fetchInsumos(auth.token);
     });
@@ -101,6 +102,28 @@ class _InventarioContentState extends State<InventarioContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Banner datos desde caché
+                if (provider.desdeCache)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF8E1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: kSemaforoAmarillo),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.history, color: Color(0xFFE65100), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(
+                        provider.lastSync != null
+                            ? 'Mostrando datos guardados (última sync: ${_formatFecha(provider.lastSync!)})'
+                            : 'Mostrando datos guardados — sin conexión al servidor',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)),
+                      )),
+                    ]),
+                  ),
                 // ── Encabezado ───────────────────────────────────────────────
                 if (isMobile) ...[
                   Row(children: [
@@ -192,24 +215,22 @@ class _InventarioContentState extends State<InventarioContent> {
                 ),
                 const SizedBox(height: 12),
 
-                // ── Tabla ─────────────────────────────────────────────────────
+                // ── Lista (móvil) / Tabla (desktop) ──────────────────────────
                 Expanded(
                   child: filtrados.isEmpty
                       ? _buildEmpty()
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(8),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: SingleChildScrollView(
-                              scrollDirection: isMobile ? Axis.horizontal : Axis.vertical,
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(minWidth: isMobile ? 500 : 0),
+                      : isMobile
+                          ? _buildCardList(filtrados, context)
+                          : Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: const [
+                                  BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.vertical,
                                   child: esQuimico
@@ -218,8 +239,6 @@ class _InventarioContentState extends State<InventarioContent> {
                                 ),
                               ),
                             ),
-                          ),
-                        ),
                 ),
 
                 // ── Leyenda ───────────────────────────────────────────────────
@@ -261,6 +280,90 @@ class _InventarioContentState extends State<InventarioContent> {
             ),
         ]);
         }); // LayoutBuilder
+      },
+    );
+  }
+
+  // ── Vista de cards para móvil ─────────────────────────────────────────────
+
+  Widget _buildCardList(List<Insumo> items, BuildContext context) {
+    return ListView.separated(
+      padding: EdgeInsets.zero,
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (ctx, i) {
+        final insumo = items[i];
+        final color  = _semaforoColor(insumo.semaforo);
+        final (chipLabel, chipColor, chipBg) = switch (insumo.semaforo) {
+          'ROJO'     => ('CRÍTICO', kSemaforoRojo,    const Color(0xFFFFEBEE)),
+          'AMARILLO' => ('BAJO',    kSemaforoAmarillo, const Color(0xFFFFF8E1)),
+          _          => ('OK',      kSemaforoVerde,    const Color(0xFFE8F5E9)),
+        };
+        return Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          elevation: 1,
+          shadowColor: Colors.black12,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => Navigator.push(ctx,
+                MaterialPageRoute(builder: (_) => InsumoDetailScreen(
+                    insumoId: insumo.id, insumoNombre: insumo.nombre))),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border(left: BorderSide(color: color, width: 4)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: Row(children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(insumo.nombre,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text('${insumo.tipo} · ${insumo.ubicacion}',
+                          style: const TextStyle(color: kTextMuted, fontSize: 12),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('${insumo.stockActual.toStringAsFixed(0)} ${insumo.unidad}',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: chipBg,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(chipLabel,
+                          style: TextStyle(color: chipColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                if (insumo.tipo == 'Químico') ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: Icon(Icons.science_outlined, size: 20,
+                        color: insumo.tieneSga ? kPrimary : kTextMuted),
+                    onPressed: () => Navigator.push(ctx,
+                        MaterialPageRoute(builder: (_) => SgaScreen(
+                            insumoId: insumo.id, insumoNombre: insumo.nombre))),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+        );
       },
     );
   }
@@ -465,6 +568,14 @@ class _InventarioContentState extends State<InventarioContent> {
       constraints: const BoxConstraints(),
     ),
   );
+
+  String _formatFecha(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1)  return 'justo ahora';
+    if (diff.inMinutes < 60) return 'hace ${diff.inMinutes} min';
+    if (diff.inHours < 24)   return 'hace ${diff.inHours} h';
+    return 'hace ${diff.inDays} día(s)';
+  }
 
   Widget _buildEmpty() => Center(
     child: Column(mainAxisSize: MainAxisSize.min, children: [

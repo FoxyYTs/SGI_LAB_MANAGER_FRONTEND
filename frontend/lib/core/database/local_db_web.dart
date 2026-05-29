@@ -11,6 +11,7 @@ class _NoopDb {
       {String? where, List? whereArgs, String? orderBy, int? limit}) async => [];
   Future<List<Map<String, dynamic>>> rawQuery(String sql,
       [List? args]) async => [];
+  Future<int> rawInsert(String sql, [List? args]) async => 0;
   Future<int> update(String t, Map<String, dynamic> v,
       {String? where, List? whereArgs}) async => 0;
   _Batch batch() => _Batch();

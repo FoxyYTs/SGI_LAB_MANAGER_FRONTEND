@@ -167,8 +167,8 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
                               margin: const EdgeInsets.only(bottom: 20),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: kSuccess.withOpacity(0.1),
-                                border: Border.all(color: kSuccess.withOpacity(0.4)),
+                                color: kSuccess.withValues(alpha: 0.1),
+                                border: Border.all(color: kSuccess.withValues(alpha: 0.4)),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Row(

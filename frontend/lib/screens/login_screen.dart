@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../core/theme/colors.dart';
 import '../core/log_service.dart';
 import '../core/api/api_client.dart';
+import '../core/sync/sync_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -26,6 +28,22 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() async {
+    // En móvil/desktop, bloquear login si no hay conexión a internet.
+    if (!kIsWeb && !SyncService.instance.online) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(children: [
+            Icon(Icons.wifi_off, color: Colors.white, size: 18),
+            SizedBox(width: 10),
+            Expanded(child: Text('Sin conexión a internet.\nEl inicio de sesión requiere conexión.')),
+          ]),
+          backgroundColor: kDanger,
+          duration: Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
@@ -66,7 +84,32 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             )
           : null,
-      body: Container(
+      body: Column(children: [
+        // Banner offline
+        if (!kIsWeb)
+          ListenableBuilder(
+            listenable: SyncService.instance,
+            builder: (_, __) => SyncService.instance.online
+                ? const SizedBox.shrink()
+                : Material(
+                    color: const Color(0xFFB71C1C),
+                    child: SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Row(children: const [
+                          Icon(Icons.wifi_off, color: Colors.white, size: 16),
+                          SizedBox(width: 8),
+                          Expanded(child: Text(
+                            'Sin conexión — el inicio de sesión no está disponible',
+                            style: TextStyle(color: Colors.white, fontSize: 12),
+                          )),
+                        ]),
+                      ),
+                    ),
+                  ),
+          ),
+        Expanded(child: Container(
         width: double.infinity,
         height: double.infinity,
         decoration: const BoxDecoration(
@@ -90,29 +133,38 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Cabecera azul estilo Bootstrap card-header
+                    // Cabecera con ícono de laboratorio
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      padding: const EdgeInsets.fromLTRB(28, 28, 28, 20),
                       decoration: const BoxDecoration(
-                        color: kPrimary,
+                        color: Colors.white,
                         borderRadius: BorderRadius.only(
                           topLeft: Radius.circular(12),
                           topRight: Radius.circular(12),
                         ),
                       ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: const Column(
                         children: [
-                          Icon(Icons.lock, color: Colors.white, size: 28),
-                          SizedBox(width: 10),
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: Color(0xFFE3F2FD),
+                            child: Icon(Icons.science, color: kPrimary, size: 30),
+                          ),
+                          SizedBox(height: 12),
                           Text(
-                            "Iniciar Sesión",
+                            "SGI LAB MANAGER",
                             style: TextStyle(
-                              fontSize: 22,
+                              fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: kPrimary,
+                              letterSpacing: 0.5,
                             ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            "Laboratorios de Ciencias Básicas",
+                            style: TextStyle(fontSize: 12, color: kTextMuted),
                           ),
                         ],
                       ),
@@ -158,19 +210,19 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 48,
                             child: _isLoading
                                 ? const Center(child: CircularProgressIndicator(color: kPrimary))
-                                : ElevatedButton.icon(
+                                : ElevatedButton(
                                     onPressed: _handleLogin,
-                                    icon: const Icon(Icons.login),
-                                    label: const Text(
-                                      "Iniciar Sesión",
-                                      style: TextStyle(fontSize: 16),
-                                    ),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: kSuccess,
+                                      backgroundColor: kPrimary,
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(6),
+                                        borderRadius: BorderRadius.circular(8),
                                       ),
+                                      elevation: 0,
+                                    ),
+                                    child: const Text(
+                                      "Ingresar",
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                                     ),
                                   ),
                           ),
@@ -195,14 +247,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                           ),
                           const SizedBox(height: 4),
-                          const Text(
-                            "SGI LAB MANAGER",
-                            style: TextStyle(
-                              color: kTextMuted,
-                              fontSize: 12,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -211,8 +255,8 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-        ),
-      ),
+        ))),
+      ]),
     );
   }
 }

@@ -342,7 +342,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                       value: _esGraduado,
                       onChanged: (v) => setState(() => _esGraduado = v),
                       title: const Text('¿Es graduado?'),
-                      activeColor: kPrimary,
+                      activeThumbColor: kPrimary,
                       contentPadding: EdgeInsets.zero,
                     ),
                   ],
@@ -423,7 +423,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
     String? Function(T?)? validator,
   }) =>
       DropdownButtonFormField<T>(
-        value: value,
+        initialValue: value,
         items: items,
         onChanged: onChanged,
         validator: validator,

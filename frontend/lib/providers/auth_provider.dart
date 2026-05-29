@@ -18,9 +18,7 @@ import '../core/log_service.dart';
 /// El acceso a funciones de la UI usa [can] con las constantes de [Perm].
 class AuthProvider with ChangeNotifier {
   final _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-    ),
+    aOptions: AndroidOptions(),
     webOptions: WebOptions(
       dbName: 'sgi_lab_storage',
       publicKey: 'sgi_lab_key',

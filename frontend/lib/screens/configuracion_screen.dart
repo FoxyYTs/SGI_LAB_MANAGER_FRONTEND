@@ -166,6 +166,7 @@ class _CrudListState extends State<_CrudList> {
       ),
     );
     if (confirmed != true) return;
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     await dio.delete('${widget.endpoint}$id/');
