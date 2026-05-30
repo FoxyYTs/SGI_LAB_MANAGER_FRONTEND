@@ -125,17 +125,20 @@ class _CrudListState extends State<_CrudList> {
   }
 
   Future<void> _fetch() async {
+    if (!mounted) return;
     setState(() => _loading = true);
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       final resp = await dio.get(widget.endpoint);
+      if (!mounted) return;
       setState(() {
         final d  = resp.data;
         _items   = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _loading = false);
     }
   }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -52,9 +53,11 @@ void main() async {
       LogService.logError('LocalDb.instance', e, s);
     }
 
-    // Inicializar Workmanager con el dispatcher de fondo
-    await Workmanager().initialize(backgroundDispatcher, isInDebugMode: false);
-    LogService.log('Workmanager inicializado');
+    // Workmanager solo disponible en Android
+    if (Platform.isAndroid) {
+      await Workmanager().initialize(backgroundDispatcher, isInDebugMode: false);
+      LogService.log('Workmanager inicializado');
+    }
   }
 
   // Restaurar sesión guardada ANTES de levantar la UI.
@@ -68,8 +71,8 @@ void main() async {
     await SyncService.instance.init(null);
   }
 
-  // Si hay sesión activa, inicializar notificaciones y registrar tareas de fondo
-  if (!kIsWeb && auth.isAuthenticated) {
+  // Notificaciones y tareas de fondo solo en Android
+  if (!kIsWeb && auth.isAuthenticated && Platform.isAndroid) {
     await NotificationService.init();
     await NotificationService.requestPermission();
     await registerBackgroundTasks();

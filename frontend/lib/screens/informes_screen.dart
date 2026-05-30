@@ -23,15 +23,18 @@ class _InformesContentState extends State<InformesContent> {
   }
 
   Future<void> _cargar() async {
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
     try {
       final dio = ApiClient.instance.authenticatedDio(auth.token!);
       final r = await dio.get('academico/ultimo-informe/');
+      if (!mounted) return;
       setState(() {
         _ultimosInformes = Map<String, dynamic>.from(r.data);
         _cargando = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _cargando = false);
     }
   }
@@ -95,8 +98,7 @@ class _InformesContentState extends State<InformesContent> {
                                 crossAxisCount: crossCount,
                                 crossAxisSpacing: 12,
                                 mainAxisSpacing: 12,
-                                // Tarjetas más compactas en multi-columna
-                                childAspectRatio: crossCount == 1 ? 2.2 : 1.65,
+                                childAspectRatio: crossCount == 1 ? 1.9 : 1.45,
                               ),
                             ),
                           ),
@@ -329,7 +331,7 @@ class _InformeTileState extends State<_InformeTile> {
               )),
             ]),
 
-            const Spacer(),
+            const SizedBox(height: 8),
 
             // ── Filtros de fecha (si aplica) ──────────────────────────
             if (widget.tipo.conFechas) ...[

@@ -13,8 +13,12 @@ const _kServerUrl = String.fromEnvironment(
 );
 
 // Nombres de tarea
-const kTaskStock    = 'sgi_stock_check';
-const kTaskSchedule = 'sgi_schedule_check';
+const kTaskStock         = 'sgi_stock_check';
+const kTaskSchedule      = 'sgi_schedule_check';
+const kTaskServerMonitor = 'sgi_server_monitor';
+
+// Clave SharedPreferences para el estado del servidor
+const _kServerStatusKey = 'server_monitor_status'; // 'online' | 'offline'
 
 // ── Punto de entrada del hilo de fondo ────────────────────────────────────────
 // @pragma necesario para que el compilador no elimine esta función.
@@ -37,6 +41,8 @@ void backgroundDispatcher() {
           await _checkStock(token);
         case kTaskSchedule:
           await _checkSchedule(token, rol, username);
+        case kTaskServerMonitor:
+          await _checkServer();
       }
     } catch (_) {
       // Las notificaciones son no-críticas; ignoramos cualquier error
@@ -47,7 +53,7 @@ void backgroundDispatcher() {
 
 // ── Registro de tareas periódicas ─────────────────────────────────────────────
 
-/// Registra ambas tareas periódicas. Llamar tras iniciar sesión.
+/// Registra todas las tareas periódicas. Llamar tras iniciar sesión.
 Future<void> registerBackgroundTasks() async {
   // Stock crítico: cada 6 horas
   await Workmanager().registerPeriodicTask(
@@ -68,12 +74,23 @@ Future<void> registerBackgroundTasks() async {
     constraints: Constraints(networkType: NetworkType.connected),
     existingWorkPolicy: ExistingWorkPolicy.keep,
   );
+
+  // Monitor de disponibilidad del servidor: cada 15 minutos.
+  // Sin restricción de red — necesita correr incluso sin conexión para
+  // detectar cuando el servidor está caído.
+  await Workmanager().registerPeriodicTask(
+    kTaskServerMonitor,
+    kTaskServerMonitor,
+    frequency: const Duration(minutes: 15),
+    existingWorkPolicy: ExistingWorkPolicy.keep,
+  );
 }
 
 /// Cancela todas las tareas periódicas. Llamar al cerrar sesión.
 Future<void> cancelBackgroundTasks() async {
   await Workmanager().cancelByUniqueName(kTaskStock);
   await Workmanager().cancelByUniqueName(kTaskSchedule);
+  await Workmanager().cancelByUniqueName(kTaskServerMonitor);
 }
 
 // ── Lógica de Stock Crítico ───────────────────────────────────────────────────
@@ -121,9 +138,9 @@ Future<void> _checkSchedule(String token, String rol, String username) async {
       final miBloque = bloques.where((b) {
         final bDia  = _int(b['dia_semana']);
         final bHora = _int(b['hora']);
-        final bUser = b['usuario_username'] as String?
-            ?? (b['usuario'] is Map ? b['usuario']['username'] as String? : null)
-            ?? '';
+        // El serializer HorarioEncargadoSerializer expone 'username' en el root,
+        // no 'usuario_username'. b['usuario'] es el ID (int), no un objeto.
+        final bUser = (b['username'] as String?) ?? '';
         return bDia == dayWeek && bHora == hora && bUser == username;
       });
 
@@ -167,6 +184,58 @@ Future<void> _checkSchedule(String token, String rol, String username) async {
   }
 }
 
+// ── Monitor de disponibilidad del servidor ────────────────────────────────────
+
+Future<void> _checkServer() async {
+  final prefs = await SharedPreferences.getInstance();
+  final estadoAnterior = prefs.getString(_kServerStatusKey); // 'online' | 'offline' | null
+
+  bool ahoraOnline;
+  try {
+    final dio = Dio(BaseOptions(
+      baseUrl: '${_kServerUrl.endsWith('/') ? _kServerUrl.substring(0, _kServerUrl.length - 1) : _kServerUrl}/api/',
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 10),
+    ));
+    final resp = await dio.get('academico/dashboard/');
+    ahoraOnline = resp.statusCode != null && resp.statusCode! < 500;
+  } catch (_) {
+    ahoraOnline = false;
+  }
+
+  final estadoActual = ahoraOnline ? 'online' : 'offline';
+
+  // Solo notificar cuando el estado cambia
+  if (estadoAnterior == estadoActual) return;
+
+  await prefs.setString(_kServerStatusKey, estadoActual);
+
+  final ahora = DateTime.now();
+  final horaStr =
+      '${ahora.day.toString().padLeft(2, '0')}/${ahora.month.toString().padLeft(2, '0')}/${ahora.year} '
+      '${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}';
+
+  if (ahoraOnline) {
+    // Servidor recuperado
+    await _show(
+      id: 1005,
+      title: '✅ Servidor en línea',
+      body: 'El servidor volvió a estar disponible — $horaStr',
+      channelId: 'sgi_server_channel',
+      channelName: 'Estado del servidor',
+    );
+  } else {
+    // Servidor caído
+    await _show(
+      id: 1004,
+      title: '🔴 Servidor sin conexión',
+      body: 'No se pudo contactar al servidor desde las $horaStr',
+      channelId: 'sgi_server_channel',
+      channelName: 'Estado del servidor',
+    );
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 Future<List> _getHorarioEncargado(String token) async {
@@ -194,7 +263,13 @@ Dio _dio(String token) => Dio(BaseOptions(
   headers: {'Authorization': 'Bearer $token'},
 ));
 
-Future<void> _show({required int id, required String title, required String body}) async {
+Future<void> _show({
+  required int id,
+  required String title,
+  required String body,
+  String channelId   = 'sgi_lab_channel',
+  String channelName = 'SGI LAB MANAGER',
+}) async {
   final plugin = FlutterLocalNotificationsPlugin();
   await plugin.initialize(
     const InitializationSettings(
@@ -205,11 +280,11 @@ Future<void> _show({required int id, required String title, required String body
     id,
     title,
     body,
-    const NotificationDetails(
+    NotificationDetails(
       android: AndroidNotificationDetails(
-        'sgi_lab_channel',
-        'SGI LAB MANAGER',
-        channelDescription: 'Alertas de inventario y horarios',
+        channelId,
+        channelName,
+        channelDescription: 'Alertas de inventario, horarios y estado del servidor',
         importance: Importance.high,
         priority: Priority.high,
       ),

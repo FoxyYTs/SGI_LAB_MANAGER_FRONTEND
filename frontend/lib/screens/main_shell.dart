@@ -86,7 +86,7 @@ class _MainShellState extends State<MainShell> {
       const _TabDef(Icons.history_outlined,       'Bitácora',      BitacoraContent()),
     if (auth.can(Perm.academicoVer))
       const _TabDef(Icons.calendar_month_outlined,'Horario',       HorarioScreen()),
-    if (auth.can(Perm.bitacoraVer))
+    if (auth.can(Perm.informesVer))
       const _TabDef(Icons.picture_as_pdf_outlined,'Informes',      InformesContent()),
     if (auth.can(Perm.configuracionGestion))
       _TabDef(Icons.settings_outlined, 'Configuración', ConfiguracionScreen(key: _configKey)),
@@ -358,45 +358,7 @@ class _MainShellState extends State<MainShell> {
         const Text('SGI LAB MANAGER',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15,
                 letterSpacing: 0.8, color: _kOnSurface)),
-        const SizedBox(width: 20),
-        // Buscador pill
-        Expanded(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: TextField(
-              style: const TextStyle(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Buscar insumos, equipos...',
-                hintStyle: const TextStyle(color: kTextMuted, fontSize: 13),
-                prefixIcon: const Icon(Icons.search, size: 18, color: kTextMuted),
-                filled: true,
-                fillColor: _kSidebarBg,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(999),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                isDense: true,
-              ),
-            ),
-          ),
-        ),
         const Spacer(),
-        // Iconos acción
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined, size: 20),
-          color: kPrimary,
-          tooltip: 'Notificaciones',
-          onPressed: () {},
-        ),
-        IconButton(
-          icon: const Icon(Icons.help_outline, size: 20),
-          color: kPrimary,
-          tooltip: 'Ayuda',
-          onPressed: () {},
-        ),
-        Container(height: 28, width: 1, color: _kSidebarBorder,
-            margin: const EdgeInsets.symmetric(horizontal: 8)),
         // Usuario + avatar
         GestureDetector(
           onTap: () => Navigator.pushNamed(context, '/mi-perfil'),
@@ -417,9 +379,14 @@ class _MainShellState extends State<MainShell> {
             CircleAvatar(
               radius: 18,
               backgroundColor: kPrimary.withValues(alpha: 0.15),
-              child: Text(initial,
-                  style: const TextStyle(color: kPrimary,
-                      fontWeight: FontWeight.bold, fontSize: 14)),
+              backgroundImage: auth.fotoUrl != null
+                  ? NetworkImage(auth.fotoUrl!)
+                  : null,
+              child: auth.fotoUrl == null
+                  ? Text(initial,
+                      style: const TextStyle(color: kPrimary,
+                          fontWeight: FontWeight.bold, fontSize: 14))
+                  : null,
             ),
           ]),
         ),

@@ -370,6 +370,7 @@ class _TabEncargadosState extends State<_TabEncargados>
   void initState() { super.initState(); Future.microtask(_cargar); }
 
   Future<void> _cargar() async {
+    if (!mounted) return;
     setState(() => _cargando = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
@@ -385,6 +386,7 @@ class _TabEncargadosState extends State<_TabEncargados>
       for (final r in registros) {
         grid[r['dia_semana'] as int]?[r['hora'] as int]?.add(r);
       }
+      if (!mounted) return;
       setState(() => _grid = grid);
     } catch (_) {}
 
@@ -392,9 +394,11 @@ class _TabEncargadosState extends State<_TabEncargados>
       final resp = await dio.get('academico/encargados-disponibles/');
       final disponibles = List<Map<String, dynamic>>.from(
           resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      if (!mounted) return;
       setState(() => _disponibles = disponibles);
     } catch (_) {}
 
+    if (!mounted) return;
     setState(() => _cargando = false);
   }
 
@@ -626,6 +630,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
   void initState() { super.initState(); Future.microtask(_cargar); }
 
   Future<void> _cargar() async {
+    if (!mounted) return;
     setState(() => _cargando = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
@@ -640,6 +645,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       for (final r in registros) {
         grid[r['dia_semana'] as int]?[r['hora'] as int]?.add(r);
       }
+      if (!mounted) return;
       setState(() => _grid = grid);
     } catch (_) {}
 
@@ -647,9 +653,11 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       final resp = await dio.get('academico/asignaturas/');
       final asignaturas = List<Map<String, dynamic>>.from(
           resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      if (!mounted) return;
       setState(() => _asignaturas = asignaturas);
     } catch (_) {}
 
+    if (!mounted) return;
     setState(() => _cargando = false);
   }
 
@@ -1050,22 +1058,26 @@ class _TabGestionState extends State<_TabGestion>
   void initState() { super.initState(); Future.microtask(_cargar); }
 
   Future<void> _cargar() async {
+    if (!mounted) return;
     setState(() => _cargando = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
 
     try {
       final r = await dio.get('academico/areas/');
+      if (!mounted) return;
       setState(() => _areas = List<Map<String, dynamic>>.from(
           r.data is List ? r.data : (r.data['results'] ?? [])));
     } catch (_) {}
 
     try {
       final r = await dio.get('academico/asignaturas/');
+      if (!mounted) return;
       setState(() => _asignaturas = List<Map<String, dynamic>>.from(
           r.data is List ? r.data : (r.data['results'] ?? [])));
     } catch (_) {}
 
+    if (!mounted) return;
     setState(() => _cargando = false);
   }
 

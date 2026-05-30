@@ -133,260 +133,462 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
     }
   }
 
+  // ── UI helpers ──────────────────────────────────────────────────────────────
+
+  Widget _header() => Container(
+    width: double.infinity,
+    decoration: const BoxDecoration(
+      color: kPrimary,
+      borderRadius: BorderRadius.only(
+        topLeft: Radius.circular(12),
+        topRight: Radius.circular(12),
+      ),
+    ),
+    padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
+    child: Column(children: [
+      Container(
+        width: 60, height: 60,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.15),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.warning_amber_outlined, color: Colors.white, size: 32),
+      ),
+      const SizedBox(height: 12),
+      const Text(
+        'Reporte de Rotura / Pérdida',
+        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 4),
+      Text(
+        'Laboratorios de Ciencias Básicas — Politécnico Colombiano Jaime Isaza Cadavid',
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
+        textAlign: TextAlign.center,
+      ),
+    ]),
+  );
+
+  Widget _seccionLabel(String title) => Padding(
+    padding: const EdgeInsets.only(top: 4, bottom: 8),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title,
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, color: kPrimary, fontSize: 13)),
+      const Divider(height: 8, thickness: 1, color: Color(0xFFDEE2E6)),
+    ]),
+  );
+
+  InputDecoration _deco(String label, IconData icon) => InputDecoration(
+    labelText: label,
+    labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+    prefixIcon: Icon(icon, color: kPrimary, size: 18),
+    filled: true,
+    fillColor: const Color(0xFFF8F9FA),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: kPrimary, width: 1.5),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: kDanger),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: const BorderSide(color: kDanger, width: 1.5),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    isDense: true,
+  );
+
+  // ── build ───────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
+    final wide = MediaQuery.of(context).size.width >= 700;
     return Scaffold(
-      backgroundColor: kBackground,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: kDanger,
-        title: const Text('Reporte de Rotura / Pérdida',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      backgroundColor: wide ? const Color(0xFFE9ECEF) : kBackground,
+      body: SafeArea(
+        child: _enviado ? _buildConfirmacion() : _buildScrollBody(wide),
       ),
-      body: _enviado ? _buildConfirmacion() : _buildForm(),
     );
   }
 
-  Widget _buildConfirmacion() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(32),
+  Widget _buildScrollBody(bool wide) {
+    final content = Column(children: [
+      _header(),
+      _buildFormBody(wide),
+    ]);
+
+    if (!wide) {
+      return SingleChildScrollView(child: content);
+    }
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Card(
+            elevation: 3,
+            shadowColor: Colors.black26,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            clipBehavior: Clip.antiAlias,
+            child: content,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmacion() {
+    final wide = MediaQuery.of(context).size.width >= 700;
+    final inner = Padding(
+      padding: const EdgeInsets.all(40),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.check_circle_outline, size: 80, color: kSuccess),
+        const Icon(Icons.check_circle, size: 80, color: kSuccess),
         const SizedBox(height: 16),
         const Text('¡Reporte enviado!',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPrimary)),
         const SizedBox(height: 8),
-        const Text('El personal del laboratorio revisará el reporte y se pondrá en contacto contigo.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54, fontSize: 14)),
-        const SizedBox(height: 24),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
-          onPressed: () => setState(() {
-            _enviado       = false;
-            _insumoId      = null;
-            _programaSel   = null;
-            _asignaturaSel = null;
-            _fechaIncidente = null;
-            _nomCtrl.clear();
-            _nitCtrl.clear();
-            _corrCtrl.clear();
-            _celCtrl.clear();
-            _cantCtrl.text = '1';
-            _obsCtrl.clear();
-          }),
-          child: const Text('Nuevo reporte'),
-        ),
-      ]),
-    ),
-  );
-
-  Widget _buildForm() => SingleChildScrollView(
-    padding: const EdgeInsets.all(20),
-    child: Form(
-      key: _formKey,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Completa este formulario si rompiste o perdiste un implemento del laboratorio.',
-            style: TextStyle(fontSize: 14, color: Colors.black54)),
-        const SizedBox(height: 20),
-
-        _seccion('Tus datos'),
-        const SizedBox(height: 8),
-        TextFormField(
-          controller: _nomCtrl,
-          decoration: _deco('Nombre completo *', Icons.person_outline),
-          validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
-        ),
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: _nitCtrl,
-          keyboardType: TextInputType.number,
-          decoration: _deco('Cédula / Carnet *', Icons.badge_outlined),
-          validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
-        ),
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: _corrCtrl,
-          keyboardType: TextInputType.emailAddress,
-          decoration: _deco('Correo electrónico *', Icons.email_outlined),
-          validator: (v) {
-            if (v!.trim().isEmpty) return 'Requerido';
-            if (!v.contains('@')) return 'Correo inválido';
-            return null;
-          },
-        ),
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: _celCtrl,
-          keyboardType: TextInputType.phone,
-          decoration: _deco('Número de celular *', Icons.phone_outlined),
-          validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
-        ),
-        const SizedBox(height: 10),
-        if (!_cargando && _programas.isNotEmpty)
-          DropdownButtonFormField<Map<String, dynamic>>(
-            initialValue: _programaSel,
-            decoration: _deco('Programa académico *', Icons.school_outlined),
-            items: _programas.map((p) => DropdownMenuItem(
-              value: p,
-              child: Text(p['nombre']?.toString() ?? '',
-                  style: const TextStyle(fontSize: 13)),
-            )).toList(),
-            onChanged: (v) => setState(() => _programaSel = v),
-            validator: (_) => _programaSel == null ? 'Selecciona tu programa' : null,
-          ),
-        const SizedBox(height: 10),
-        if (!_cargando && _asignaturas.isNotEmpty)
-          DropdownButtonFormField<Map<String, dynamic>>(
-            initialValue: _asignaturaSel,
-            decoration: _deco('Asignatura (opcional)', Icons.menu_book_outlined),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('No aplica / No recuerdo')),
-              ..._asignaturas.map((a) => DropdownMenuItem(
-                value: a,
-                child: Text(a['nombre']?.toString() ?? ''),
-              )),
-            ],
-            onChanged: (v) => setState(() => _asignaturaSel = v),
-          ),
-        const SizedBox(height: 20),
-
-        _seccion('Implemento roto o perdido'),
-        const SizedBox(height: 8),
-
-        if (_cargando)
-          const Center(child: CircularProgressIndicator(color: kPrimary))
-        else if (_insumos.isEmpty)
-          const Text('No se pudo cargar la lista de implementos.',
-              style: TextStyle(color: Colors.red))
-        else
-          FormField<String>(
-            initialValue: _insumoId,
-            validator: (_) => _insumoId == null ? 'Selecciona el implemento' : null,
-            builder: (state) {
-              final nombre = _insumoId == null
-                  ? null
-                  : _insumos.where((x) => x['id']?.toString() == _insumoId)
-                      .map((x) => x['nombre_insumo']?.toString() ?? '')
-                      .firstOrNull;
-              return InkWell(
-                onTap: () async {
-                  final sel = await showDialog<Map<String, dynamic>>(
-                    context: context,
-                    builder: (_) => _DialogImplemento(insumos: _insumos),
-                  );
-                  if (sel != null) {
-                    setState(() => _insumoId = sel['id']?.toString());
-                    state.didChange(_insumoId);
-                  }
-                },
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                        color: state.hasError ? Colors.red : const Color(0xFFAAAAAA)),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                    Row(children: [
-                      const Icon(Icons.inventory_2_outlined, color: kPrimary, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(nombre ?? 'Seleccionar implemento...',
-                          style: TextStyle(
-                            color: nombre != null ? Colors.black87 : Colors.grey,
-                            fontSize: 14,
-                          ),
-                          overflow: TextOverflow.ellipsis)),
-                      const Icon(Icons.search, color: kTextMuted, size: 16),
-                    ]),
-                    if (state.hasError)
-                      Padding(padding: const EdgeInsets.only(top: 4),
-                          child: Text(state.errorText!,
-                              style: const TextStyle(color: Colors.red, fontSize: 12))),
-                  ]),
-                ),
-              );
-            },
-          ),
-
-        const SizedBox(height: 10),
-        TextFormField(
-          controller: _cantCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: _deco('Cantidad *', Icons.numbers),
-          validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Debe ser mayor a 0' : null,
-        ),
-        const SizedBox(height: 10),
-
-        // Fecha incidente
-        FormField<DateTime>(
-          initialValue: _fechaIncidente,
-          builder: (state) => InkWell(
-            onTap: _seleccionarFecha,
-            borderRadius: BorderRadius.circular(4),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFAAAAAA)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(children: [
-                const Icon(Icons.calendar_today_outlined, color: kPrimary, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  _fechaIncidente != null
-                      ? '${_fechaIncidente!.day.toString().padLeft(2,'0')}/${_fechaIncidente!.month.toString().padLeft(2,'0')}/${_fechaIncidente!.year}'
-                      : 'Fecha del incidente (opcional)',
-                  style: TextStyle(
-                    color: _fechaIncidente != null ? Colors.black87 : Colors.grey,
-                    fontSize: 14,
-                  ),
-                ),
-              ]),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 12),
-        TextFormField(
-          controller: _obsCtrl,
-          maxLines: 3,
-          decoration: _deco('¿Qué sucedió? (opcional)', Icons.notes_outlined),
+        const Text(
+          'El personal del laboratorio revisará el reporte y se pondrá en contacto contigo.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.black54, fontSize: 14),
         ),
         const SizedBox(height: 24),
-
         SizedBox(
           width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: (_enviando || _cargando) ? null : _enviar,
-            icon: _enviando
-                ? const SizedBox(width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.report_outlined),
-            label: const Text('Enviar reporte'),
+          child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: kDanger, foregroundColor: Colors.white,
+              backgroundColor: kPrimary, foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
+            onPressed: () => setState(() {
+              _enviado       = false;
+              _insumoId      = null;
+              _programaSel   = null;
+              _asignaturaSel = null;
+              _fechaIncidente = null;
+              _nomCtrl.clear();
+              _nitCtrl.clear();
+              _corrCtrl.clear();
+              _celCtrl.clear();
+              _cantCtrl.text = '1';
+              _obsCtrl.clear();
+            }),
+            child: const Text('Nuevo reporte'),
           ),
         ),
       ]),
-    ),
-  );
+    );
 
-  Widget _seccion(String title) => Text(title,
-      style: const TextStyle(fontWeight: FontWeight.bold, color: kPrimary, fontSize: 14));
+    if (!wide) return Center(child: inner);
 
-  InputDecoration _deco(String label, IconData icon) => InputDecoration(
-    labelText: label,
-    prefixIcon: Icon(icon, color: kPrimary, size: 18),
-    border: const OutlineInputBorder(),
-    focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: kPrimary)),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-    isDense: true,
-  );
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: inner,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFormBody(bool wide) {
+    final padding = wide
+        ? const EdgeInsets.fromLTRB(28, 24, 28, 28)
+        : const EdgeInsets.all(16);
+
+    return Padding(
+      padding: padding,
+      child: Form(
+        key: _formKey,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text(
+            'Completa este formulario si rompiste o perdiste un implemento del laboratorio.',
+            style: TextStyle(fontSize: 14, color: Colors.black54),
+          ),
+          const SizedBox(height: 20),
+
+          _seccionLabel('Tus datos'),
+
+          if (wide) ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: TextFormField(
+                controller: _nomCtrl,
+                decoration: _deco('Nombre completo *', Icons.person_outline),
+                validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
+              )),
+              const SizedBox(width: 16),
+              Expanded(child: TextFormField(
+                controller: _nitCtrl,
+                keyboardType: TextInputType.number,
+                decoration: _deco('Cédula / Carnet *', Icons.badge_outlined),
+                validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
+              )),
+            ]),
+            const SizedBox(height: 12),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: TextFormField(
+                controller: _corrCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: _deco('Correo electrónico *', Icons.email_outlined),
+                validator: (v) {
+                  if (v!.trim().isEmpty) return 'Requerido';
+                  if (!v.contains('@')) return 'Correo inválido';
+                  return null;
+                },
+              )),
+              const SizedBox(width: 16),
+              Expanded(child: TextFormField(
+                controller: _celCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: _deco('Número de celular *', Icons.phone_outlined),
+                validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
+              )),
+            ]),
+          ] else ...[
+            TextFormField(
+              controller: _nomCtrl,
+              decoration: _deco('Nombre completo *', Icons.person_outline),
+              validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _nitCtrl,
+              keyboardType: TextInputType.number,
+              decoration: _deco('Cédula / Carnet *', Icons.badge_outlined),
+              validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _corrCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: _deco('Correo electrónico *', Icons.email_outlined),
+              validator: (v) {
+                if (v!.trim().isEmpty) return 'Requerido';
+                if (!v.contains('@')) return 'Correo inválido';
+                return null;
+              },
+            ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _celCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: _deco('Número de celular *', Icons.phone_outlined),
+              validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
+            ),
+          ],
+
+          const SizedBox(height: 12),
+          if (!_cargando && _programas.isNotEmpty)
+            DropdownButtonFormField<Map<String, dynamic>>(
+              initialValue: _programaSel,
+              decoration: _deco('Programa académico *', Icons.school_outlined),
+              items: _programas.map((p) => DropdownMenuItem(
+                value: p,
+                child: Text(p['nombre']?.toString() ?? '',
+                    style: const TextStyle(fontSize: 13)),
+              )).toList(),
+              onChanged: (v) => setState(() => _programaSel = v),
+              validator: (_) => _programaSel == null ? 'Selecciona tu programa' : null,
+            ),
+          const SizedBox(height: 12),
+          if (!_cargando && _asignaturas.isNotEmpty)
+            DropdownButtonFormField<Map<String, dynamic>>(
+              initialValue: _asignaturaSel,
+              decoration: _deco('Asignatura (opcional)', Icons.menu_book_outlined),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('No aplica / No recuerdo')),
+                ..._asignaturas.map((a) => DropdownMenuItem(
+                  value: a,
+                  child: Text(a['nombre']?.toString() ?? ''),
+                )),
+              ],
+              onChanged: (v) => setState(() => _asignaturaSel = v),
+            ),
+          const SizedBox(height: 20),
+
+          _seccionLabel('Implemento roto o perdido'),
+
+          if (_cargando)
+            const Center(child: CircularProgressIndicator(color: kPrimary))
+          else if (_insumos.isEmpty)
+            const Text('No se pudo cargar la lista de implementos.',
+                style: TextStyle(color: kDanger))
+          else
+            FormField<String>(
+              initialValue: _insumoId,
+              validator: (_) => _insumoId == null ? 'Selecciona el implemento' : null,
+              builder: (state) {
+                final nombre = _insumoId == null
+                    ? null
+                    : _insumos.where((x) => x['id']?.toString() == _insumoId)
+                        .map((x) => x['nombre_insumo']?.toString() ?? '')
+                        .firstOrNull;
+                return InkWell(
+                  onTap: () async {
+                    final sel = await showDialog<Map<String, dynamic>>(
+                      context: context,
+                      builder: (_) => _DialogImplemento(insumos: _insumos),
+                    );
+                    if (sel != null) {
+                      setState(() => _insumoId = sel['id']?.toString());
+                      state.didChange(_insumoId);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8F9FA),
+                      border: Border.all(
+                          color: state.hasError ? kDanger : const Color(0xFFDEE2E6)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                      Row(children: [
+                        const Icon(Icons.inventory_2_outlined, color: kPrimary, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(nombre ?? 'Seleccionar implemento...',
+                            style: TextStyle(
+                              color: nombre != null ? Colors.black87 : Colors.grey,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis)),
+                        const Icon(Icons.search, color: kTextMuted, size: 16),
+                      ]),
+                      if (state.hasError)
+                        Padding(padding: const EdgeInsets.only(top: 4),
+                            child: Text(state.errorText!,
+                                style: const TextStyle(color: kDanger, fontSize: 12))),
+                    ]),
+                  ),
+                );
+              },
+            ),
+
+          const SizedBox(height: 12),
+
+          if (wide) ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: TextFormField(
+                controller: _cantCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: _deco('Cantidad *', Icons.numbers),
+                validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Debe ser mayor a 0' : null,
+              )),
+              const SizedBox(width: 16),
+              // Fecha incidente
+              Expanded(child: FormField<DateTime>(
+                initialValue: _fechaIncidente,
+                builder: (state) => InkWell(
+                  onTap: _seleccionarFecha,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8F9FA),
+                      border: Border.all(color: const Color(0xFFDEE2E6)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(children: [
+                      const Icon(Icons.calendar_today_outlined, color: kPrimary, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(
+                        _fechaIncidente != null
+                            ? '${_fechaIncidente!.day.toString().padLeft(2,'0')}/${_fechaIncidente!.month.toString().padLeft(2,'0')}/${_fechaIncidente!.year}'
+                            : 'Fecha del incidente (opcional)',
+                        style: TextStyle(
+                          color: _fechaIncidente != null ? Colors.black87 : Colors.grey,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      )),
+                    ]),
+                  ),
+                ),
+              )),
+            ]),
+          ] else ...[
+            TextFormField(
+              controller: _cantCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: _deco('Cantidad *', Icons.numbers),
+              validator: (v) => (double.tryParse(v ?? '') ?? 0) <= 0 ? 'Debe ser mayor a 0' : null,
+            ),
+            const SizedBox(height: 10),
+            FormField<DateTime>(
+              initialValue: _fechaIncidente,
+              builder: (state) => InkWell(
+                onTap: _seleccionarFecha,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8F9FA),
+                    border: Border.all(color: const Color(0xFFDEE2E6)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.calendar_today_outlined, color: kPrimary, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      _fechaIncidente != null
+                          ? '${_fechaIncidente!.day.toString().padLeft(2,'0')}/${_fechaIncidente!.month.toString().padLeft(2,'0')}/${_fechaIncidente!.year}'
+                          : 'Fecha del incidente (opcional)',
+                      style: TextStyle(
+                        color: _fechaIncidente != null ? Colors.black87 : Colors.grey,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _obsCtrl,
+            maxLines: 3,
+            decoration: _deco('¿Qué sucedió? (opcional)', Icons.notes_outlined),
+          ),
+          const SizedBox(height: 24),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: (_enviando || _cargando) ? null : _enviar,
+              icon: _enviando
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.report_outlined),
+              label: const Text('Reportar rotura',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
 class _DialogImplemento extends StatefulWidget {
