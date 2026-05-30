@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -31,6 +32,7 @@ class AuthProvider with ChangeNotifier {
   String?      _refreshToken;
   String?      _rol;
   String?      _username;
+  String?      _fotoUrl;
   Set<String>  _permisos = {};
   Timer?       _medianochTimer;
 
@@ -38,6 +40,7 @@ class AuthProvider with ChangeNotifier {
   String?     get rol             => _rol;
   String?     get token           => _token;
   String?     get username        => _username;
+  String?     get fotoUrl         => _fotoUrl;
   Set<String> get permisos        => _permisos;
 
   /// Verifica si el usuario tiene un permiso concreto.
@@ -71,6 +74,7 @@ class AuthProvider with ChangeNotifier {
       _refreshToken = await _storage.read(key: 'refresh_token');
       _rol          = await _storage.read(key: 'rol');
       _username     = await _storage.read(key: 'username');
+      _fotoUrl      = await _storage.read(key: 'foto_url');
 
       final permsJson = await _storage.read(key: 'permisos');
       if (permsJson != null) {
@@ -112,8 +116,8 @@ class AuthProvider with ChangeNotifier {
       await SyncService.instance.init(_token);
       if (kIsWeb) _programarCierreMedianoche();
 
-      // Activar notificaciones push locales tras login exitoso
-      if (!kIsWeb) {
+      // Notificaciones y tareas de fondo solo en Android
+      if (!kIsWeb && Platform.isAndroid) {
         await NotificationService.init();
         await NotificationService.requestPermission();
         await registerBackgroundTasks();
@@ -149,6 +153,38 @@ class AuthProvider with ChangeNotifier {
       debugPrint('Error cargando permisos: $e');
       _permisos = {};
     }
+    // Cargar foto de perfil de forma independiente para no bloquear el login
+    try {
+      final dio  = ApiClient.instance.authenticatedDio(_token);
+      final resp = await dio.get('usuarios/perfil/');
+      final perfil = resp.data['perfil'] as Map<String, dynamic>?;
+      final url = perfil?['foto_url'] as String?;
+      _fotoUrl = (url != null && url.isNotEmpty) ? url : null;
+      if (_fotoUrl != null) {
+        await _storage.write(key: 'foto_url', value: _fotoUrl);
+      } else {
+        await _storage.delete(key: 'foto_url');
+      }
+    } catch (_) {
+      // La foto es no-crítica; si falla no interrumpir el flujo
+    }
+  }
+
+  /// Recarga solo la foto de perfil (llamar desde MiPerfilScreen tras subir foto).
+  Future<void> recargarFoto() async {
+    try {
+      final dio  = ApiClient.instance.authenticatedDio(_token);
+      final resp = await dio.get('usuarios/perfil/');
+      final perfil = resp.data['perfil'] as Map<String, dynamic>?;
+      final url = perfil?['foto_url'] as String?;
+      _fotoUrl = (url != null && url.isNotEmpty) ? url : null;
+      if (_fotoUrl != null) {
+        await _storage.write(key: 'foto_url', value: _fotoUrl);
+      } else {
+        await _storage.delete(key: 'foto_url');
+      }
+      notifyListeners();
+    } catch (_) {}
   }
 
   /// Fuerza recarga de permisos (útil después de que el admin modifique permisos).
@@ -161,8 +197,8 @@ class AuthProvider with ChangeNotifier {
     _medianochTimer?.cancel();
     _medianochTimer = null;
 
-    // Cancelar tareas de fondo al cerrar sesión
-    if (!kIsWeb) await cancelBackgroundTasks();
+    // Cancelar tareas de fondo al cerrar sesión (solo Android)
+    if (!kIsWeb && Platform.isAndroid) await cancelBackgroundTasks();
 
     try {
       await _storage.deleteAll();
@@ -172,6 +208,7 @@ class AuthProvider with ChangeNotifier {
     _token    = null;
     _rol      = null;
     _username = null;
+    _fotoUrl  = null;
     _permisos = {};
     notifyListeners();
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/inventario_provider.dart';
@@ -8,6 +9,7 @@ import '../core/permissions.dart';
 import 'insumo_form_screen.dart';
 import 'insumo_detail_screen.dart';
 import 'sga_screen.dart';
+import '../core/sync/sync_service.dart';
 
 class InventarioContent extends StatefulWidget {
   const InventarioContent({super.key});
@@ -19,9 +21,11 @@ class InventarioContent extends StatefulWidget {
 class _InventarioContentState extends State<InventarioContent> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _debounce;
   String _filtroTipo  = 'Todos';
   String _sortCol     = 'nombre';
   bool   _sortAsc     = true;
+  bool   _eraOnline   = true;
 
   static const _tipos = ['Todos', 'Implemento', 'Vidriería', 'Equipo', 'Químico'];
 
@@ -33,10 +37,30 @@ class _InventarioContentState extends State<InventarioContent> {
       final auth = Provider.of<AuthProvider>(context, listen: false);
       Provider.of<InventarioProvider>(context, listen: false).fetchInsumos(auth.token);
     });
+    _eraOnline = SyncService.instance.online;
+    SyncService.instance.addListener(_onSync);
+  }
+
+  void _onSync() {
+    final ahoraOnline = SyncService.instance.online;
+    if (!_eraOnline && ahoraOnline && mounted) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      Provider.of<InventarioProvider>(context, listen: false).fetchInsumos(auth.token);
+    }
+    _eraOnline = ahoraOnline;
+  }
+
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _searchQuery = value);
+    });
   }
 
   @override
   void dispose() {
+    SyncService.instance.removeListener(_onSync);
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -149,7 +173,7 @@ class _InventarioContentState extends State<InventarioContent> {
                           borderSide: BorderSide(color: kPrimary)),
                       contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    onChanged: (v) => setState(() => _searchQuery = v),
+                    onChanged: _onSearchChanged,
                   ),
                 ] else
                   Row(children: [
@@ -170,7 +194,7 @@ class _InventarioContentState extends State<InventarioContent> {
                               borderSide: BorderSide(color: kPrimary)),
                           contentPadding: const EdgeInsets.symmetric(vertical: 10),
                         ),
-                        onChanged: (v) => setState(() => _searchQuery = v),
+                        onChanged: _onSearchChanged,
                       ),
                     ),
                     const SizedBox(width: 12),

@@ -1,83 +1,111 @@
 # SGI LAB MANAGER — Frontend
 
-Sistema de Gestión de Inventarios para laboratorio académico. Aplicación multi-plataforma desarrollada en **Flutter**, que corre en Linux (desarrollo), Android y Web.
-
-> Proyecto desarrollado como solución integral para la administración de inventario, préstamos de equipos e insumos, seguridad química (SGA/GHS) y gestión académica de los Laboratorios de Ciencias Basicas Poli Rionegro (PCJIC).
+Aplicación multi-plataforma en **Flutter** para la gestión del laboratorio integrado del PCJIC Rionegro, Colombia. Corre en Android, Web y Linux (desarrollo).
 
 ---
 
-## Tecnologías
+## Stack tecnológico
 
 | Tecnología | Rol |
 | --- | --- |
 | Flutter / Dart | Framework UI multi-plataforma |
 | Provider | Gestión de estado reactivo |
 | Dio | Cliente HTTP con interceptor JWT |
-| sqflite + sqflite_common_ffi | Persistencia local (SQLite) para modo offline |
-| connectivity_plus | Detección de red y sincronización |
+| sqflite + sqflite_common_ffi | SQLite local (modo offline — Android/Linux) |
+| connectivity_plus | Detección de red y sincronización automática |
+| workmanager | Tareas periódicas en background (solo Android) |
+| flutter_local_notifications | Notificaciones nativas Android |
+| shared_preferences | Estado persistente para tareas de fondo |
+| flutter_secure_storage | Almacenamiento seguro de tokens y foto de perfil |
 | qr_flutter | Generación de códigos QR |
-| flutter_secure_storage | Almacenamiento seguro de tokens |
-| file_picker | Selección de PDFs (fichas de seguridad) |
+| file_picker | Selección de archivos (PDFs de FDS, fotos de perfil) |
 
 ---
 
-## Funcionalidades principales
+## Funcionalidades
 
-### Gestión de inventario
+### Inventario
 
-Control completo de insumos del laboratorio (Implementos, Vidriería, Químicos, Equipos). Incluye semáforo de stock visual (crítico / bajo / normal), registro de foto por URL y acceso al detalle completo de cada insumo.
+Control de insumos (Implemento, Vidriería, Químico, Equipo) con semáforo visual de stock, búsqueda con debounce de 300ms, filtros por tipo, tabla desktop y cards en móvil.
 
-### Seguridad química — SGA / GHS
+### SGA / Seguridad Química
 
-Ficha de seguridad química por insumo: pictogramas GHS, rombo NFPA 704, frases de peligro y precaución, composición, primeros auxilios y datos de transporte. **Extracción automática de datos desde PDF** de Ficha de Datos de Seguridad usando inteligencia artificial (Google Gemini). Generación de etiqueta GHS en PDF y ficha para reporte Colmena ARL.
+Ficha completa GHS: pictogramas GHS01–GHS09, NFPA 704, frases H/P, composición, datos de transporte. Extracción automática desde PDF de FDS usando Google Gemini. Generación de etiqueta GHS y ficha Colmena ARL en PDF.
 
-### Préstamos y movimientos
+### Préstamos y Movimientos
 
-Flujo de préstamo con estados (Pendiente → Activo → Devuelto), con descuento y reintegro automático de stock. Bitácora completa de todos los movimientos del inventario.
+Flujo completo: PENDIENTE → ACTIVO (con descuento de stock validado) → DEVUELTO. Bitácora de movimientos con filtros. Cola offline para aprobaciones y rechazos sin red.
 
-### Horario semanal
+### Horario Semanal
 
-Cuadrícula visual Lunes–Sábado × 6:00–21:00h con dos vistas: encargados de turno y asignaturas en práctica. Soporta fusión automática de bloques consecutivos de la misma materia.
+Cuadrícula Lun–Sáb × 6–21h. Vista de encargados y asignaturas con fusión automática de bloques consecutivos. Re-fetch automático al recuperar conexión.
 
-### Formularios públicos via QR
+### Informes
 
-Cuatro formularios accesibles sin login, cada uno con su propio código QR: solicitud de préstamo, registro de horas de monitor (con descripción de actividades y duración), registro de práctica docente (selección de docente, asignatura, guía, horario de ingreso/salida) y reporte de implemento roto. Los formularios de práctica y horas soportan catálogos precargados para agilizar el llenado.
+Seis tipos de informe en PDF y Excel: inventario, préstamos, bitácora, horas monitor, prácticas docentes, deudores morosos. Filtros de fecha. Auditoría en `RegistroInforme`.
 
-### Generación de informes en PDF y Excel
+### Formularios Públicos QR
 
-Pantalla de informes con seis tipos de reporte: inventario completo, préstamos, bitácora de movimientos, horas de monitor, prácticas docentes y deudores morosos. Cada tipo ofrece dos botones de descarga: **PDF** (ReportLab) y **Excel** (color verde `#217346`). Cada informe admite filtros de fecha y queda registrado en auditoría.
+Cuatro formularios sin login, rediseñados responsivos (card centrado en desktop ≥700px, columna en móvil):
 
-### Notificaciones de horario para monitores
+- **Solicitud de préstamo** — accesible desde QR sin cuenta
+- **Registro de horas monitor** — check-in con duración y actividades
+- **Registro de práctica docente** — QR apunta a Google Forms externo
+- **Reporte de rotura** — con selección de insumo y fecha
 
-Cuando un monitor llega al final de su bloque de turno registrado, la aplicación muestra automáticamente un diálogo recordatorio. El servicio (`MonitorReminderService`) consulta el horario del usuario autenticado y programa un temporizador local para la hora de fin de cada bloque consecutivo.
+### Mi Perfil
 
-### Perfil de usuario
+Edición de nombre, email, teléfono, semestre, programa. Subida de foto de perfil (multipart). **Cambio de contraseña** con verificación de la actual. El avatar del topbar se actualiza en tiempo real tras subir foto.
 
-Pantalla de perfil que permite al usuario autenticado ver y editar sus datos personales (nombre, identificación, teléfono) directamente desde la aplicación. Incluye **carga de foto de perfil** desde el dispositivo (subida multipart al servidor).
+### Gestión de Permisos
 
-### Gestión de catálogos académicos
+Roles diferenciados (ADMIN, LAB, MONITOR, ESTUDIANTE). Permisos por rol y permisos extra individuales activos en tiempo real sin relogin. Búsqueda de usuarios en tiempo real. Toggle de activación/desactivación.
 
-Pantalla de configuración con siete pestañas: ubicaciones, unidades de medida, programas académicos, docentes (con asignación múltiple a programas y asignaturas), guías de práctica (con gestión de insumos requeridos y apertura de PDF externo), áreas académicas y asignaturas.
+### Modo Offline (Android / Linux)
 
-### Sistema de permisos por rol
-
-Roles diferenciados (Administrador, Laboratorista, Monitor, Docente, Estudiante). La interfaz adapta dinámicamente las opciones visibles según los permisos del usuario autenticado. Pantalla de administración de permisos por rol con cambio de rol en tiempo real.
-
-### Modo offline
-
-En plataformas de escritorio y móvil, el inventario se cachea en SQLite local. Las operaciones fallidas por falta de red se encolan y se sincronizan automáticamente al recuperar la conexión.
+Inventario y Dashboard cachean en SQLite. Al recuperar red, se dispara re-fetch automático en segundo plano. Cola de operaciones pendientes (aprobar/rechazar préstamos) que se ejecutan al reconectar.
 
 ---
 
-## Seguridad
+## Notificaciones Background (solo Android)
 
-### Persistencia de sesión
+Tres tareas periódicas gestionadas por **WorkManager** (no disponibles en Linux/Web):
 
-La sesión se restaura al arrancar la app sin necesidad de volver a iniciar sesión. En plataformas nativas (Linux, Android) la sesión es permanente hasta que el usuario cierre sesión manualmente. En **web**, la sesión expira automáticamente a medianoche del día en que se inició, evitando que sesiones queden activas indefinidamente en equipos compartidos.
+| Tarea | Frecuencia | Descripción |
+| --- | --- | --- |
+| `sgi_stock_check` | 6 horas | Alerta si hay insumos con stock crítico |
+| `sgi_schedule_check` | 15 min | Recordatorio de fin de turno y práctica próxima |
+| `sgi_server_monitor` | 15 min | Notifica cuando el servidor cae o se recupera |
 
-### Verificación de versión mínima
+Cada notificación se dispara **una sola vez** por evento. Las tareas se cancelan automáticamente al cerrar sesión.
 
-Los clientes móvil y de escritorio envían una cabecera `X-App-Version` en cada petición. Si la versión instalada es inferior a la mínima configurada en el servidor, la API responde con HTTP **426 Upgrade Required** y la aplicación navega automáticamente a una pantalla de actualización (`ActualizacionRequeridaScreen`) que bloquea el uso hasta que el usuario actualice. Los clientes web están exentos de esta verificación.
+---
+
+## Seguridad y sesión
+
+- Token JWT access: 2 horas. Token refresh: 7 días.
+- `flutter_secure_storage` almacena tokens, rol, permisos y foto de perfil.
+- La sesión persiste entre reinicios de la app (sin internet incluido).
+- En **web**, la sesión expira a medianoche del día de login.
+- Los clientes Android/Linux envían `X-App-Version` — si la versión es menor a la mínima configurada en servidor, la app muestra pantalla de actualización obligatoria (HTTP 426).
+
+---
+
+## Plataformas
+
+| Plataforma | Estado | Comando |
+| --- | --- | --- |
+| Android | Producción | `flutter build apk --release --dart-define=SERVER_URL=https://apisgi.foxyyts.qzz.io` |
+| Web | Producción | `flutter build web --dart-define=SERVER_URL=https://apisgi.foxyyts.qzz.io --dart-define=FRONTEND_URL=https://sgilabmanager.foxyyts.qzz.io --release` |
+| Linux | Desarrollo | `flutter run -d linux` |
+
+### APK de diagnóstico
+
+```bash
+flutter build apk --release \
+  --dart-define=DEV_MODE=true \
+  --dart-define=SERVER_URL=https://apisgi.foxyyts.qzz.io
+```
 
 ---
 
@@ -85,65 +113,30 @@ Los clientes móvil y de escritorio envían una cabecera `X-App-Version` en cada
 
 ```text
 frontend/lib/
-├── core/           # API client, base de datos local, sync offline, permisos, tema
-├── models/         # Modelos de datos Dart
-├── providers/      # Estado global (auth, inventario)
-└── screens/        # Pantallas de la aplicación
+├── core/
+│   ├── api/            api_client.dart — Dio singleton, URL base, interceptor JWT
+│   ├── cache/          cache_service.dart — caché SQLite genérico
+│   ├── database/       local_db.dart — SQLite nativo vs stub web
+│   ├── sync/           sync_service.dart — cola offline y reconexión
+│   ├── permissions.dart
+│   └── theme/colors.dart
+├── models/
+│   └── insumo_model.dart
+├── providers/
+│   ├── auth_provider.dart      sesión, permisos, foto de perfil
+│   └── inventario_provider.dart
+├── screens/            una pantalla por módulo
+├── services/
+│   ├── background_tasks.dart   WorkManager (Android only)
+│   └── notification_service.dart
+└── widgets/
+    └── qr_generator_dialog.dart
 ```
 
-La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) permite que las funciones de base de datos local y conectividad usen implementaciones reales en Linux/Android y stubs en Web, sin cambios en el resto del código.
+La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) permite que SQLite y connectivity usen implementaciones reales en Linux/Android y stubs en Web.
 
 ---
 
-## Plataformas
+## Repositorio relacionado
 
-| Plataforma | Estado |
-| --- | --- |
-| Android | Soportado — build APK |
-| Web | Soportado — servido con nginx |
-| Linux | Entorno de desarrollo |
-
----
-
-## Cómo ejecutar
-
-### Prerequisitos
-
-- Flutter SDK `^3.x` con Dart `^3.11`
-- Backend de la aplicación corriendo localmente
-
-### Linux (escritorio — desarrollo)
-
-```bash
-cd frontend
-flutter pub get
-flutter run -d linux
-```
-
-### Web
-
-```bash
-flutter run -d chrome
-```
-
-### Build Android
-
-```bash
-flutter build apk --release
-```
-
-### Build Android (diagnóstico)
-
-Para obtener logs detallados y mensajes de error técnicos en la UI, compilar con el flag `DEV_MODE`:
-
-```bash
-flutter build apk --release \
-  --dart-define=DEV_MODE=true \
-  --dart-define=SERVER_URL=https://tu-backend.example.com
-```
-
-### Build Web
-
-```bash
-flutter build web
-```
+Backend (Django): [SGI_LAB_MANAGER_BACKEND](https://github.com/FoxyYTs/SGI_LAB_MANAGER_BACKEND)

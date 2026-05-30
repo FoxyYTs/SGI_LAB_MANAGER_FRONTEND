@@ -28,8 +28,17 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   bool _loading    = true;
   bool _guardando  = false;
   bool _subiendoFoto = false;
+  bool _cambiandoPass = false;
   String? _rol;
   String? _fotoUrl;
+
+  // Controladores para cambio de contraseña
+  final _passActualCtrl   = TextEditingController();
+  final _passNuevaCtrl    = TextEditingController();
+  final _passNueva2Ctrl   = TextEditingController();
+  bool _verPassActual  = false;
+  bool _verPassNueva   = false;
+  bool _verPassNueva2  = false;
 
   @override
   void initState() {
@@ -44,6 +53,9 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     _emailCtrl.dispose();
     _telefonoCtrl.dispose();
     _semestreCtrl.dispose();
+    _passActualCtrl.dispose();
+    _passNuevaCtrl.dispose();
+    _passNueva2Ctrl.dispose();
     super.dispose();
   }
 
@@ -166,6 +178,11 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       final perfil = (resp.data as Map<String, dynamic>)['perfil'] as Map<String, dynamic>? ?? {};
       if (mounted) {
         setState(() => _fotoUrl = perfil['foto_url'] as String?);
+      }
+      // Actualizar el avatar del topbar fuera del mounted check
+      // ignore: use_build_context_synchronously
+      if (mounted) await context.read<AuthProvider>().recargarFoto();
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Foto actualizada'),
@@ -184,6 +201,59 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       }
     } finally {
       if (mounted) setState(() => _subiendoFoto = false);
+    }
+  }
+
+  Future<void> _cambiarPassword() async {
+    final actual  = _passActualCtrl.text.trim();
+    final nueva   = _passNuevaCtrl.text.trim();
+    final nueva2  = _passNueva2Ctrl.text.trim();
+
+    if (actual.isEmpty || nueva.isEmpty || nueva2.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Completa todos los campos de contraseña.'), backgroundColor: kDanger),
+      );
+      return;
+    }
+    if (nueva != nueva2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Las contraseñas nuevas no coinciden.'), backgroundColor: kDanger),
+      );
+      return;
+    }
+    if (nueva.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La contraseña debe tener al menos 8 caracteres.'), backgroundColor: kDanger),
+      );
+      return;
+    }
+
+    setState(() => _cambiandoPass = true);
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.post('usuarios/cambiar-password/', data: {
+        'password_actual': actual,
+        'nueva_password':  nueva,
+        'nueva_password2': nueva2,
+      });
+      _passActualCtrl.clear();
+      _passNuevaCtrl.clear();
+      _passNueva2Ctrl.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contraseña actualizada correctamente.'), backgroundColor: kSuccess),
+        );
+      }
+    } on DioException catch (e) {
+      final msg = (e.response?.data as Map?)?['error'] ?? 'Error al cambiar la contraseña.';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg.toString()), backgroundColor: kDanger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cambiandoPass = false);
     }
   }
 
@@ -372,7 +442,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                         ),
                         const SizedBox(height: 32),
 
-                        // ── Botón guardar ─────────────────────────────────
+                        // ── Botón guardar datos ───────────────────────────
                         SizedBox(
                           width: double.infinity,
                           height: 46,
@@ -393,6 +463,70 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 36),
+
+                        // ── Sección cambio de contraseña ──────────────────
+                        _seccionLabel('Cambiar contraseña'),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _passActualCtrl,
+                          obscureText: !_verPassActual,
+                          decoration: _inputDec('Contraseña actual', Icons.lock_outline).copyWith(
+                            suffixIcon: IconButton(
+                              icon: Icon(_verPassActual ? Icons.visibility_off : Icons.visibility, size: 18),
+                              onPressed: () => setState(() => _verPassActual = !_verPassActual),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: _passNuevaCtrl,
+                          obscureText: !_verPassNueva,
+                          decoration: _inputDec('Nueva contraseña', Icons.lock_person_outlined).copyWith(
+                            suffixIcon: IconButton(
+                              icon: Icon(_verPassNueva ? Icons.visibility_off : Icons.visibility, size: 18),
+                              onPressed: () => setState(() => _verPassNueva = !_verPassNueva),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextFormField(
+                          controller: _passNueva2Ctrl,
+                          obscureText: !_verPassNueva2,
+                          decoration: _inputDec('Confirmar nueva contraseña', Icons.lock_reset_outlined).copyWith(
+                            suffixIcon: IconButton(
+                              icon: Icon(_verPassNueva2 ? Icons.visibility_off : Icons.visibility, size: 18),
+                              onPressed: () => setState(() => _verPassNueva2 = !_verPassNueva2),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 46,
+                          child: OutlinedButton.icon(
+                            onPressed: _cambiandoPass ? null : _cambiarPassword,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: kPrimary),
+                              foregroundColor: kPrimary,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                            icon: _cambiandoPass
+                                ? const SizedBox(
+                                    width: 18, height: 18,
+                                    child: CircularProgressIndicator(
+                                        color: kPrimary, strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.key_outlined, size: 18),
+                            label: Text(
+                              _cambiandoPass ? 'Actualizando...' : 'Cambiar contraseña',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
                       ],
                     ),
                   ),

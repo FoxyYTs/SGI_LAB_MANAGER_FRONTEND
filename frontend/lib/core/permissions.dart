@@ -11,6 +11,7 @@ class Perm {
   static const academicoGestionar   = 'academico.gestionar';
   static const configuracionGestion = 'configuracion.gestion';
   static const configuracionRoles   = 'configuracion.roles';
+  static const informesVer          = 'informes.ver';
 
   /// Todos los permisos disponibles en el sistema
   static const todos = [
@@ -19,6 +20,7 @@ class Perm {
     bitacoraVer, bitacoraGestionar,
     academicoVer, academicoGestionar,
     configuracionGestion, configuracionRoles,
+    informesVer,
   ];
 
   /// Nombre legible para mostrar en la UI
@@ -33,5 +35,6 @@ class Perm {
     'academico.gestionar':   'Gestionar módulo académico',
     'configuracion.gestion': 'Acceder a configuración',
     'configuracion.roles':   'Gestionar permisos',
+    'informes.ver':          'Ver informes',
   }[codigo] ?? codigo;
 }

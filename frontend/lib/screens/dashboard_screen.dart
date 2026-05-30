@@ -4,6 +4,7 @@ import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/cache/cache_service.dart';
 import '../providers/auth_provider.dart';
+import '../core/sync/sync_service.dart';
 import '../widgets/qr_generator_dialog.dart';
 
 class DashboardContent extends StatefulWidget {
@@ -18,11 +19,26 @@ class _DashboardContentState extends State<DashboardContent> {
   bool      _cargando   = true;
   bool      _desdeCache = false;
   DateTime? _cachedAt;
+  bool      _eraOnline  = true;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(_cargar);
+    _eraOnline = SyncService.instance.online;
+    SyncService.instance.addListener(_onSync);
+  }
+
+  void _onSync() {
+    final ahoraOnline = SyncService.instance.online;
+    if (!_eraOnline && ahoraOnline && mounted) _cargar();
+    _eraOnline = ahoraOnline;
+  }
+
+  @override
+  void dispose() {
+    SyncService.instance.removeListener(_onSync);
+    super.dispose();
   }
 
   Future<void> _cargar() async {
