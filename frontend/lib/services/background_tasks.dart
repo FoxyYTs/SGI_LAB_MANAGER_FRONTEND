@@ -61,7 +61,7 @@ Future<void> registerBackgroundTasks() async {
     kTaskStock,
     frequency: const Duration(hours: 6),
     constraints: Constraints(networkType: NetworkType.connected),
-    existingWorkPolicy: ExistingWorkPolicy.keep,
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
     backoffPolicy: BackoffPolicy.linear,
     backoffPolicyDelay: const Duration(minutes: 30),
   );
@@ -72,7 +72,7 @@ Future<void> registerBackgroundTasks() async {
     kTaskSchedule,
     frequency: const Duration(minutes: 15),
     constraints: Constraints(networkType: NetworkType.connected),
-    existingWorkPolicy: ExistingWorkPolicy.keep,
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
   );
 
   // Monitor de disponibilidad del servidor: cada 15 minutos.
@@ -82,7 +82,7 @@ Future<void> registerBackgroundTasks() async {
     kTaskServerMonitor,
     kTaskServerMonitor,
     frequency: const Duration(minutes: 15),
-    existingWorkPolicy: ExistingWorkPolicy.keep,
+    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
   );
 }
 
