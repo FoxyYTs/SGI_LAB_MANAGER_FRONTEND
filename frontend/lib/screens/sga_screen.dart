@@ -99,7 +99,9 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
       return;
     }
 
+    // ── Paso 1: extraer sin guardar ──────────────────────────────────────────
     setState(() { _extrayendo = true; });
+    Map<String, dynamic> preview;
     try {
       final formData = FormData.fromMap({
         'fds': MultipartFile.fromBytes(bytes, filename: file.name),
@@ -109,12 +111,52 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
         data: formData,
         options: Options(receiveTimeout: const Duration(seconds: 60)),
       );
-      setState(() { _datos = Map<String, dynamic>.from(r.data['datos']); _colmena = null; });
-      _snack('Extracción completada exitosamente.', kSuccess);
+      preview = Map<String, dynamic>.from(r.data);
     } on DioException catch (e) {
       _snack(e.response?.data?['detail'] ?? 'Error al procesar el PDF.', kDanger);
-    } finally {
       setState(() { _extrayendo = false; });
+      return;
+    } finally {
+      if (mounted) setState(() { _extrayendo = false; });
+    }
+
+    // ── Paso 2: mostrar diálogo de confirmación ──────────────────────────────
+    if (!mounted) return;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DialogConfirmacionFDS(
+        diff: List<Map<String, dynamic>>.from(preview['diff'] ?? []),
+        camposVacios: List<Map<String, dynamic>>.from(preview['campos_vacios'] ?? []),
+        sinDatosPrevios: preview['sin_datos_previos'] as bool? ?? true,
+        totalCambios: preview['total_cambios'] as int? ?? 0,
+      ),
+    );
+    if (confirmado != true) return;
+
+    // ── Paso 3: confirmar y guardar ──────────────────────────────────────────
+    setState(() { _extrayendo = true; });
+    try {
+      final r2 = await _dio.post(
+        'inventario/lista/${widget.insumoId}/sga/extraer-fds/?confirmar=1',
+        data: {'datos_extraidos': preview['datos_extraidos']},
+        options: Options(
+          contentType: Headers.jsonContentType,
+          receiveTimeout: const Duration(seconds: 30),
+        ),
+      );
+      if (!mounted) return;
+      setState(() { _datos = Map<String, dynamic>.from(r2.data['datos']); _colmena = null; });
+      final vacios = List<Map<String, dynamic>>.from(r2.data['campos_vacios'] ?? []);
+      if (vacios.isNotEmpty) {
+        _snack('Extracción aplicada. ${vacios.length} campo(s) sin datos en la FDS.', kSemaforoAmarillo);
+      } else {
+        _snack('Extracción completada exitosamente.', kSuccess);
+      }
+    } on DioException catch (e) {
+      _snack(e.response?.data?['detail'] ?? 'Error al confirmar la extracción.', kDanger);
+    } finally {
+      if (mounted) setState(() { _extrayendo = false; });
     }
   }
 
@@ -500,7 +542,7 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
 
   @override
   void dispose() {
-    for (final c in _c.values) c.dispose();
+    for (final c in _c.values) { c.dispose(); }
     super.dispose();
   }
 
@@ -879,4 +921,177 @@ class _ColmenaTab extends StatelessWidget {
       ],
     ),
   );
+}
+
+// ── Diálogo de confirmación de extracción FDS ─────────────────────────────────
+
+class _DialogConfirmacionFDS extends StatelessWidget {
+  final List<Map<String, dynamic>> diff;
+  final List<Map<String, dynamic>> camposVacios;
+  final bool sinDatosPrevios;
+  final int totalCambios;
+
+  const _DialogConfirmacionFDS({
+    required this.diff,
+    required this.camposVacios,
+    required this.sinDatosPrevios,
+    required this.totalCambios,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(children: [
+        const Icon(Icons.science_outlined, color: kPrimary, size: 22),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            sinDatosPrevios ? 'Primera extracción SGA' : 'Confirmar cambios SGA',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ]),
+      contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Resumen ────────────────────────────────────────────────────
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: kPrimary.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: kPrimary.withValues(alpha: 0.25)),
+                ),
+                child: Row(children: [
+                  const Icon(Icons.info_outline, color: kPrimary, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      sinDatosPrevios
+                          ? 'Se crearán los datos SGA por primera vez ($totalCambios campos).'
+                          : '$totalCambios campo(s) cambiarán respecto a los datos actuales.',
+                      style: const TextStyle(fontSize: 13, color: kPrimary),
+                    ),
+                  ),
+                ]),
+              ),
+
+              // ── Diff ───────────────────────────────────────────────────────
+              if (diff.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                const Text('Cambios detectados',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 6),
+                ...diff.map((e) => _buildDiffRow(e)),
+              ],
+
+              // ── Campos vacíos ──────────────────────────────────────────────
+              if (camposVacios.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Row(children: [
+                  const Icon(Icons.warning_amber_rounded, color: kSemaforoAmarillo, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${camposVacios.length} campo(s) sin datos en la FDS',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13, color: kSemaforoAmarillo),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: camposVacios.map((e) => Chip(
+                    label: Text(e['etiqueta']?.toString() ?? e['campo'],
+                        style: const TextStyle(fontSize: 11)),
+                    backgroundColor: kSemaforoAmarillo.withValues(alpha: 0.12),
+                    side: BorderSide(color: kSemaforoAmarillo.withValues(alpha: 0.4)),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  )).toList(),
+                ),
+              ],
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.check, size: 16),
+          label: const Text('Aplicar extracción'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: kPrimary,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiffRow(Map<String, dynamic> e) {
+    final esNuevo = e['valor_actual'] == null ||
+        e['valor_actual'] == '' ||
+        e['valor_actual'] == [];
+    final etiqueta = e['etiqueta']?.toString() ?? e['campo'];
+    final valorNuevo = _resumir(e['valor_nuevo']);
+    final valorActual = esNuevo ? null : _resumir(e['valor_actual']);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.edit_outlined, size: 13, color: kTextMuted),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(etiqueta,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                if (esNuevo)
+                  const Text('nuevo', style: TextStyle(fontSize: 11, color: kSuccess))
+                else ...[
+                  Text(valorActual ?? '—',
+                      style: const TextStyle(
+                          fontSize: 11, color: kTextMuted,
+                          decoration: TextDecoration.lineThrough)),
+                  Row(children: [
+                    const Icon(Icons.arrow_forward, size: 11, color: kPrimary),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: Text(valorNuevo,
+                          style: const TextStyle(fontSize: 11, color: kPrimary)),
+                    ),
+                  ]),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _resumir(dynamic valor) {
+    if (valor == null) return '—';
+    if (valor is List) {
+      if (valor.isEmpty) return '—';
+      final s = valor.map((e) => e is Map ? e.values.first : e).join(', ');
+      return s.length > 80 ? '${s.substring(0, 80)}…' : s;
+    }
+    final s = valor.toString();
+    return s.length > 80 ? '${s.substring(0, 80)}…' : s;
+  }
 }

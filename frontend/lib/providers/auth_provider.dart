@@ -200,16 +200,28 @@ class AuthProvider with ChangeNotifier {
     // Cancelar tareas de fondo al cerrar sesión (solo Android)
     if (!kIsWeb && Platform.isAndroid) await cancelBackgroundTasks();
 
+    // Invalidar el refresh token en el servidor para que no pueda generar nuevos access tokens.
+    // Fallo silencioso: si no hay red o el token ya expiró, la sesión local se limpia igual.
+    if (_refreshToken != null) {
+      try {
+        await ApiClient.instance.dio.post(
+          'token/blacklist/',
+          data: {'refresh': _refreshToken},
+        );
+      } catch (_) {}
+    }
+
     try {
       await _storage.deleteAll();
     } catch (e) {
       debugPrint('[AuthProvider] Error al borrar storage en logout: $e');
     }
-    _token    = null;
-    _rol      = null;
-    _username = null;
-    _fotoUrl  = null;
-    _permisos = {};
+    _token        = null;
+    _refreshToken = null;
+    _rol          = null;
+    _username     = null;
+    _fotoUrl      = null;
+    _permisos     = {};
     notifyListeners();
   }
 
