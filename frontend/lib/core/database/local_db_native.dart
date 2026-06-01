@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -15,7 +16,18 @@ class LocalDb {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
-    final path = join(await getDatabasesPath(), 'sgi_lab.db');
+
+    // En desktop usamos %APPDATA%/SGI_LAB_MANAGER/ para evitar problemas de
+    // permisos cuando la app está instalada en Program Files.
+    final String dbDir;
+    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+      final support = await getApplicationSupportDirectory();
+      dbDir = support.path;
+    } else {
+      dbDir = await getDatabasesPath();
+    }
+
+    final path = join(dbDir, 'sgi_lab.db');
     return openDatabase(path, version: 2, onCreate: _create, onUpgrade: _upgrade);
   }
 

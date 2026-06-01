@@ -113,3 +113,9 @@ secrets/
 
 # ── Logs ───────────────────────────────────────────────────────────
 *.log
+
+# ── Binarios de distribución (no van en git) ───────────────────────
+*.zip
+*.tar.gz
+*.rar
+frontend/installer/*.exe
