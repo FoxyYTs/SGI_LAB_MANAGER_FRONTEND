@@ -22,13 +22,13 @@ class ConfiguracionScreenState extends State<ConfiguracionScreen>
 
   void jumpToTab(int index) {
     if (!mounted) return;
-    _tab.animateTo(index.clamp(0, 6));
+    _tab.animateTo(index.clamp(0, 7));
   }
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 7, vsync: this);
+    _tab = TabController(length: 8, vsync: this);
   }
 
   @override
@@ -74,6 +74,7 @@ class ConfiguracionScreenState extends State<ConfiguracionScreen>
             Tab(icon: Icon(Icons.menu_book_outlined),     text: 'Guías'),
             Tab(icon: Icon(Icons.category_outlined),      text: 'Áreas'),
             Tab(icon: Icon(Icons.science_outlined),       text: 'Asignaturas'),
+            Tab(icon: Icon(Icons.business_outlined),      text: 'Laboratorio'),
           ],
         ),
       ),
@@ -87,6 +88,7 @@ class ConfiguracionScreenState extends State<ConfiguracionScreen>
           _GuiasTab(),
           _AreasTab(),
           _AsignaturasTab(),
+          const _LabConfigTab(),
         ],
       ),
     );
@@ -1262,6 +1264,214 @@ class _AccionesRow extends StatelessWidget {
           onPressed: onDelete,
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Tab: Configuración del Laboratorio
+// ─────────────────────────────────────────
+class _LabConfigTab extends StatefulWidget {
+  const _LabConfigTab();
+
+  @override
+  State<_LabConfigTab> createState() => _LabConfigTabState();
+}
+
+class _LabConfigTabState extends State<_LabConfigTab> {
+  final _formKey = GlobalKey<FormState>();
+  bool _loading   = true;
+  bool _guardando = false;
+  String? _error;
+
+  final _c = <String, TextEditingController>{
+    'nombre_laboratorio':          TextEditingController(),
+    'direccion_laboratorio':       TextEditingController(),
+    'telefono_emergencia':         TextEditingController(),
+    'nombre_proveedor_defecto':    TextEditingController(),
+    'direccion_proveedor_defecto': TextEditingController(),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _c.values) { c.dispose(); }
+    super.dispose();
+  }
+
+  Future<void> _cargar() async {
+    if (!mounted) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final r    = await dio.get('inventario/configuracion-global/');
+      final d    = Map<String, dynamic>.from(r.data);
+      for (final k in _c.keys) {
+        _c[k]!.text = d[k]?.toString() ?? '';
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Error cargando la configuración.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _guardar() async {
+    if (!_formKey.currentState!.validate()) return;
+    final auth = context.read<AuthProvider>();
+    if (!auth.can(Perm.configuracionGestion)) return;
+    setState(() => _guardando = true);
+    try {
+      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      final payload = {for (final k in _c.keys) k: _c[k]!.text.trim()};
+      await dio.patch('inventario/configuracion-global/', data: payload);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Configuración guardada.'),
+            backgroundColor: kSuccess),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al guardar.'),
+            backgroundColor: kDanger),
+      );
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+  }
+
+  InputDecoration _deco(String label, {String? hint}) => InputDecoration(
+    labelText: label,
+    hintText: hint,
+    border: const OutlineInputBorder(),
+    focusedBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: kPrimary)),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final auth    = context.watch<AuthProvider>();
+    final puedeEditar = auth.can(Perm.configuracionGestion);
+
+    if (_loading) { return const Center(child: CircularProgressIndicator(color: kPrimary)); }
+    if (_error != null) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(_error!, style: const TextStyle(color: kDanger)),
+          const SizedBox(height: 12),
+          ElevatedButton(onPressed: _cargar, child: const Text('Reintentar')),
+        ]),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Form(
+        key: _formKey,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Datos del laboratorio',
+                  style: TextStyle(fontWeight: FontWeight.bold,
+                      color: kPrimary, fontSize: 15)),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _c['nombre_laboratorio'],
+                enabled: puedeEditar,
+                decoration: _deco('Nombre del laboratorio'),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Campo requerido' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _c['direccion_laboratorio'],
+                enabled: puedeEditar,
+                decoration: _deco('Dirección'),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _c['telefono_emergencia'],
+                enabled: puedeEditar,
+                decoration: _deco('Teléfono de emergencias',
+                    hint: 'Ej: 119 — Bomberos Rionegro'),
+                keyboardType: TextInputType.phone,
+              ),
+
+              const SizedBox(height: 24),
+              const Text('Proveedor por defecto (etiquetas SGA)',
+                  style: TextStyle(fontWeight: FontWeight.bold,
+                      color: kPrimary, fontSize: 15)),
+              const SizedBox(height: 16),
+
+              TextFormField(
+                controller: _c['nombre_proveedor_defecto'],
+                enabled: puedeEditar,
+                decoration: _deco('Nombre del proveedor'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _c['direccion_proveedor_defecto'],
+                enabled: puedeEditar,
+                decoration: _deco('Dirección del proveedor'),
+                maxLines: 2,
+              ),
+
+              if (puedeEditar) ...[
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _guardando ? null : _guardar,
+                    icon: _guardando
+                        ? const SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.save_outlined),
+                    label: const Text('Guardar configuración'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: kSemaforoAmarillo.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: kSemaforoAmarillo.withValues(alpha: 0.4)),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.lock_outline, color: kSemaforoAmarillo, size: 16),
+                    SizedBox(width: 8),
+                    Text('Solo administradores y laboratoristas pueden editar.',
+                        style: TextStyle(
+                            fontSize: 12, color: kSemaforoAmarillo)),
+                  ]),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
