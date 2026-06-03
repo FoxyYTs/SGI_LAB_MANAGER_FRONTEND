@@ -283,6 +283,7 @@ class _MainShellState extends State<MainShell> {
       ('Guías',       Icons.menu_book_outlined,   4),
       ('Áreas',       Icons.category_outlined,    5),
       ('Asignaturas', Icons.science_outlined,     6),
+      ('Laboratorio', Icons.business_outlined,    7),
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -602,6 +603,7 @@ class _MainShellState extends State<MainShell> {
         _configSubItem(context, 'Guías',       Icons.menu_book_outlined,   4, tabKey),
         _configSubItem(context, 'Áreas',       Icons.category_outlined,    5, tabKey),
         _configSubItem(context, 'Asignaturas', Icons.science_outlined,     6, tabKey),
+        _configSubItem(context, 'Laboratorio', Icons.business_outlined,    7, tabKey),
       ],
     );
   }

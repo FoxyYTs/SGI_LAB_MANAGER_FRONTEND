@@ -4,8 +4,27 @@ import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
+// ── Modelo local para una presentación en el formulario ──────────────────────
+
+class _PresentacionRow {
+  String? id; // null = nueva, String = existente
+  final TextEditingController stockCtrl;
+  final TextEditingController fotoCtrl;
+  String? unidadId;
+
+  _PresentacionRow({this.id, String stock = '0', String foto = '', this.unidadId})
+      : stockCtrl = TextEditingController(text: stock),
+        fotoCtrl  = TextEditingController(text: foto);
+
+  void dispose() {
+    stockCtrl.dispose();
+    fotoCtrl.dispose();
+  }
+}
+
+// ── Pantalla ─────────────────────────────────────────────────────────────────
+
 class InsumoFormScreen extends StatefulWidget {
-  /// Si [insumo] no es null, estamos editando; si es null, estamos creando.
   final Map<String, dynamic>? insumo;
   const InsumoFormScreen({super.key, this.insumo});
 
@@ -16,41 +35,37 @@ class InsumoFormScreen extends StatefulWidget {
 class _InsumoFormScreenState extends State<InsumoFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controladores de texto
+  // Campos del insumo
   final _nombreCtrl      = TextEditingController();
-  final _stockActualCtrl = TextEditingController(text: '0');
   final _stockMinimoCtrl = TextEditingController(text: '0');
   final _observCtrl      = TextEditingController();
 
-  // Detalles químico
-  final _formulaCtrl       = TextEditingController();
-  final _casCtrl           = TextEditingController();
-  final _concCtrl          = TextEditingController();
-  final _pictogramasCtrl   = TextEditingController();
-  final _frasesHCtrl       = TextEditingController();
-  final _frasesPCtrl       = TextEditingController();
+  // Detalle químico
+  final _formulaCtrl     = TextEditingController();
+  final _casCtrl         = TextEditingController();
+  final _concCtrl        = TextEditingController();
 
-  // Detalles material
-  final _marcaCtrl       = TextEditingController();
-  final _capacidadCtrl   = TextEditingController();
-  final _materialCtrl    = TextEditingController();
-  bool  _esGraduado      = false;
+  // Detalle material
+  final _marcaCtrl     = TextEditingController();
+  final _capacidadCtrl = TextEditingController();
+  final _materialCtrl  = TextEditingController();
+  bool  _esGraduado    = false;
 
-  // Dropdowns
+  // Catálogos
   List<Map<String, dynamic>> _tipos       = [];
   List<Map<String, dynamic>> _ubicaciones = [];
   List<Map<String, dynamic>> _unidades    = [];
 
   String? _tipoId;
   String? _ubicacionId;
-  String? _unidadId;
   String  _tipoNombre = '';
 
-  bool _loading    = true;
-  bool _guardando  = false;
+  // Presentaciones dinámicas
+  final List<_PresentacionRow> _presentaciones = [];
+  final List<String> _presentacionesEliminar   = []; // ids a borrar en edición
 
-  // Foto (URL externa — imgur, drive, etc.)
-  final _fotoCtrl = TextEditingController();
+  bool _loading   = true;
+  bool _guardando = false;
 
   bool get _esQuimico  => _tipoNombre == 'Químico';
   bool get _esMaterial => _tipoNombre == 'Implemento' || _tipoNombre == 'Vidriería';
@@ -63,13 +78,12 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [
-      _nombreCtrl, _stockActualCtrl, _stockMinimoCtrl, _observCtrl, _fotoCtrl,
-      _formulaCtrl, _casCtrl, _concCtrl, _pictogramasCtrl, _frasesHCtrl, _frasesPCtrl,
-      _marcaCtrl, _capacidadCtrl, _materialCtrl,
-    ]) {
+    for (final c in [_nombreCtrl, _stockMinimoCtrl, _observCtrl,
+        _formulaCtrl, _casCtrl, _concCtrl,
+        _marcaCtrl, _capacidadCtrl, _materialCtrl]) {
       c.dispose();
     }
+    for (final p in _presentaciones) { p.dispose(); }
     super.dispose();
   }
 
@@ -82,12 +96,12 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
         dio.get('inventario/ubicaciones/'),
         dio.get('inventario/unidades/'),
       ]);
+      List<Map<String, dynamic>> parse(dynamic d) =>
+          List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
       setState(() {
-        List<Map<String, dynamic>> _parse(dynamic d) =>
-            List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-        _tipos       = _parse(results[0].data);
-        _ubicaciones = _parse(results[1].data);
-        _unidades    = _parse(results[2].data);
+        _tipos       = parse(results[0].data);
+        _ubicaciones = parse(results[1].data);
+        _unidades    = parse(results[2].data);
         _loading     = false;
       });
       _precargarEdicion();
@@ -98,21 +112,51 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
   void _precargarEdicion() {
     final ins = widget.insumo;
-    if (ins == null) return;
+    if (ins == null) {
+      // En creación agregamos una presentación vacía por defecto
+      _presentaciones.add(_PresentacionRow());
+      return;
+    }
     _nombreCtrl.text      = ins['nombre_insumo'] ?? '';
-    _stockActualCtrl.text = ins['stock_actual']?.toString() ?? '0';
     _stockMinimoCtrl.text = ins['stock_minimo']?.toString() ?? '0';
     _observCtrl.text      = ins['observaciones'] ?? '';
-    _tipoId     = ins['tipo_insumo']?.toString();
+    _tipoId      = ins['tipo_insumo']?.toString();
     _ubicacionId = ins['ubicacion']?.toString();
-    _unidadId   = ins['unidad_medida']?.toString();
-    _tipoNombre     = ins['tipo_nombre'] ?? '';
-    _fotoCtrl.text  = ins['foto'] as String? ?? '';
+    _tipoNombre  = ins['tipo_nombre'] ?? '';
+
+    // Cargar presentaciones existentes
+    final pres = ins['presentaciones'] as List? ?? [];
+    for (final p in pres) {
+      _presentaciones.add(_PresentacionRow(
+        id:       p['id']?.toString(),
+        stock:    p['stock_actual']?.toString() ?? '0',
+        foto:     p['foto'] as String? ?? '',
+        unidadId: p['unidad_medida']?.toString(),
+      ));
+    }
+    if (_presentaciones.isEmpty) {
+      _presentaciones.add(_PresentacionRow());
+    }
     setState(() {});
+  }
+
+  void _agregarPresentacion() {
+    setState(() => _presentaciones.add(_PresentacionRow()));
+  }
+
+  void _eliminarPresentacion(int index) {
+    final row = _presentaciones[index];
+    if (row.id != null) _presentacionesEliminar.add(row.id!);
+    row.dispose();
+    setState(() => _presentaciones.removeAt(index));
   }
 
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_presentaciones.isEmpty) {
+      _snack('Agrega al menos una presentación.', kDanger);
+      return;
+    }
     setState(() => _guardando = true);
 
     final auth = context.read<AuthProvider>();
@@ -121,12 +165,9 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
     final body = {
       'nombre_insumo': _nombreCtrl.text.trim(),
       'tipo_insumo':   _tipoId,
-      'unidad_medida': _unidadId,
       'ubicacion':     _ubicacionId,
-      'stock_actual':  double.tryParse(_stockActualCtrl.text) ?? 0,
       'stock_minimo':  double.tryParse(_stockMinimoCtrl.text) ?? 0,
       'observaciones': _observCtrl.text.trim(),
-      'foto':          _fotoCtrl.text.trim().isEmpty ? null : _fotoCtrl.text.trim(),
     };
 
     try {
@@ -142,15 +183,31 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
       final id = insumo['id'];
 
-      // Guarda detalle según tipo
+      // Eliminar presentaciones borradas
+      for (final presId in _presentacionesEliminar) {
+        await dio.delete('inventario/lista/$id/presentaciones/$presId/');
+      }
+
+      // Guardar presentaciones
+      for (final p in _presentaciones) {
+        final presBody = {
+          'stock_actual':  double.tryParse(p.stockCtrl.text) ?? 0,
+          'unidad_medida': p.unidadId,
+          'foto':          p.fotoCtrl.text.trim().isEmpty ? null : p.fotoCtrl.text.trim(),
+        };
+        if (p.id != null) {
+          await dio.patch('inventario/lista/$id/presentaciones/${p.id}/', data: presBody);
+        } else {
+          await dio.post('inventario/lista/$id/presentaciones/', data: presBody);
+        }
+      }
+
+      // Guardar detalle según tipo
       if (_esQuimico) {
         await dio.post('inventario/lista/$id/quimico/', data: {
           'formula_quimica': _formulaCtrl.text.trim(),
           'numero_cas':      _casCtrl.text.trim(),
           'concentracion':   _concCtrl.text.trim(),
-          'pictogramas_sga': _pictogramasCtrl.text.trim(),
-          'frases_h':        _frasesHCtrl.text.trim(),
-          'frases_p':        _frasesPCtrl.text.trim(),
         });
       } else if (_esMaterial) {
         await dio.post('inventario/lista/$id/material/', data: {
@@ -162,10 +219,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Insumo guardado correctamente.'),
-          backgroundColor: kSuccess,
-        ));
+        _snack('Insumo guardado correctamente.', kSuccess);
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -174,13 +228,16 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
         final data = (e as dynamic).response?.data;
         if (data is Map) msg = data.values.first.toString();
       } catch (_) {}
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(msg), backgroundColor: kDanger));
-      }
+      if (mounted) _snack(msg, kDanger);
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  void _snack(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color),
+    );
   }
 
   @override
@@ -216,45 +273,34 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(20),
                 children: [
+
+                  // ── Información general ──────────────────────────────────
                   _seccion('Información general'),
                   TextFormField(
                     controller: _nombreCtrl,
                     decoration: _deco('Nombre del insumo *', Icons.inventory_2_outlined),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Campo requerido' : null,
                   ),
                   const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: _dropdown<String>(
-                      label: 'Tipo de insumo *',
-                      icon: Icons.category_outlined,
-                      value: _tipoId,
-                      items: _tipos.map((t) => DropdownMenuItem(
-                        value: t['id'].toString(),
-                        child: Text(t['nombre_tipo']),
-                      )).toList(),
-                      onChanged: (v) {
-                        final tipo = _tipos.firstWhere((t) => t['id'].toString() == v,
-                            orElse: () => {});
-                        setState(() {
-                          _tipoId     = v;
-                          _tipoNombre = tipo['nombre_tipo'] ?? '';
-                        });
-                      },
-                      validator: (v) => v == null ? 'Selecciona un tipo' : null,
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(child: _dropdown<String>(
-                      label: 'Unidad de medida *',
-                      icon: Icons.straighten_outlined,
-                      value: _unidadId,
-                      items: _unidades.map((u) => DropdownMenuItem(
-                        value: u['id'].toString(),
-                        child: Text(u['nombre_unidad']),
-                      )).toList(),
-                      onChanged: (v) => setState(() => _unidadId = v),
-                      validator: (v) => v == null ? 'Selecciona una unidad' : null,
-                    )),
-                  ]),
+                  _dropdown<String>(
+                    label: 'Tipo de insumo *',
+                    icon: Icons.category_outlined,
+                    value: _tipoId,
+                    items: _tipos.map((t) => DropdownMenuItem(
+                      value: t['id'].toString(),
+                      child: Text(t['nombre_tipo']),
+                    )).toList(),
+                    onChanged: (v) {
+                      final tipo = _tipos.firstWhere(
+                          (t) => t['id'].toString() == v, orElse: () => {});
+                      setState(() {
+                        _tipoId     = v;
+                        _tipoNombre = tipo['nombre_tipo'] ?? '';
+                      });
+                    },
+                    validator: (v) => v == null ? 'Selecciona un tipo' : null,
+                  ),
                   const SizedBox(height: 14),
                   _dropdown<String>(
                     label: 'Ubicación',
@@ -270,34 +316,53 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                     onChanged: (v) => setState(() => _ubicacionId = v),
                   ),
                   const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(child: TextFormField(
-                      controller: _stockActualCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: _deco('Stock actual', Icons.numbers),
-                    )),
-                    const SizedBox(width: 12),
-                    Expanded(child: TextFormField(
-                      controller: _stockMinimoCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: _deco('Stock mínimo', Icons.warning_amber_outlined),
-                    )),
-                  ]),
+                  TextFormField(
+                    controller: _stockMinimoCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _deco('Stock crítico mínimo', Icons.warning_amber_outlined),
+                  ),
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _observCtrl,
                     maxLines: 2,
                     decoration: _deco('Observaciones', Icons.notes_outlined),
                   ),
-                  const SizedBox(height: 20),
 
-                  // ── Foto ──
-                  _seccion('Foto del insumo'),
-                  _buildFotoSelector(),
+                  // ── Presentaciones ───────────────────────────────────────
+                  const SizedBox(height: 28),
+                  Row(
+                    children: [
+                      Expanded(child: _seccion('Presentaciones / Stock')),
+                      TextButton.icon(
+                        onPressed: _agregarPresentacion,
+                        icon: const Icon(Icons.add, color: kPrimary, size: 18),
+                        label: const Text('Agregar',
+                            style: TextStyle(color: kPrimary, fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                  if (_presentaciones.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: kSemaforoAmarillo.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: kSemaforoAmarillo.withValues(alpha: 0.4)),
+                      ),
+                      child: const Text(
+                        'Agrega al menos una presentación con su stock y unidad.',
+                        style: TextStyle(color: kSemaforoAmarillo, fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  else
+                    ...List.generate(_presentaciones.length, (i) =>
+                        _buildPresentacionRow(i)),
 
-                  // ── Detalle Químico ──
+                  // ── Detalle Químico ──────────────────────────────────────
                   if (_esQuimico) ...[
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
                     _seccion('Información química (SGA)'),
                     Row(children: [
                       Expanded(child: TextFormField(
@@ -311,21 +376,11 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                     const SizedBox(height: 14),
                     TextFormField(controller: _concCtrl,
                         decoration: _deco('Concentración', Icons.opacity)),
-                    const SizedBox(height: 14),
-                    TextFormField(controller: _pictogramasCtrl,
-                        decoration: _deco('Pictogramas GHS (JSON array)', Icons.warning_amber_outlined,
-                            hintText: '["GHS01","GHS06"]')),
-                    const SizedBox(height: 14),
-                    TextFormField(controller: _frasesHCtrl, maxLines: 3,
-                        decoration: _deco('Frases H', Icons.info_outline)),
-                    const SizedBox(height: 14),
-                    TextFormField(controller: _frasesPCtrl, maxLines: 3,
-                        decoration: _deco('Frases P', Icons.health_and_safety_outlined)),
                   ],
 
-                  // ── Detalle Material ──
+                  // ── Detalle Material ─────────────────────────────────────
                   if (_esMaterial) ...[
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 28),
                     _seccion('Información del material'),
                     Row(children: [
                       Expanded(child: TextFormField(controller: _marcaCtrl,
@@ -354,46 +409,99 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
     );
   }
 
-  Widget _buildFotoSelector() {
-    final url = _fotoCtrl.text.trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (url.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                url,
-                height: 180,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  height: 60,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
+  Widget _buildPresentacionRow(int index) {
+    final p = _presentaciones[index];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFDEE2E6)),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Presentación ${index + 1}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: kPrimary, fontSize: 13)),
+              const Spacer(),
+              if (_presentaciones.length > 1)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: kDanger, size: 20),
+                  tooltip: 'Eliminar presentación',
+                  onPressed: () => _eliminarPresentacion(index),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              flex: 2,
+              child: TextFormField(
+                controller: p.stockCtrl,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: _deco('Stock actual *', Icons.numbers),
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 3,
+              child: StatefulBuilder(
+                builder: (ctx, setSub) => DropdownButtonFormField<String>(
+                  initialValue: p.unidadId,
+                  decoration: InputDecoration(
+                    labelText: 'Unidad *',
+                    prefixIcon: const Icon(Icons.straighten_outlined,
+                        color: kPrimary),
+                    border: const OutlineInputBorder(),
+                    focusedBorder: const OutlineInputBorder(
+                        borderSide: BorderSide(color: kPrimary, width: 2)),
                   ),
-                  child: const Text('URL de imagen inválida o inaccesible',
-                      style: TextStyle(color: kTextMuted, fontSize: 12)),
+                  items: _unidades.map((u) => DropdownMenuItem(
+                    value: u['id'].toString(),
+                    child: Text(u['nombre_unidad']),
+                  )).toList(),
+                  onChanged: (v) {
+                    p.unidadId = v;
+                    setSub(() {});
+                  },
+                  validator: (v) => v == null ? 'Selecciona' : null,
                 ),
               ),
             ),
+          ]),
+          const SizedBox(height: 10),
+          TextFormField(
+            controller: p.fotoCtrl,
+            decoration: _deco('URL de imagen (opcional)', Icons.image_outlined),
+            keyboardType: TextInputType.url,
+            onChanged: (_) => setState(() {}),
           ),
-        TextFormField(
-          controller: _fotoCtrl,
-          decoration: _deco('URL de imagen (imgur, drive…)', Icons.image_outlined),
-          keyboardType: TextInputType.url,
-          onChanged: (_) => setState(() {}),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Pega el enlace directo a la imagen. Ej: https://i.imgur.com/abc123.jpg',
-          style: TextStyle(fontSize: 11, color: kTextMuted),
-        ),
-      ],
+          if (p.fotoCtrl.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                p.fotoCtrl.text.trim(),
+                height: 120,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -404,15 +512,13 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
             fontSize: 14, fontWeight: FontWeight.bold, color: kPrimary)),
   );
 
-  InputDecoration _deco(String label, IconData icon, {String? hintText}) =>
-      InputDecoration(
-        labelText: label,
-        hintText: hintText,
-        prefixIcon: Icon(icon, color: kPrimary),
-        border: const OutlineInputBorder(),
-        focusedBorder: const OutlineInputBorder(
-            borderSide: BorderSide(color: kPrimary, width: 2)),
-      );
+  InputDecoration _deco(String label, IconData icon) => InputDecoration(
+    labelText: label,
+    prefixIcon: Icon(icon, color: kPrimary),
+    border: const OutlineInputBorder(),
+    focusedBorder: const OutlineInputBorder(
+        borderSide: BorderSide(color: kPrimary, width: 2)),
+  );
 
   Widget _dropdown<T>({
     required String label,
