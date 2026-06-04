@@ -325,7 +325,6 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                   const SizedBox(height: 12),
                   _infoRow(Icons.place_outlined, 'Ubicación',
                       d['ubicacion_nombre']?.toString() ?? 'Sin ubicación'),
-                  _infoRow(Icons.straighten_outlined, 'Unidad', unidad),
                   if (d['observaciones']?.toString().isNotEmpty == true)
                     _infoRow(Icons.notes_outlined, 'Observaciones',
                         d['observaciones'].toString()),
@@ -376,6 +375,15 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             const SizedBox(height: 16),
             _buildDetalleMaterial(
                 Map<String, dynamic>.from(d['detalle_material'])),
+          ],
+
+          // ── Presentaciones disponibles ───────────────────────────────────
+          if ((d['presentaciones'] as List?)?.isNotEmpty == true) ...[
+            const SizedBox(height: 16),
+            _buildPresentaciones(
+              List<Map<String, dynamic>>.from(d['presentaciones'] as List),
+              stockMin,
+            ),
           ],
 
           // ── Reportar rotura ─────────────────────────────────────────────
@@ -549,6 +557,82 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
           ),
         ),
       ]),
+    );
+  }
+
+  Widget _buildPresentaciones(List<Map<String, dynamic>> presentaciones, double stockMin) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white, borderRadius: BorderRadius.circular(10),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Header azul
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            color: kPrimary,
+            child: const Row(children: [
+              Icon(Icons.inventory_2_outlined, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text('Presentaciones disponibles',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+            ]),
+          ),
+          // Filas de presentación
+          ...presentaciones.asMap().entries.map((e) {
+            final idx   = e.key;
+            final p     = e.value;
+            final stock = double.tryParse(p['stock_actual']?.toString() ?? '0') ?? 0;
+            final unidad = p['unidad_nombre']?.toString() ?? '';
+
+            final (chipLabel, chipColor, chipBg) = stock <= 0
+                ? ('SIN STOCK', kDanger,           const Color(0xFFFFEBEE))
+                : stock <= stockMin
+                    ? ('CRÍTICO',  kSemaforoRojo,    const Color(0xFFFFEBEE))
+                    : stock <= stockMin * 1.5
+                        ? ('BAJO',     const Color(0xFFE65100), const Color(0xFFFFF8E1))
+                        : ('OK',       kSemaforoVerde, const Color(0xFFE8F5E9));
+
+            return Container(
+              decoration: BoxDecoration(
+                color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
+                border: const Border(bottom: BorderSide(color: Color(0xFFDEE2E6))),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(children: [
+                // Ícono frasco
+                Container(
+                  width: 36, height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE9ECEF),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Icon(Icons.science_outlined, size: 18, color: kTextMuted),
+                ),
+                const SizedBox(width: 12),
+                // Nombre presentación
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('$unidad', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    Text('${stock.toStringAsFixed(stock.truncateToDouble() == stock ? 0 : 2)} $unidad disponibles',
+                        style: const TextStyle(fontSize: 11, color: kTextMuted)),
+                  ]),
+                ),
+                // Chip estado
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: chipBg, borderRadius: BorderRadius.circular(20)),
+                  child: Text(chipLabel,
+                      style: TextStyle(color: chipColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ]),
+            );
+          }),
+        ]),
+      ),
     );
   }
 

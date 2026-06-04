@@ -8,7 +8,8 @@ import '../core/sync/sync_service.dart';
 import '../widgets/qr_generator_dialog.dart';
 
 class DashboardContent extends StatefulWidget {
-  const DashboardContent({super.key});
+  final void Function(int tabIndex)? onNavigateTo;
+  const DashboardContent({super.key, this.onNavigateTo});
   @override State<DashboardContent> createState() => _DashboardContentState();
 }
 
@@ -16,6 +17,11 @@ class _DashboardContentState extends State<DashboardContent> {
   static const _cacheKey = 'dashboard';
 
   Map<String, dynamic>? _data;
+
+  // dia(0-5) → hora(6-21) → valor
+  Map<int, Map<int, String>> _encByDia  = {};
+  Map<int, Map<int, String>> _asgByDia  = {};
+
   bool      _cargando   = true;
   bool      _desdeCache = false;
   DateTime? _cachedAt;
@@ -42,17 +48,63 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Future<void> _cargar() async {
+    if (!mounted) return;
     setState(() => _cargando = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
-      final r = await dio.get('academico/dashboard/');
-      final data = Map<String, dynamic>.from(r.data);
+      final results = await Future.wait([
+        dio.get('academico/dashboard/'),
+        dio.get('academico/horario-encargado/'),   // todos los días
+        dio.get('academico/horario-asignatura/'),  // todos los días
+      ]);
+      final data = Map<String, dynamic>.from(results[0].data);
       await CacheService.instance.set(_cacheKey, data);
-      if (mounted) setState(() { _data = data; _desdeCache = false; _cachedAt = null; _cargando = false; });
+
+      // Indexar encargados por día y hora
+      final encByDia = <int, Map<int, String>>{};
+      final rawEnc = results[1].data;
+      final listaEnc = List<Map<String, dynamic>>.from(
+          rawEnc is List ? rawEnc : (rawEnc['results'] ?? []));
+      for (final e in listaEnc) {
+        final dia  = e['dia_semana'] as int? ?? -1;
+        final hora = e['hora'] as int? ?? -1;
+        if (dia < 0 || hora < 0) continue;
+        final user = e['username'] as String? ?? '?';
+        final rol  = e['rol'] as String? ?? '';
+        encByDia.putIfAbsent(dia, () => {})[hora] =
+            '$user${rol.isNotEmpty ? ' · $rol' : ''}';
+      }
+
+      // Indexar asignaturas por día y hora
+      final asgByDia = <int, Map<int, String>>{};
+      final rawAsg = results[2].data;
+      final listaAsg = List<Map<String, dynamic>>.from(
+          rawAsg is List ? rawAsg : (rawAsg['results'] ?? []));
+      for (final a in listaAsg) {
+        final dia   = a['dia_semana'] as int? ?? -1;
+        final hora  = a['hora'] as int? ?? -1;
+        if (dia < 0 || hora < 0) continue;
+        final nombre = a['nombre_asignatura'] as String?
+            ?? a['asignatura_nombre'] as String? ?? '?';
+        final grupo  = a['grupo'] as String? ?? '';
+        asgByDia.putIfAbsent(dia, () => {})[hora] =
+            '$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}';
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _data       = data;
+        _encByDia   = encByDia;
+        _asgByDia   = asgByDia;
+        _desdeCache = false;
+        _cachedAt   = null;
+        _cargando   = false;
+      });
     } catch (_) {
       final cached = await CacheService.instance.get(_cacheKey);
-      if (mounted) setState(() {
+      if (!mounted) return;
+      setState(() {
         _data       = cached != null ? Map<String, dynamic>.from(cached.data as Map) : null;
         _desdeCache = cached != null;
         _cachedAt   = cached?.cachedAt;
@@ -63,136 +115,96 @@ class _DashboardContentState extends State<DashboardContent> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 650;
-        final hPad = isMobile ? 14.0 : 24.0;
-        return SingleChildScrollView(
-          padding: EdgeInsets.all(hPad),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_desdeCache)
-                    _CacheBanner(cachedAt: _cachedAt, onRefresh: _cargar),
-                  if (_desdeCache) SizedBox(height: isMobile ? 10 : 14),
-                  _buildJumbotron(auth, isMobile),
-                  SizedBox(height: isMobile ? 14 : 20),
-                  if (_cargando)
-                    const Center(child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(color: kPrimary),
-                    ))
-                  else if (_data != null) ...[
-                    _buildStatCards(constraints.maxWidth, isMobile),
-                    SizedBox(height: isMobile ? 14 : 24),
-                    _buildCriticosTable(isMobile),
-                  ],
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 650;
+      final pad = isMobile ? 14.0 : 24.0;
+      return SingleChildScrollView(
+        padding: EdgeInsets.all(pad),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Banner caché
+                if (_desdeCache) ...[
+                  _CacheBanner(cachedAt: _cachedAt, onRefresh: _cargar),
+                  SizedBox(height: isMobile ? 10 : 14),
                 ],
-              ),
+
+                // Stats
+                if (_cargando)
+                  const Center(child: Padding(
+                    padding: EdgeInsets.all(48),
+                    child: CircularProgressIndicator(color: kPrimary),
+                  ))
+                else if (_data != null) ...[
+                  _buildStatCards(constraints.maxWidth, isMobile),
+                  SizedBox(height: isMobile ? 14 : 20),
+
+                  // Horario + Acciones rápidas
+                  if (isMobile)
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      _buildAccionesRapidas(),
+                      const SizedBox(height: 14),
+                      _buildHorarioSemanal(isMobile),
+                    ])
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 65, child: _buildHorarioSemanal(isMobile)),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 35, child: _buildAccionesRapidas()),
+                      ],
+                    ),
+
+                  SizedBox(height: isMobile ? 14 : 20),
+
+                  // Tabla críticos (secundaria, al fondo)
+                  _buildCriticosTable(isMobile),
+                  const SizedBox(height: 24),
+                ],
+              ],
             ),
           ),
-        );
-      },
-    );
+        ),
+      );
+    });
   }
 
-  // ── Jumbotron ─────────────────────────────────────────────────────────────
-
-  Widget _buildJumbotron(AuthProvider auth, bool isMobile) {
-    final texto = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Hola, ${auth.username ?? 'bienvenido'}',
-          style: TextStyle(
-            fontSize: isMobile ? 20 : 26,
-            fontWeight: FontWeight.w300,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'SGI LAB MANAGER — Laboratorios de Ciencias Basicas Poli Rionegro',
-          style: TextStyle(fontSize: isMobile ? 12 : 14, color: kTextMuted),
-        ),
-      ],
-    );
-
-    final botonQr = ElevatedButton.icon(
-      onPressed: () => showDialog(
-        context: context,
-        builder: (_) => const QrGeneratorDialog(),
-      ),
-      icon: const Icon(Icons.qr_code_2),
-      label: const Text('Códigos QR'),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: kPrimary,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      ),
-    );
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.symmetric(
-        vertical: isMobile ? 20 : 32,
-        horizontal: isMobile ? 16 : 28,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 2))],
-      ),
-      child: isMobile
-          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              texto,
-              const SizedBox(height: 16),
-              SizedBox(width: double.infinity, child: botonQr),
-            ])
-          : Row(children: [
-              Expanded(child: texto),
-              botonQr,
-            ]),
-    );
-  }
-
-  // ── Tarjetas de estadísticas ───────────────────────────────────────────────
+  // ── Stat cards ────────────────────────────────────────────────────────────
 
   Widget _buildStatCards(double availableWidth, bool isMobile) {
-    final crossCount = isMobile ? 2 : (availableWidth < 900 ? 4 : 5);
-    final aspectRatio = isMobile ? 1.5 : 1.9;
-
+    final crossCount  = isMobile ? 2 : 4;
+    final aspectRatio = isMobile ? 1.5 : 2.2;
     final cards = [
-      _statCard(Icons.warning_amber_rounded,  'Insumos críticos',   '${_data!['stock_critico']        ?? 0}', kSemaforoRojo,    const Color(0xFFFFEBEE)),
-      _statCard(Icons.info_outline,           'Insumos bajos',      '${_data!['stock_bajo']           ?? 0}', const Color(0xFFE65100), const Color(0xFFFFF3E0)),
-      _statCard(Icons.swap_horiz_outlined,    'Préstamos activos',  '${_data!['prestamos_activos']    ?? 0}', kPrimary,         const Color(0xFFE3F2FD)),
-      _statCard(Icons.hourglass_top_outlined, 'Por aprobar',        '${_data!['prestamos_pendientes'] ?? 0}', const Color(0xFFE65100), const Color(0xFFFFF8E1)),
-      if (!isMobile)
-        _statCard(Icons.inventory_2_outlined, 'Total insumos',      '${_data!['total_insumos']        ?? 0}', kPrimary,         const Color(0xFFE8F5E9)),
+      _statCard(Icons.warning_amber_rounded,  'Insumos críticos',
+          '${_data!['stock_critico'] ?? 0}',       kSemaforoRojo,           const Color(0xFFFFEBEE)),
+      _statCard(Icons.info_outline,           'Insumos bajos',
+          '${_data!['stock_bajo'] ?? 0}',           const Color(0xFFE65100), const Color(0xFFFFF3E0)),
+      _statCard(Icons.swap_horiz_outlined,    'Préstamos activos',
+          '${_data!['prestamos_activos'] ?? 0}',    kPrimary,                const Color(0xFFE3F2FD)),
+      _statCard(Icons.hourglass_top_outlined, 'Por aprobar',
+          '${_data!['prestamos_pendientes'] ?? 0}', const Color(0xFFE65100), const Color(0xFFFFF8E1)),
     ];
-
     return GridView.count(
-      crossAxisCount: crossCount,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      childAspectRatio: aspectRatio,
-      shrinkWrap: true,
+      crossAxisCount: crossCount, crossAxisSpacing: 12, mainAxisSpacing: 12,
+      childAspectRatio: aspectRatio, shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       children: cards,
     );
   }
 
-  Widget _statCard(IconData icon, String label, String value, Color color, Color bgColor) =>
+  Widget _statCard(IconData icon, String label, String value,
+      Color color, Color bgColor) =>
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 2))],
+          color: bgColor, borderRadius: BorderRadius.circular(10),
+          boxShadow: [BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 4, offset: const Offset(0, 2))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,80 +212,365 @@ class _DashboardContentState extends State<DashboardContent> {
           children: [
             Icon(icon, color: color, size: 20),
             const Spacer(),
-            Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: color, height: 1)),
+            Text(value, style: TextStyle(
+                fontSize: 26, fontWeight: FontWeight.bold, color: color, height: 1)),
             const SizedBox(height: 4),
-            Text(label, style: TextStyle(color: color.withValues(alpha: 0.75), fontSize: 11, fontWeight: FontWeight.w500),
+            Text(label, style: TextStyle(
+                color: color.withValues(alpha: 0.75), fontSize: 11,
+                fontWeight: FontWeight.w500),
                 maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
         ),
       );
 
-  // ── Tabla de stock crítico ─────────────────────────────────────────────────
+  // ── Horario semanal ───────────────────────────────────────────────────────
 
-  Widget _buildCriticosTable(bool isMobile) {
-    final lista = _data!['lista_criticos'] as List?;
-    if (lista?.isNotEmpty != true) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.check_circle_outline, size: 48, color: kSuccess),
+  static const _dias   = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  static const _horas  = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+  Widget _buildHorarioSemanal(bool isMobile) {
+    final diaHoy     = DateTime.now().weekday - 1; // 0=Lun … 5=Sáb
+    final horaActual = DateTime.now().hour;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white, borderRadius: BorderRadius.circular(10),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header azul
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: kPrimary,
+              child: Row(children: [
+                const Icon(Icons.calendar_today_outlined, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('Horario Semanal',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                ),
+                TextButton(
+                  onPressed: () => widget.onNavigateTo?.call(4),
+                  child: const Text('Ver completo →',
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ),
+              ]),
+            ),
+
+            // Subtítulo
+            Container(
+              color: const Color(0xFFF0F4F8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: const Text('Encargados y asignaturas en turno',
+                  style: TextStyle(fontSize: 11, color: kTextMuted)),
+            ),
+
+            // Grilla
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: _buildGridSemanal(diaHoy, horaActual),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridSemanal(int diaHoy, int horaActual) {
+    const labelWidth = 52.0;
+    const colWidth   = 130.0;
+    const rowHeight  = 44.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Cabecera días
+        Row(children: [
+          SizedBox(width: labelWidth),
+          ..._dias.asMap().entries.map((e) {
+            final esHoy = e.key == diaHoy;
+            return Container(
+              width: colWidth,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              color: esHoy ? kPrimary : const Color(0xFF0069D9),
+              alignment: Alignment.center,
+              child: Text(e.value,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: esHoy ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 12)),
+            );
+          }),
+        ]),
+        // Filas de horas
+        ..._horas.asMap().entries.map((hEntry) {
+          final hora    = hEntry.value;
+          final esAhora = hora == horaActual && diaHoy >= 0 && diaHoy <= 5;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Etiqueta hora
+              Container(
+                width: labelWidth,
+                height: rowHeight,
+                alignment: Alignment.topCenter,
+                padding: const EdgeInsets.only(top: 6),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    right:  BorderSide(color: Color(0xFFDEE2E6)),
+                    bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                  ),
+                ),
+                child: Text('${hora.toString().padLeft(2, '0')}:00',
+                    style: TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w600,
+                        color: esAhora ? kPrimary : kTextMuted)),
+              ),
+              // Celdas por día
+              ..._dias.asMap().entries.map((dEntry) {
+                final dia   = dEntry.key;
+                final esHoy = dia == diaHoy;
+                final enc   = _encByDia[dia]?[hora];
+                final asg   = _asgByDia[dia]?[hora];
+                final tieneContenido = enc != null || asg != null;
+
+                return Container(
+                  width: colWidth,
+                  height: tieneContenido ? null : rowHeight,
+                  constraints: tieneContenido
+                      ? BoxConstraints(minHeight: rowHeight)
+                      : null,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: esAhora && esHoy
+                        ? const Color(0xFFD4E8FF)
+                        : esHoy
+                            ? const Color(0xFFF0F7FF)
+                            : hEntry.key.isOdd
+                                ? const Color(0xFFF8F9FA)
+                                : Colors.white,
+                    border: Border(
+                      right:  const BorderSide(color: Color(0xFFDEE2E6)),
+                      bottom: const BorderSide(color: Color(0xFFDEE2E6)),
+                      left: esAhora && esHoy
+                          ? const BorderSide(color: kSemaforoRojo, width: 2)
+                          : BorderSide.none,
+                    ),
+                  ),
+                  child: tieneContenido
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (enc != null)
+                              _chipHorario(enc, kPrimary, const Color(0xFFE3F2FD)),
+                            if (enc != null && asg != null)
+                              const SizedBox(height: 2),
+                            if (asg != null)
+                              _chipHorario(asg, kSuccess, const Color(0xFFE8F5E9)),
+                          ],
+                        )
+                      : null,
+                );
+              }),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _chipHorario(String label, Color color, Color bg) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+        border: Border(left: BorderSide(color: color, width: 2))),
+    child: Text(label,
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w500),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1),
+  );
+
+  // ── Acciones rápidas ──────────────────────────────────────────────────────
+
+  Widget _buildAccionesRapidas() => Container(
+    decoration: BoxDecoration(
+      color: Colors.white, borderRadius: BorderRadius.circular(10),
+      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Header
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: kPrimary,
+          child: const Row(children: [
+            Icon(Icons.bolt_outlined, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text('Acciones rápidas',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(children: [
+            // Botón QR prominente
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => showDialog(
+                    context: context, builder: (_) => const QrGeneratorDialog()),
+                icon: const Icon(Icons.qr_code_2, size: 22),
+                label: const Text('Códigos QR',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary, foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 0,
+                ),
+              ),
+            ),
             const SizedBox(height: 10),
-            const Text('Todo el inventario tiene stock suficiente',
-                style: TextStyle(color: kTextMuted)),
+            // Grid 2×3 de acciones secundarias
+            GridView.count(
+              crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
+              childAspectRatio: 1.3, shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: [
+                _accionBtn(Icons.add_box_outlined,          'Registrar entrada',    () => widget.onNavigateTo?.call(2)),
+                _accionBtn(Icons.outbox_outlined,            'Registrar salida',     () => widget.onNavigateTo?.call(2)),
+                _accionBtn(Icons.inventory_2_outlined,       'Escanear ítem',        () => widget.onNavigateTo?.call(1)),
+                _accionBtn(Icons.check_circle_outlined,      'Aprobar préstamos',    () => widget.onNavigateTo?.call(2),
+                    badge: '${_data?['prestamos_pendientes'] ?? 0}'),
+                _accionBtn(Icons.history_outlined,           'Ver bitácora',         () => widget.onNavigateTo?.call(3)),
+                _accionBtn(Icons.assignment_return_outlined, 'Registrar devolución', () => widget.onNavigateTo?.call(2)),
+              ],
+            ),
+            // Link personalizar
             const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: _cargar,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Actualizar'),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: null,
+                child: Text('✏ Personalizar bandeja',
+                    style: TextStyle(fontSize: 11, color: kTextMuted)),
+              ),
             ),
           ]),
         ),
-      );
-    }
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        const Icon(Icons.warning_amber_rounded, color: kSemaforoRojo, size: 20),
-        const SizedBox(width: 8),
-        const Text('Insumos en stock crítico',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        const Spacer(),
-        TextButton.icon(
-          onPressed: _cargar,
-          icon: const Icon(Icons.refresh, size: 16),
-          label: const Text('Actualizar'),
-        ),
       ]),
-      const SizedBox(height: 10),
-      Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+    ),
+  );
+
+  Widget _accionBtn(IconData icon, String label, VoidCallback? onTap,
+      {String? badge}) =>
+      InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFFDEE2E6)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Stack(children: [
+            Center(
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(icon, color: kPrimary, size: 22),
+                const SizedBox(height: 5),
+                Text(label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF223542),
+                        fontWeight: FontWeight.w500),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+              ]),
+            ),
+            if (badge != null && badge != '0')
+              Positioned(
+                top: 6, right: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                      color: kDanger, borderRadius: BorderRadius.circular(10)),
+                  child: Text(badge,
+                      style: const TextStyle(color: Colors.white, fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                ),
+              ),
+          ]),
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          // Scroll horizontal en móvil para la tabla con columnas fijas
-          child: SingleChildScrollView(
+      );
+
+  // ── Tabla críticos (secundaria) ───────────────────────────────────────────
+
+  Widget _buildCriticosTable(bool isMobile) {
+    final lista = _data!['lista_criticos'] as List?;
+    if (lista?.isNotEmpty != true) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white, borderRadius: BorderRadius.circular(10),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Column(children: [
+          // Header discreto
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: const Color(0xFFF8F9FA),
+            child: Row(children: [
+              const Icon(Icons.warning_amber_rounded, color: kSemaforoRojo, size: 16),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('⚠ Insumos Críticos',
+                    style: TextStyle(color: Color(0xFF223542), fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                    color: kSemaforoRojo, borderRadius: BorderRadius.circular(10)),
+                child: Text('${lista!.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11,
+                        fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => widget.onNavigateTo?.call(1),
+                style: TextButton.styleFrom(padding: EdgeInsets.zero,
+                    minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                child: const Text('Ver todos →',
+                    style: TextStyle(color: kPrimary, fontSize: 12)),
+              ),
+            ]),
+          ),
+          // Tabla
+          SingleChildScrollView(
             scrollDirection: isMobile ? Axis.horizontal : Axis.vertical,
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: isMobile ? 360 : 0,
-              ),
+              constraints: BoxConstraints(minWidth: isMobile ? 360 : 0),
               child: Table(
                 columnWidths: const {
                   0: FlexColumnWidth(3),
-                  1: FixedColumnWidth(100),
+                  1: FixedColumnWidth(110),
                   2: FixedColumnWidth(100),
+                  3: FixedColumnWidth(90),
                 },
                 border: const TableBorder(
                     horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
                 children: [
-                  _headerRow(['Insumo', 'Stock actual', 'Mínimo']),
+                  _headerRow(['Insumo', 'Stock actual', 'Mínimo', 'Estado']),
                   ...lista!.asMap().entries.map((e) {
-                    final idx  = e.key;
-                    final ins  = e.value as Map<String, dynamic>;
+                    final idx = e.key;
+                    final ins = e.value as Map<String, dynamic>;
                     final stock    = double.tryParse(ins['stock_actual'].toString()) ?? 0;
                     final stockMin = double.tryParse(ins['stock_minimo'].toString()) ?? 0;
                     return TableRow(
@@ -293,13 +590,25 @@ class _DashboardContentState extends State<DashboardContent> {
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          child: Text(stock.toStringAsFixed(1),
+                          child: Text('${stock.toStringAsFixed(1)} ${ins['unidad_abreviatura'] ?? ''}',
                               style: const TextStyle(color: kSemaforoRojo, fontWeight: FontWeight.bold)),
                         ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           child: Text(stockMin.toStringAsFixed(1),
                               style: const TextStyle(color: kTextMuted)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                                color: const Color(0xFFFFEBEE),
+                                borderRadius: BorderRadius.circular(20)),
+                            child: const Text('Crítico',
+                                style: TextStyle(color: kSemaforoRojo, fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ),
                         ),
                       ],
                     );
@@ -308,22 +617,22 @@ class _DashboardContentState extends State<DashboardContent> {
               ),
             ),
           ),
-        ),
+        ]),
       ),
-    ]);
+    );
   }
 
   TableRow _headerRow(List<String> cols) => TableRow(
     decoration: const BoxDecoration(color: kPrimary),
     children: cols.map((h) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Text(h,
-          softWrap: false,
-          overflow: TextOverflow.ellipsis,
+      child: Text(h, softWrap: false, overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
     )).toList(),
   );
 }
+
+// ── Banner de caché ───────────────────────────────────────────────────────────
 
 class _CacheBanner extends StatelessWidget {
   final DateTime? cachedAt;
@@ -332,26 +641,21 @@ class _CacheBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final edad = cachedAt != null ? CacheService.formatEdad(cachedAt!) : 'desconocido';
+    final edad = cachedAt != null ? CacheService.formatEdad(cachedAt!) : '—';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFFFF8E1), borderRadius: BorderRadius.circular(8),
         border: Border.all(color: kSemaforoAmarillo),
       ),
       child: Row(children: [
         const Icon(Icons.history, color: Color(0xFFE65100), size: 16),
         const SizedBox(width: 8),
-        Expanded(child: Text(
-          'Mostrando datos guardados ($edad)',
-          style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)),
-        )),
-        GestureDetector(
-          onTap: onRefresh,
-          child: const Icon(Icons.refresh, color: Color(0xFFE65100), size: 16),
-        ),
+        Expanded(child: Text('Mostrando datos guardados ($edad)',
+            style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)))),
+        GestureDetector(onTap: onRefresh,
+            child: const Icon(Icons.refresh, color: Color(0xFFE65100), size: 16)),
       ]),
     );
   }

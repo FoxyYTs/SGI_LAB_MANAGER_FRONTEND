@@ -264,277 +264,407 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
-        title: const Text(
-          'Mi Perfil',
-          style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold),
-        ),
+        title: const Text('Mi Perfil',
+            style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: kPrimary),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: kPrimary))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Avatar + username
-                        Center(
-                          child: Column(
-                            children: [
-                              GestureDetector(
-                                onTap: _subiendoFoto ? null : _seleccionarFoto,
-                                child: Stack(
-                                  alignment: Alignment.bottomRight,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 42,
-                                      backgroundColor: kPrimary.withValues(alpha: 0.15),
-                                      backgroundImage: _fotoUrl != null
-                                          ? NetworkImage(_fotoUrl!)
-                                          : null,
-                                      child: _subiendoFoto
-                                          ? const SizedBox(
-                                              width: 28,
-                                              height: 28,
-                                              child: CircularProgressIndicator(
-                                                  color: kPrimary, strokeWidth: 2.5),
-                                            )
-                                          : (_fotoUrl == null
-                                              ? const Icon(Icons.person,
-                                                  size: 44, color: kPrimary)
-                                              : null),
-                                    ),
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: kPrimary,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: Colors.white, width: 2),
-                                      ),
-                                      padding: const EdgeInsets.all(4),
-                                      child: const Icon(Icons.camera_alt,
-                                          color: Colors.white, size: 14),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Toca para cambiar foto',
-                                style: TextStyle(
-                                    fontSize: 11, color: kTextMuted),
-                              ),
-                              const SizedBox(height: 6),
-                              if (_rol != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: kPrimary.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    _rol!,
-                                    style: const TextStyle(
-                                        color: kPrimary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 28),
-
-                        // ── Datos personales ──────────────────────────────
-                        _seccionLabel('Datos personales'),
-                        const SizedBox(height: 12),
-                        Row(
+          : LayoutBuilder(builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth > 700;
+              return SingleChildScrollView(
+                padding: EdgeInsets.all(isDesktop ? 24 : 20),
+                child: Form(
+                  key: _formKey,
+                  child: isDesktop
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _firstNameCtrl,
-                                decoration: _inputDec('Nombre', Icons.person_outline),
-                                validator: (v) =>
-                                    (v == null || v.trim().isEmpty)
-                                        ? 'Requerido'
-                                        : null,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _lastNameCtrl,
-                                decoration: _inputDec('Apellido', Icons.person_outline),
-                                validator: (v) =>
-                                    (v == null || v.trim().isEmpty)
-                                        ? 'Requerido'
-                                        : null,
-                              ),
-                            ),
+                            SizedBox(width: 280, child: _buildPanelIzquierdo(context)),
+                            const SizedBox(width: 20),
+                            Expanded(child: _buildPanelDerecho()),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildAvatarSection(),
+                            const SizedBox(height: 24),
+                            _buildFormDatos(),
+                            const SizedBox(height: 20),
+                            _buildFormPassword(),
                           ],
                         ),
-                        const SizedBox(height: 14),
-                        TextFormField(
-                          controller: _emailCtrl,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: _inputDec('Correo electrónico', Icons.email_outlined),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Requerido';
-                            if (!v.contains('@')) return 'Correo inválido';
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 14),
-                        TextFormField(
-                          controller: _telefonoCtrl,
-                          keyboardType: TextInputType.phone,
-                          decoration: _inputDec('Teléfono / Celular', Icons.phone_outlined),
-                        ),
-                        const SizedBox(height: 28),
+                ),
+              );
+            }),
+    );
+  }
 
-                        // ── Información académica ─────────────────────────
-                        _seccionLabel('Información académica'),
-                        const SizedBox(height: 12),
+  // ── Panel izquierdo (solo desktop) ───────────────────────────────────────
 
-                        // Programa
-                        DropdownButtonFormField<String>(
-                          // ignore: deprecated_member_use
-                          value: _programaSeleccionado,
-                          decoration: _inputDec('Programa académico', Icons.school_outlined),
-                          isExpanded: true,
-                          items: [
-                            const DropdownMenuItem<String>(
-                              value: null,
-                              child: Text('Sin programa',
-                                  style: TextStyle(color: kTextMuted)),
-                            ),
-                            ..._programas.map((p) => DropdownMenuItem<String>(
-                              value: p['id'].toString(),
-                              child: Text(
-                                p['nombre'] as String? ?? p['id'].toString(),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            )),
-                          ],
-                          onChanged: (v) => setState(() => _programaSeleccionado = v),
-                        ),
-                        const SizedBox(height: 14),
+  Widget _buildPanelIzquierdo(BuildContext context) {
+    final auth     = context.read<AuthProvider>();
+    final nombre   = '${_firstNameCtrl.text} ${_lastNameCtrl.text}'.trim();
+    final iniciales = nombre.isNotEmpty
+        ? nombre.split(' ').take(2).map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join()
+        : '?';
 
-                        // Semestre
-                        TextFormField(
-                          controller: _semestreCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: _inputDec('Semestre (1–10)', Icons.format_list_numbered_outlined),
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return null;
-                            final n = int.tryParse(v.trim());
-                            if (n == null || n < 1 || n > 10) {
-                              return 'Semestre debe ser entre 1 y 10';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 32),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+        // Avatar
+        GestureDetector(
+          onTap: _subiendoFoto ? null : _seleccionarFoto,
+          child: Stack(alignment: Alignment.bottomRight, children: [
+            CircleAvatar(
+              radius: 48,
+              backgroundColor: kPrimary.withValues(alpha: 0.15),
+              backgroundImage: _fotoUrl != null ? NetworkImage(_fotoUrl!) : null,
+              child: _subiendoFoto
+                  ? const SizedBox(width: 28, height: 28,
+                      child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2.5))
+                  : (_fotoUrl == null
+                      ? Text(iniciales,
+                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: kPrimary))
+                      : null),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                  color: kPrimary, shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2)),
+              padding: const EdgeInsets.all(5),
+              child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+            ),
+          ]),
+        ),
+        const SizedBox(height: 12),
 
-                        // ── Botón guardar datos ───────────────────────────
-                        SizedBox(
-                          width: double.infinity,
-                          height: 46,
-                          child: ElevatedButton.icon(
-                            onPressed: _guardando ? null : _guardar,
-                            icon: _guardando
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.save_outlined, size: 18),
-                            label: Text(
-                              _guardando ? 'Guardando...' : 'Guardar cambios',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 36),
+        // Nombre
+        Text(nombre.isEmpty ? (auth.username ?? '') : nombre,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center),
+        const SizedBox(height: 6),
 
-                        // ── Sección cambio de contraseña ──────────────────
-                        _seccionLabel('Cambiar contraseña'),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: _passActualCtrl,
-                          obscureText: !_verPassActual,
-                          decoration: _inputDec('Contraseña actual', Icons.lock_outline).copyWith(
-                            suffixIcon: IconButton(
-                              icon: Icon(_verPassActual ? Icons.visibility_off : Icons.visibility, size: 18),
-                              onPressed: () => setState(() => _verPassActual = !_verPassActual),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _passNuevaCtrl,
-                          obscureText: !_verPassNueva,
-                          decoration: _inputDec('Nueva contraseña', Icons.lock_person_outlined).copyWith(
-                            suffixIcon: IconButton(
-                              icon: Icon(_verPassNueva ? Icons.visibility_off : Icons.visibility, size: 18),
-                              onPressed: () => setState(() => _verPassNueva = !_verPassNueva),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _passNueva2Ctrl,
-                          obscureText: !_verPassNueva2,
-                          decoration: _inputDec('Confirmar nueva contraseña', Icons.lock_reset_outlined).copyWith(
-                            suffixIcon: IconButton(
-                              icon: Icon(_verPassNueva2 ? Icons.visibility_off : Icons.visibility, size: 18),
-                              onPressed: () => setState(() => _verPassNueva2 = !_verPassNueva2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 46,
-                          child: OutlinedButton.icon(
-                            onPressed: _cambiandoPass ? null : _cambiarPassword,
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: kPrimary),
-                              foregroundColor: kPrimary,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                            ),
-                            icon: _cambiandoPass
-                                ? const SizedBox(
-                                    width: 18, height: 18,
-                                    child: CircularProgressIndicator(
-                                        color: kPrimary, strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.key_outlined, size: 18),
-                            label: Text(
-                              _cambiandoPass ? 'Actualizando...' : 'Cambiar contraseña',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
+        // Chip rol
+        if (_rol != null)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(_rol!,
+                style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+
+        const SizedBox(height: 16),
+        const Divider(),
+        const SizedBox(height: 12),
+
+        // Info de solo lectura
+        _infoRow(Icons.email_outlined,     'Correo',    _emailCtrl.text.isNotEmpty ? _emailCtrl.text : '—'),
+        _infoRow(Icons.phone_outlined,     'Teléfono',  _telefonoCtrl.text.isNotEmpty ? _telefonoCtrl.text : '—'),
+        _infoRow(Icons.school_outlined,    'Programa',
+            _programas.firstWhere(
+                (p) => p['id'].toString() == _programaSeleccionado,
+                orElse: () => {'nombre': '—'})['nombre'] as String? ?? '—'),
+        _infoRow(Icons.format_list_numbered_outlined, 'Semestre',
+            _semestreCtrl.text.isNotEmpty ? 'Semestre ${_semestreCtrl.text}' : '—'),
+
+        const SizedBox(height: 20),
+        const Divider(),
+        const SizedBox(height: 12),
+
+        // Botón cerrar sesión
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              final auth = context.read<AuthProvider>();
+              await auth.logout();
+            },
+            icon: const Icon(Icons.logout, size: 16, color: kDanger),
+            label: const Text('Cerrar sesión',
+                style: TextStyle(color: kDanger, fontSize: 13)),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: kDanger),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _infoRow(IconData icon, String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(children: [
+      Icon(icon, size: 16, color: kTextMuted),
+      const SizedBox(width: 8),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: kTextMuted)),
+        Text(value, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+      ])),
+    ]),
+  );
+
+  // ── Panel derecho ─────────────────────────────────────────────────────────
+
+  Widget _buildPanelDerecho() => Column(children: [
+    _buildFormDatos(),
+    const SizedBox(height: 16),
+    _buildFormPassword(),
+  ]);
+
+  // ── Avatar (móvil) ────────────────────────────────────────────────────────
+
+  Widget _buildAvatarSection() => Center(
+    child: Column(children: [
+      GestureDetector(
+        onTap: _subiendoFoto ? null : _seleccionarFoto,
+        child: Stack(alignment: Alignment.bottomRight, children: [
+          CircleAvatar(
+            radius: 42,
+            backgroundColor: kPrimary.withValues(alpha: 0.15),
+            backgroundImage: _fotoUrl != null ? NetworkImage(_fotoUrl!) : null,
+            child: _subiendoFoto
+                ? const SizedBox(width: 28, height: 28,
+                    child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2.5))
+                : (_fotoUrl == null
+                    ? const Icon(Icons.person, size: 44, color: kPrimary)
+                    : null),
+          ),
+          Container(
+            decoration: BoxDecoration(
+                color: kPrimary, shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2)),
+            padding: const EdgeInsets.all(4),
+            child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 6),
+      Text('Toca para cambiar foto', style: TextStyle(fontSize: 11, color: kTextMuted)),
+      const SizedBox(height: 6),
+      if (_rol != null)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12)),
+          child: Text(_rol!,
+              style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold, fontSize: 12)),
+        ),
+    ]),
+  );
+
+  // ── Card Datos personales ─────────────────────────────────────────────────
+
+  Widget _buildFormDatos() => Container(
+    decoration: BoxDecoration(
+      color: Colors.white, borderRadius: BorderRadius.circular(10),
+      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+    ),
+    child: Column(children: [
+      // Header azul
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: const BoxDecoration(
+          color: kPrimary,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+        ),
+        child: const Row(children: [
+          Icon(Icons.person_outline, color: Colors.white, size: 18),
+          SizedBox(width: 8),
+          Text('Datos Personales',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: TextFormField(
+              controller: _firstNameCtrl,
+              decoration: _inputDec('Nombre', Icons.person_outline),
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: TextFormField(
+              controller: _lastNameCtrl,
+              decoration: _inputDec('Apellido', Icons.person_outline),
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+            )),
+          ]),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _emailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            decoration: _inputDec('Correo electrónico', Icons.email_outlined),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return 'Requerido';
+              if (!v.contains('@')) return 'Correo inválido';
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: TextFormField(
+              controller: _telefonoCtrl,
+              keyboardType: TextInputType.phone,
+              decoration: _inputDec('Teléfono', Icons.phone_outlined),
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: DropdownButtonFormField<String>(
+              // ignore: deprecated_member_use
+              value: _programaSeleccionado,
+              decoration: _inputDec('Programa', Icons.school_outlined),
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('Sin programa', style: TextStyle(color: kTextMuted)),
+                ),
+                ..._programas.map((p) => DropdownMenuItem<String>(
+                  value: p['id'].toString(),
+                  child: Text(p['nombre'] as String? ?? p['id'].toString(),
+                      overflow: TextOverflow.ellipsis),
+                )),
+              ],
+              onChanged: (v) => setState(() => _programaSeleccionado = v),
+            )),
+          ]),
+          const SizedBox(height: 12),
+          SizedBox(width: 200, child: TextFormField(
+            controller: _semestreCtrl,
+            keyboardType: TextInputType.number,
+            decoration: _inputDec('Semestre (1–10)', Icons.format_list_numbered_outlined),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return null;
+              final n = int.tryParse(v.trim());
+              if (n == null || n < 1 || n > 10) return 'Entre 1 y 10';
+              return null;
+            },
+          )),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              height: 42,
+              child: ElevatedButton.icon(
+                onPressed: _guardando ? null : _guardar,
+                icon: _guardando
+                    ? const SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.save_outlined, size: 18),
+                label: Text(_guardando ? 'Guardando...' : 'Guardar cambios',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimary, foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                 ),
               ),
             ),
-    );
-  }
+          ),
+        ]),
+      ),
+    ]),
+  );
+
+  // ── Card Seguridad ────────────────────────────────────────────────────────
+
+  Widget _buildFormPassword() => Container(
+    decoration: BoxDecoration(
+      color: Colors.white, borderRadius: BorderRadius.circular(10),
+      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+    ),
+    child: Column(children: [
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: const BoxDecoration(
+          color: kPrimary,
+          borderRadius: BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+        ),
+        child: const Row(children: [
+          Icon(Icons.lock_outline, color: Colors.white, size: 18),
+          SizedBox(width: 8),
+          Text('Seguridad',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Actualiza tu contraseña regularmente.',
+              style: TextStyle(fontSize: 12, color: kTextMuted)),
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _passActualCtrl,
+            obscureText: !_verPassActual,
+            decoration: _inputDec('Contraseña actual', Icons.lock_outline).copyWith(
+              suffixIcon: IconButton(
+                icon: Icon(_verPassActual ? Icons.visibility_off : Icons.visibility, size: 18),
+                onPressed: () => setState(() => _verPassActual = !_verPassActual),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextFormField(
+              controller: _passNuevaCtrl,
+              obscureText: !_verPassNueva,
+              decoration: _inputDec('Nueva contraseña', Icons.lock_person_outlined).copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(_verPassNueva ? Icons.visibility_off : Icons.visibility, size: 18),
+                  onPressed: () => setState(() => _verPassNueva = !_verPassNueva),
+                ),
+              ),
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: TextFormField(
+              controller: _passNueva2Ctrl,
+              obscureText: !_verPassNueva2,
+              decoration: _inputDec('Confirmar contraseña', Icons.lock_reset_outlined).copyWith(
+                suffixIcon: IconButton(
+                  icon: Icon(_verPassNueva2 ? Icons.visibility_off : Icons.visibility, size: 18),
+                  onPressed: () => setState(() => _verPassNueva2 = !_verPassNueva2),
+                ),
+              ),
+            )),
+          ]),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 42,
+            child: OutlinedButton.icon(
+              onPressed: _cambiandoPass ? null : _cambiarPassword,
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: kPrimary),
+                foregroundColor: kPrimary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: _cambiandoPass
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
+                  : const Icon(Icons.key_outlined, size: 18),
+              label: Text(_cambiandoPass ? 'Actualizando...' : 'Cambiar contraseña',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+          ),
+        ]),
+      ),
+    ]),
+  );
 
   Widget _seccionLabel(String texto) {
     return Column(

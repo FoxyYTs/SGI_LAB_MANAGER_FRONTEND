@@ -934,6 +934,13 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     );
   }
 
+  // Genera un color de borde para la asignatura basado en su nombre
+  static Color _colorBloque(String nombre) {
+    final hash = nombre.codeUnits.fold(0, (a, b) => a + b);
+    const palette = [kPrimary, Color(0xFF6F42C1), Color(0xFF28A745), Color(0xFF17A2B8), Color(0xFFE65100)];
+    return palette[hash % palette.length];
+  }
+
   // Chip para un bloque (posiblemente fusionado)
   Widget _chipAsignatura(_Bloque b, int dia, bool puedeEditar) {
     final item     = b.itemsByHora[0][0];
@@ -942,6 +949,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final grupo    = item['grupo']?.toString() ?? '';
     final subtitle = [if (docente.isNotEmpty) docente, if (grupo.isNotEmpty) grupo].join(' · ');
     final isMulti  = b.duracion > 1;
+    final color    = _colorBloque(nombre);
 
     return GestureDetector(
       onLongPress: puedeEditar ? () => _eliminarBloque(dia, b) : null,
@@ -954,12 +962,15 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
           height: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           decoration: BoxDecoration(
-            color: kPrimary.withValues(alpha: 0.12),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: kPrimary.withValues(alpha: isMulti ? 0.5 : 0.3),
-              width: isMulti ? 1.5 : 1,
+            border: Border(
+              left:   BorderSide(color: color, width: 3),
+              top:    const BorderSide(color: Color(0xFFDEE2E6)),
+              right:  const BorderSide(color: Color(0xFFDEE2E6)),
+              bottom: const BorderSide(color: Color(0xFFDEE2E6)),
             ),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -968,8 +979,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
               Row(children: [
                 Expanded(
                   child: Text(nombre,
-                      style: const TextStyle(
-                          fontSize: 10, fontWeight: FontWeight.bold, color: kPrimary),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
                       overflow: TextOverflow.ellipsis,
                       maxLines: isMulti ? 2 : 1),
                 ),
@@ -978,12 +988,11 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                     decoration: BoxDecoration(
-                      color: kPrimary.withValues(alpha: 0.2),
+                      color: const Color(0xFFE9ECEF),
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: Text('${b.duracion}h',
-                        style: const TextStyle(
-                            fontSize: 8, color: kPrimary, fontWeight: FontWeight.bold)),
+                        style: const TextStyle(fontSize: 8, color: kTextMuted, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ]),
@@ -1004,28 +1013,31 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final nombre   = item['nombre_asignatura']?.toString() ?? '?';
     final docente  = item['docente']?.toString() ?? '';
     final grupo    = item['grupo']?.toString() ?? '';
-    final subtitle =
-        [if (docente.isNotEmpty) docente, if (grupo.isNotEmpty) grupo].join(' · ');
+    final subtitle = [if (docente.isNotEmpty) docente, if (grupo.isNotEmpty) grupo].join(' · ');
+    final color    = _colorBloque(nombre);
 
     return GestureDetector(
       onLongPress: puedeEditar ? () => _eliminar(dia, hora, item) : null,
       child: Tooltip(
-        message:
-            '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}\nMantén presionado para quitar',
+        message: '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}\nMantén presionado para quitar',
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           decoration: BoxDecoration(
-            color: kPrimary.withValues(alpha: 0.12),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: kPrimary.withValues(alpha: 0.3)),
+            border: Border(
+              left:   BorderSide(color: color, width: 3),
+              top:    const BorderSide(color: Color(0xFFDEE2E6)),
+              right:  const BorderSide(color: Color(0xFFDEE2E6)),
+              bottom: const BorderSide(color: Color(0xFFDEE2E6)),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(nombre,
-                  style: const TextStyle(
-                      fontSize: 10, fontWeight: FontWeight.bold, color: kPrimary),
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
                   overflow: TextOverflow.ellipsis),
               if (subtitle.isNotEmpty)
                 Text(subtitle,

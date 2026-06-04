@@ -120,42 +120,51 @@ class _BitacoraContentState extends State<BitacoraContent> {
           ],
           // ── Encabezado ────────────────────────────────────────────────
           Row(children: [
-            const Expanded(child: Text('Bitácora de movimientos',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis)),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Bitácora de movimientos',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const Text('Historial de entradas, salidas y ajustes de stock',
+                  style: TextStyle(fontSize: 12, color: kTextMuted)),
+            ]),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: kPrimary, size: 20),
+              tooltip: 'Actualizar',
               onPressed: _cargar,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Actualizar'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary, foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
             ),
           ]),
           const SizedBox(height: 12),
 
-          // ── Chips de filtro ───────────────────────────────────────────
+          // ── Chips de filtro pill ──────────────────────────────────────
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: _tipos.map((tipo) {
-                final sel = _filtroTipo == tipo;
+                final sel   = _filtroTipo == tipo;
                 final color = tipo == 'Todos' ? kPrimary : _colorTipo(tipo);
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(_labels[tipo] ?? tipo),
-                    selected: sel,
-                    selectedColor: color,
-                    labelStyle: TextStyle(
-                      color: sel ? Colors.white : kTextMuted,
-                      fontWeight: sel ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    onSelected: (_) {
+                  child: GestureDetector(
+                    onTap: () {
                       setState(() => _filtroTipo = tipo);
                       _cargar();
                     },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: sel ? color : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: sel ? color : const Color(0xFFDEE2E6)),
+                      ),
+                      child: Text(
+                        _labels[tipo] ?? tipo,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: sel ? Colors.white : kTextMuted,
+                          fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
                   ),
                 );
               }).toList(),
@@ -180,21 +189,29 @@ class _BitacoraContentState extends State<BitacoraContent> {
                           ),
                         ]),
                       )
-                    : Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: const [
-                            BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: SingleChildScrollView(
-                            child: _buildTabla(),
+                    : Column(children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: SingleChildScrollView(child: _buildTabla()),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'Mostrando ${_movimientos.length} movimiento${_movimientos.length != 1 ? "s" : ""}',
+                            style: const TextStyle(fontSize: 12, color: kTextMuted),
+                          ),
+                        ),
+                      ]),
           ),
         ],
       ),
@@ -235,17 +252,8 @@ class _BitacoraContentState extends State<BitacoraContent> {
                     style: const TextStyle(fontWeight: FontWeight.w500)),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(_iconTipo(tipo), size: 14, color: color),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(_labels[tipo] ?? tipo,
-                        style: TextStyle(color: color, fontSize: 12,
-                            fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis),
-                  ),
-                ]),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+                child: _chipTipo(tipo),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
@@ -268,6 +276,29 @@ class _BitacoraContentState extends State<BitacoraContent> {
           );
         }),
       ],
+    );
+  }
+
+  Widget _chipTipo(String tipo) {
+    final color = _colorTipo(tipo);
+    final bg    = switch (tipo) {
+      'ENTRADA'          => const Color(0xFFE8F5E9),
+      'SALIDA'           => const Color(0xFFFFEBEE),
+      'AJUSTE'           => const Color(0xFFE3F2FD),
+      'ROTURA'           => const Color(0xFFFFF8E1),
+      'CONSUMO_PRACTICA' => const Color(0xFFF3E5F5),
+      _                  => const Color(0xFFF5F5F5),
+    };
+    final label = _labels[tipo] ?? tipo;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(_iconTipo(tipo), size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+      ]),
     );
   }
 

@@ -673,139 +673,217 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   }
 
   Widget _buildPermisosPanel() {
-    final auth       = context.watch<AuthProvider>();
-    final nombre     = '${_seleccionado!['first_name'] ?? ''} ${_seleccionado!['last_name'] ?? ''}'.trim();
-    final username   = _seleccionado!['username'] as String;
-    final rol        = (_seleccionado!['perfil']?['rol'] ?? '') as String;
+    final auth        = context.watch<AuthProvider>();
+    final nombre      = '${_seleccionado!['first_name'] ?? ''} ${_seleccionado!['last_name'] ?? ''}'.trim();
+    final username    = _seleccionado!['username'] as String;
+    final email       = _seleccionado!['email'] as String? ?? '';
+    final rol         = (_seleccionado!['perfil']?['rol'] ?? '') as String;
     final esMiUsuario = auth.username == username;
-    final isActivo   = _seleccionado!['is_active'] as bool? ?? true;
+    final isActivo    = _seleccionado!['is_active'] as bool? ?? true;
+    final esAdmin     = rol == 'ADMIN';
+    final iniciales   = (nombre.isEmpty ? username : nombre)
+        .split(' ').take(2).map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       children: [
-        // ── Encabezado del usuario ──────────────────────────────────────
-        Row(children: [
-          const Icon(Icons.person_outline, color: kPrimary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Text(nombre.isEmpty ? username : nombre,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                if (!isActivo) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: kDanger.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      'Inactivo',
-                      style: TextStyle(
-                          fontSize: 10, color: kDanger, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ],
-              ]),
-              Text('@$username',
-                  style: const TextStyle(color: kTextMuted, fontSize: 12)),
-            ]),
+        // ── Card usuario ──────────────────────────────────────────────────
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(10),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
           ),
-          if (!esMiUsuario) ...[
-            IconButton(
-              tooltip: 'Editar perfil',
-              onPressed: () => _abrirEditarPerfil(_seleccionado!),
-              icon: const Icon(Icons.edit_outlined, size: 18, color: kPrimary),
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            // Avatar
+            CircleAvatar(
+              radius: 24, backgroundColor: kPrimary.withValues(alpha: 0.15),
+              child: Text(iniciales, style: const TextStyle(
+                  color: kPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
             ),
-            _toggling
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(color: kDanger, strokeWidth: 2))
-                : IconButton(
-                    tooltip: isActivo ? 'Desactivar cuenta' : 'Activar cuenta',
-                    onPressed: () => _toggleActivo(_seleccionado!),
-                    icon: Icon(
-                      isActivo
-                          ? Icons.person_off_outlined
-                          : Icons.person_outlined,
-                      size: 18,
-                      color: isActivo ? kDanger : kSuccess,
-                    ),
+            const SizedBox(width: 14),
+            // Nombre + email
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(nombre.isEmpty ? username : nombre,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              if (email.isNotEmpty)
+                Text(email, style: const TextStyle(color: kTextMuted, fontSize: 12)),
+            ])),
+            const SizedBox(width: 12),
+            // Rol selector
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              const Text('ROL ASIGNADO',
+                  style: TextStyle(fontSize: 9, color: kTextMuted, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              if (_cambiandoRol)
+                const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
+              else if (esMiUsuario)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: kPrimary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text(rol, style: const TextStyle(color: kPrimary, fontSize: 12, fontWeight: FontWeight.bold)),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFDEE2E6)),
+                      borderRadius: BorderRadius.circular(8)),
+                  child: DropdownButton<String>(
+                    value: rol.isEmpty ? null : rol,
+                    underline: const SizedBox.shrink(),
+                    isDense: true,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF223542)),
+                    items: _rolesDisponibles.map((r) => DropdownMenuItem(
+                      value: r,
+                      child: Text(r),
+                    )).toList(),
+                    onChanged: (v) { if (v != null && v != rol) _cambiarRol(v); },
                   ),
-          ],
-        ]),
-        const Divider(height: 24),
-
-        // ── Selector de rol ─────────────────────────────────────────────
-        Row(children: [
-          const Icon(Icons.badge_outlined, size: 18, color: kPrimary),
-          const SizedBox(width: 8),
-          const Text('Rol:', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(width: 12),
-          if (_cambiandoRol)
-            const SizedBox(width: 18, height: 18,
-                child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
-          else if (esMiUsuario)
-            Text(rol, style: const TextStyle(color: kTextMuted))
-          else
-            DropdownButton<String>(
-              value: rol.isEmpty ? null : rol,
-              underline: const SizedBox.shrink(),
-              isDense: true,
-              items: _rolesDisponibles.map((r) => DropdownMenuItem(
-                value: r,
-                child: Text(r, style: const TextStyle(fontSize: 13)),
-              )).toList(),
-              onChanged: (v) {
-                if (v != null && v != rol) _cambiarRol(v);
-              },
-            ),
-          if (esMiUsuario) ...[
-            const SizedBox(width: 8),
-            const Text('(tu cuenta)', style: TextStyle(fontSize: 11, color: kTextMuted)),
-          ],
-        ]),
+                ),
+            ]),
+            const SizedBox(width: 12),
+            // Estado + acciones
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              const Text('ESTADO CUENTA',
+                  style: TextStyle(fontSize: 9, color: kTextMuted, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Container(
+                  width: 8, height: 8,
+                  decoration: BoxDecoration(
+                      color: isActivo ? kSemaforoVerde : kDanger,
+                      shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 5),
+                Text(isActivo ? 'Activo' : 'Inactivo',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: isActivo ? kSemaforoVerde : kDanger,
+                        fontWeight: FontWeight.w600)),
+              ]),
+            ]),
+            if (!esMiUsuario) ...[
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => _abrirEditarPerfil(_seleccionado!),
+                icon: const Icon(Icons.edit_outlined, size: 14),
+                label: const Text('Editar perfil', style: TextStyle(fontSize: 12)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: kPrimary,
+                  side: const BorderSide(color: kPrimary),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+              ),
+            ],
+          ]),
+        ),
         const SizedBox(height: 16),
 
-        // ── Permisos del rol ────────────────────────────────────────────
-        const Text('Permisos del rol (solo lectura)',
-            style: TextStyle(fontSize: 12, color: kTextMuted, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        ...Perm.todos.where((c) => _rolPermisos.contains(c)).map((c) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(children: [
-            const Icon(Icons.check_circle, color: kSuccess, size: 16),
-            const SizedBox(width: 8),
-            Text(Perm.nombre(c), style: const TextStyle(fontSize: 13)),
-          ]),
-        )),
-        const SizedBox(height: 20),
+        // ── Tabla de permisos ────────────────────────────────────────────
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(10),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Column(children: [
+              // Header azul
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                color: kPrimary,
+                child: Row(children: [
+                  Text('Permisos de $username',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                  const Spacer(),
+                  const Text('Los permisos heredados del rol no pueden quitarse individualmente.',
+                      style: TextStyle(color: Colors.white70, fontSize: 11)),
+                ]),
+              ),
 
-        // ── Permisos extra ──────────────────────────────────────────────
-        const Text('Permisos adicionales (editables)',
-            style: TextStyle(fontSize: 12, color: kPrimary, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        const Text('Estos permisos se suman a los del rol.',
-            style: TextStyle(fontSize: 11, color: kTextMuted)),
-        const SizedBox(height: 8),
-        ...Perm.todos.map((codigo) {
-          final delRol = _rolPermisos.contains(codigo);
-          final extra  = _extraPermisos.contains(codigo);
-          return CheckboxListTile(
-            value: extra,
-            dense: true,
-            activeColor: kPrimary,
-            subtitle: delRol
-                ? const Text('Ya incluido en el rol',
-                    style: TextStyle(fontSize: 10, color: kTextMuted))
-                : null,
-            title: Text(Perm.nombre(codigo), style: const TextStyle(fontSize: 13)),
-            secondary: Text(codigo, style: const TextStyle(fontSize: 10, color: kTextMuted)),
-            onChanged: delRol ? null : (v) => _toggleExtra(codigo, v!),
-          );
-        }),
+              // Banner ADMIN
+              if (esAdmin)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: kPrimary.withValues(alpha: 0.08),
+                  child: const Row(children: [
+                    Icon(Icons.info_outline, color: kPrimary, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(child: Text(
+                      'Este usuario tiene todos los permisos como ADMIN. Los permisos extra no aplican.',
+                      style: TextStyle(color: kPrimary, fontSize: 12),
+                    )),
+                  ]),
+                ),
+
+              // Cabecera tabla
+              Container(
+                color: const Color(0xFFF8F9FA),
+                child: const Row(children: [
+                  Expanded(child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text('PERMISO',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)),
+                  )),
+                  SizedBox(width: 80, child: Center(child: Text('DE ROL',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)))),
+                  SizedBox(width: 80, child: Center(child: Text('EXTRA',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)))),
+                ]),
+              ),
+              const Divider(height: 1, color: Color(0xFFDEE2E6)),
+
+              // Filas de permisos
+              ...Perm.todos.asMap().entries.map((e) {
+                final idx    = e.key;
+                final codigo = e.value;
+                final delRol = esAdmin || _rolPermisos.contains(codigo);
+                final extra  = _extraPermisos.contains(codigo);
+                return Container(
+                  decoration: BoxDecoration(
+                    color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
+                    border: const Border(bottom: BorderSide(color: Color(0xFFDEE2E6))),
+                  ),
+                  child: Row(children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(Perm.nombre(codigo),
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                          Text(codigo,
+                              style: const TextStyle(fontSize: 10, color: kTextMuted)),
+                        ]),
+                      ),
+                    ),
+                    // DE ROL
+                    SizedBox(width: 80, child: Center(
+                      child: delRol
+                          ? const Icon(Icons.lock, size: 18, color: kPrimary)
+                          : const Icon(Icons.remove, size: 16, color: Color(0xFFDEE2E6)),
+                    )),
+                    // EXTRA
+                    SizedBox(width: 80, child: Center(
+                      child: esAdmin || delRol
+                          ? const Icon(Icons.remove, size: 16, color: Color(0xFFDEE2E6))
+                          : Checkbox(
+                              value: extra,
+                              activeColor: kPrimary,
+                              onChanged: (v) => _toggleExtra(codigo, v!),
+                            ),
+                    )),
+                  ]),
+                );
+              }),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 24),
       ],
     );
   }

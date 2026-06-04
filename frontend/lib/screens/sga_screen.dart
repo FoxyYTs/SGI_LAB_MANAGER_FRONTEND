@@ -276,223 +276,263 @@ class _DatosSgaTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (datos.isEmpty) {
-      return _buildEmpty(context);
-    }
+    if (datos.isEmpty) return _buildEmpty(context);
+
+    final fraseH   = (datos['frases_h'] as List?)?.cast<String>() ?? [];
+    final fraseP   = (datos['frases_p'] as List?)?.cast<String>() ?? [];
+    final pics     = (datos['pictogramas_sga'] as List?)?.cast<String>() ?? [];
+    final tieneNfpa = datos['nfpa_salud'] != null ||
+        datos['nfpa_inflamable'] != null || datos['nfpa_reactivo'] != null;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildBanner(datos),
-          const SizedBox(height: 12),
-          _buildPictogramas(datos),
-          const SizedBox(height: 12),
-          if ((datos['frases_h'] as List?)?.isNotEmpty == true) ...[
-            _buildSeccion('Frases H — Indicaciones de peligro',
-                Icons.warning_amber_rounded, kDanger),
-            ...(datos['frases_h'] as List).map((f) => _buildBullet(f.toString())),
-            const SizedBox(height: 8),
-          ],
-          if ((datos['frases_p'] as List?)?.isNotEmpty == true) ...[
-            _buildSeccion('Frases P — Consejos de prudencia',
-                Icons.shield_outlined, kPrimary),
-            ...(datos['frases_p'] as List).map((f) => _buildBullet(f.toString())),
-            const SizedBox(height: 8),
-          ],
-          if (datos['epp']?.toString().isNotEmpty == true) ...[
-            _buildSeccion('EPP', Icons.security_outlined, kTextMuted),
-            _buildCard(datos['epp'].toString()),
-          ],
-          if (datos['primeros_auxilios']?.toString().isNotEmpty == true) ...[
-            _buildSeccion('Primeros auxilios', Icons.medical_services_outlined, kSuccess),
-            _buildCard(datos['primeros_auxilios'].toString()),
-          ],
-          // ── NFPA 704 ────────────────────────────────────────────────────────
-          if (datos['nfpa_salud'] != null || datos['nfpa_inflamable'] != null ||
-              datos['nfpa_reactivo'] != null) ...[
-            _buildSeccion('Rombo NFPA 704', Icons.emergency_outlined, const Color(0xFF8B0000)),
-            const SizedBox(height: 6),
-            _buildNfpa(datos),
-            const SizedBox(height: 8),
-          ],
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildBanner(datos),
+              const SizedBox(height: 16),
 
-          if (datos['fecha_vencimiento']?.toString().isNotEmpty == true) ...[
-            _buildSeccion('Fecha de vencimiento', Icons.event_outlined, kTextMuted),
-            Padding(
-              padding: const EdgeInsets.only(left: 8, bottom: 4),
-              child: Text(datos['fecha_vencimiento'].toString(),
-                  style: const TextStyle(fontSize: 13)),
-            ),
-          ],
+              // Pictogramas + NFPA
+              if (pics.isNotEmpty || tieneNfpa) ...[
+                LayoutBuilder(builder: (ctx, c) {
+                  final dos = c.maxWidth > 580;
+                  final pCard = pics.isNotEmpty ? _buildPictogramasCard(pics) : null;
+                  final nCard = tieneNfpa ? _buildNfpaCard(datos) : null;
+                  if (pCard != null && nCard != null && dos) {
+                    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(flex: 60, child: pCard),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 40, child: nCard),
+                    ]);
+                  }
+                  return Column(children: [
+                    ?pCard,
+                    if (pCard != null && nCard != null) const SizedBox(height: 12),
+                    ?nCard,
+                  ]);
+                }),
+                const SizedBox(height: 12),
+              ],
 
-          if (datos['fds_drive_url']?.toString().isNotEmpty == true)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Ver FDS en Google Drive'),
-                onPressed: () async {
-                  final uri = Uri.parse(datos['fds_drive_url'].toString());
-                  if (await canLaunchUrl(uri)) launchUrl(uri, mode: LaunchMode.externalApplication);
-                },
-              ),
-            ),
-          const SizedBox(height: 24),
-          if (datos['datos_extraidos'] == true)
-            Text(
-              'Datos extraídos automáticamente con Gemini AI · ${datos['fecha_extraccion']?.toString().substring(0, 10) ?? ''}',
-              style: const TextStyle(color: kTextMuted, fontSize: 11),
-            ),
-        ],
+              if (fraseH.isNotEmpty) ...[
+                _buildFrasesCard('H — Indicaciones de peligro',
+                    Icons.warning_amber_rounded, kDanger, fraseH),
+                const SizedBox(height: 12),
+              ],
+              if (fraseP.isNotEmpty) ...[
+                _buildFrasesCard('P — Consejos de prudencia',
+                    Icons.shield_outlined, kPrimary, fraseP),
+                const SizedBox(height: 12),
+              ],
+              if (datos['epp']?.toString().isNotEmpty == true) ...[
+                _SgaCard(
+                  titulo: 'EPP — Equipo de Protección',
+                  icon: Icons.security_outlined,
+                  headerColor: kPrimary,
+                  child: Text(datos['epp'].toString(),
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (datos['primeros_auxilios']?.toString().isNotEmpty == true) ...[
+                _SgaCard(
+                  titulo: 'Primeros auxilios',
+                  icon: Icons.medical_services_outlined,
+                  headerColor: kSuccess,
+                  child: Text(datos['primeros_auxilios'].toString(),
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (datos['fecha_vencimiento']?.toString().isNotEmpty == true) ...[
+                _SgaCard(
+                  titulo: 'Fecha de vencimiento',
+                  icon: Icons.event_outlined,
+                  headerColor: kTextMuted,
+                  child: Text(datos['fecha_vencimiento'].toString(),
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              if (datos['fds_drive_url']?.toString().isNotEmpty == true)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Ver FDS en Google Drive'),
+                  onPressed: () async {
+                    final uri = Uri.parse(datos['fds_drive_url'].toString());
+                    if (await canLaunchUrl(uri)) {
+                      launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                ),
+
+              const SizedBox(height: 16),
+              if (datos['datos_extraidos'] == true)
+                Text(
+                  'Datos extraídos automáticamente · '
+                  '${datos['fecha_extraccion']?.toString().substring(0, 10) ?? ''}',
+                  style: const TextStyle(color: kTextMuted, fontSize: 11),
+                ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildEmpty(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.science_outlined, size: 64, color: kTextMuted),
-        const SizedBox(height: 12),
-        const Text('Sin datos SGA cargados',
-            style: TextStyle(fontSize: 16, color: kTextMuted)),
-        const SizedBox(height: 8),
-        const Text('Sube la FDS (PDF) para extraer datos automáticamente',
-            style: TextStyle(color: kTextMuted, fontSize: 13),
-            textAlign: TextAlign.center),
-        const SizedBox(height: 16),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.upload_file),
-          label: const Text('Subir FDS'),
-          style: ElevatedButton.styleFrom(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.science_outlined, size: 64, color: kTextMuted),
+      const SizedBox(height: 12),
+      const Text('Sin datos SGA cargados',
+          style: TextStyle(fontSize: 16, color: kTextMuted)),
+      const SizedBox(height: 8),
+      const Text('Sube la FDS (PDF) para extraer datos automáticamente',
+          style: TextStyle(color: kTextMuted, fontSize: 13), textAlign: TextAlign.center),
+      const SizedBox(height: 16),
+      ElevatedButton.icon(
+        icon: const Icon(Icons.upload_file),
+        label: const Text('Subir FDS'),
+        style: ElevatedButton.styleFrom(
             backgroundColor: kPrimary, foregroundColor: Colors.white),
-          onPressed: () => (context.findAncestorStateOfType<_SgaScreenState>())?._extraerFDS(),
-        ),
-      ],
-    ),
+        onPressed: () =>
+            (context.findAncestorStateOfType<_SgaScreenState>())?._extraerFDS(),
+      ),
+    ]),
   );
 
   Widget _buildBanner(Map<String, dynamic> d) {
-    final pwa = d['palabra_advertencia']?.toString() ?? '';
+    final pwa   = d['palabra_advertencia']?.toString() ?? '';
     final color = pwa == 'PELIGRO' ? kDanger : kSemaforoAmarillo;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color, width: 1.5),
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.45), width: 1.5),
       ),
-      child: Row(
-        children: [
-          Icon(Icons.warning_amber_rounded, color: color, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (pwa.isNotEmpty)
-                  Text(pwa, style: TextStyle(
-                      fontWeight: FontWeight.bold, color: color, fontSize: 18)),
-                Text(d['nombre_producto']?.toString() ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                if (d['numero_cas']?.toString().isNotEmpty == true)
-                  Text('CAS: ${d['numero_cas']}',
-                      style: const TextStyle(color: kTextMuted, fontSize: 12)),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: Column(children: [
+        Icon(Icons.warning_amber_rounded, color: color, size: 42),
+        const SizedBox(height: 6),
+        if (pwa.isNotEmpty)
+          Text(pwa, style: TextStyle(
+              fontWeight: FontWeight.bold, color: color, fontSize: 22)),
+        const SizedBox(height: 4),
+        Text(d['nombre_producto']?.toString() ?? insumoNombre,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            textAlign: TextAlign.center),
+        if (d['formula_quimica']?.toString().isNotEmpty == true)
+          Text(d['formula_quimica'].toString(),
+              style: const TextStyle(fontSize: 13, color: kTextMuted)),
+        if (d['numero_cas']?.toString().isNotEmpty == true)
+          Text('CAS: ${d['numero_cas']}',
+              style: const TextStyle(color: kTextMuted, fontSize: 12)),
+      ]),
     );
   }
 
-  Widget _buildPictogramas(Map<String, dynamic> d) {
-    final pics = (d['pictogramas_sga'] as List?)?.cast<String>() ?? [];
-    if (pics.isEmpty) return const SizedBox.shrink();
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+  Widget _buildPictogramasCard(List<String> pics) => _SgaCard(
+    titulo: 'Pictogramas GHS',
+    icon: Icons.category_outlined,
+    headerColor: kPrimary,
+    child: Wrap(
+      spacing: 8, runSpacing: 8,
       children: pics.map((code) {
-        final info = _ghsInfo[code];
-        final emoji  = info?.$1 ?? '?';
-        final label  = info?.$2 ?? code;
-        final color  = info?.$3 ?? Colors.grey;
+        final info  = _ghsInfo[code];
+        final emoji = info?.$1 ?? '?';
+        final label = info?.$2 ?? code;
+        final color = info?.$3 ?? Colors.grey;
         return Container(
           width: 72,
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            border: Border.all(color: color, width: 2),
-            borderRadius: BorderRadius.circular(8),
-            color: color.withValues(alpha: 0.07),
+            border: Border.all(color: color, width: 1.5),
+            borderRadius: BorderRadius.circular(6),
+            color: color.withValues(alpha: 0.06),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(height: 4),
-              Text(code, style: TextStyle(
-                  fontSize: 9, color: color, fontWeight: FontWeight.bold)),
-              Text(label, style: const TextStyle(fontSize: 9, color: kTextMuted),
-                  textAlign: TextAlign.center, maxLines: 2),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(emoji, style: const TextStyle(fontSize: 26)),
+            const SizedBox(height: 4),
+            Text(code, style: TextStyle(
+                fontSize: 9, color: color, fontWeight: FontWeight.bold)),
+            Text(label, style: const TextStyle(fontSize: 9, color: kTextMuted),
+                textAlign: TextAlign.center, maxLines: 2),
+          ]),
         );
       }).toList(),
-    );
-  }
-
-  Widget _buildSeccion(String title, IconData icon, Color color) => Padding(
-    padding: const EdgeInsets.only(top: 8, bottom: 4),
-    child: Row(children: [
-      Icon(icon, size: 16, color: color),
-      const SizedBox(width: 6),
-      Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color, fontSize: 13)),
-    ]),
+    ),
   );
 
-  Widget _buildBullet(String text) => Padding(
-    padding: const EdgeInsets.only(left: 8, bottom: 2),
+  Widget _buildNfpaCard(Map<String, dynamic> d) => _SgaCard(
+    titulo: 'Rombo NFPA 704',
+    icon: Icons.emergency_outlined,
+    headerColor: const Color(0xFF8B0000),
     child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text('• ', style: TextStyle(color: kTextMuted)),
-        Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+        _nfpaCell('SALUD',    d['nfpa_salud'],     Colors.blue.shade700),
+        const SizedBox(width: 4),
+        _nfpaCell('INFLAM.',  d['nfpa_inflamable'], Colors.red.shade700),
+        const SizedBox(width: 4),
+        _nfpaCell('REACTIV.', d['nfpa_reactivo'],   Colors.yellow.shade800),
+        const SizedBox(width: 4),
+        _nfpaCell('ESPEC.',
+            d['nfpa_corrosivo'] == true ? 'W' : '–', Colors.grey.shade700),
       ],
     ),
   );
 
-  Widget _buildCard(String text) => Container(
-    width: double.infinity,
-    margin: const EdgeInsets.only(bottom: 4),
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: const Color(0xFFDEE2E6)),
-    ),
-    child: Text(text, style: const TextStyle(fontSize: 13)),
+  Widget _nfpaCell(String label, dynamic val, Color color) => Container(
+    width: 58, height: 58,
+    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6)),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Text(val?.toString() ?? '–',
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
+      Text(label, style: const TextStyle(color: Colors.white70, fontSize: 8)),
+    ]),
   );
 
-  Widget _buildNfpa(Map<String, dynamic> d) {
-    Widget cell(String label, dynamic val, Color bg) => Container(
-      width: 56, height: 56,
-      color: bg,
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(val?.toString() ?? '–',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
-        Text(label,
-            style: const TextStyle(color: Colors.white, fontSize: 8)),
-      ]),
+  Widget _buildFrasesCard(String titulo, IconData icon, Color color, List<String> frases) =>
+    _SgaCard(
+      titulo: titulo,
+      icon: icon,
+      headerColor: color,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        children: frases.map((f) {
+          final m    = RegExp(r'^([HPR]\d+[a-z]?)\s*[–—-]\s*(.+)$').firstMatch(f.trim());
+          final code = m?.group(1) ?? '';
+          final desc = m?.group(2) ?? f;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(6),
+              border: Border(left: BorderSide(color: color, width: 3)),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (code.isNotEmpty) ...[
+                SizedBox(
+                  width: 44,
+                  child: Text(code, style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(child: Text(desc, style: const TextStyle(fontSize: 12))),
+            ]),
+          );
+        }).toList(),
+      ),
     );
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      cell('SALUD',      d['nfpa_salud'],      Colors.blue.shade700),
-      cell('INFLAM.',    d['nfpa_inflamable'],  Colors.red.shade700),
-      cell('REACTIV.',   d['nfpa_reactivo'],    Colors.yellow.shade700),
-      cell('ESPEC.',     d['nfpa_corrosivo'] == true ? 'W' : '–', Colors.grey.shade700),
-    ]);
-  }
 }
 
 // ── Tab: Edición de datos SGA ─────────────────────────────────────────────────
@@ -530,6 +570,20 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
         'vertido_accidental', 'estabilidad_reactividad', 'numero_un', 'estado_fisico']) {
       _c[k] = TextEditingController(text: _d[k]?.toString() ?? '');
     }
+    // Normaliza enums a mayúsculas para que coincidan con los items del dropdown
+    // (el modelo puede devolver "Peligro", "peligro", "ATENCION" sin tilde, etc.)
+    final pwa = _c['palabra_advertencia']!.text.toUpperCase();
+    _c['palabra_advertencia']!.text =
+        pwa.contains('ATEN') ? 'ATENCIÓN' : pwa.isEmpty ? '' : 'PELIGRO';
+    final ef = _c['estado_fisico']!.text.toUpperCase();
+    // Mapea variantes conocidas al valor canónico
+    const estadoMap = {
+      'SOLIDO': 'SÓLIDO', 'SÓLIDO': 'SÓLIDO',
+      'LIQUIDO': 'LÍQUIDO', 'LÍQUIDO': 'LÍQUIDO',
+      'GASEOSO': 'GASEOSO', 'GAS': 'GASEOSO',
+      'PASTA': 'PASTA', 'GEL': 'GEL',
+    };
+    _c['estado_fisico']!.text = estadoMap[ef] ?? ef;
     _nfpaSalud       = _d['nfpa_salud'] as int?;
     _nfpaInflamable  = _d['nfpa_inflamable'] as int?;
     _nfpaReactivo    = _d['nfpa_reactivo'] as int?;
@@ -589,8 +643,10 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
 
   InputDecoration _deco(String label) => InputDecoration(
     labelText: label,
-    border: const OutlineInputBorder(),
+    border: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8))),
     focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8)),
         borderSide: BorderSide(color: kPrimary)),
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
   );
@@ -598,164 +654,238 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       child: Form(
         key: _formKey,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _seccion('Sección 1 — Identificación'),
-            TextFormField(controller: _c['nombre_producto'], decoration: _deco('Nombre del producto')),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: TextFormField(controller: _c['formula_quimica'], decoration: _deco('Fórmula química'))),
-              const SizedBox(width: 10),
-              Expanded(child: TextFormField(controller: _c['numero_cas'], decoration: _deco('Número CAS'))),
-            ]),
-            const SizedBox(height: 10),
-            TextFormField(controller: _c['nombre_proveedor'], decoration: _deco('Nombre del proveedor')),
-            const SizedBox(height: 10),
-            TextFormField(controller: _c['direccion_proveedor'], decoration: _deco('Dirección del proveedor')),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _c['fds_drive_url'],
-              decoration: _deco('URL de la FDS en Google Drive'),
-              keyboardType: TextInputType.url,
-            ),
-
-            _seccion('Sección 2 — Peligros'),
-            DropdownButtonFormField<String>(
-              initialValue: _c['palabra_advertencia']!.text.isEmpty
-                  ? null : _c['palabra_advertencia']!.text,
-              decoration: _deco('Palabra de advertencia'),
-              items: ['PELIGRO', 'ATENCIÓN'].map((v) =>
-                  DropdownMenuItem(value: v, child: Text(v))).toList(),
-              onChanged: (v) => _c['palabra_advertencia']!.text = v ?? '',
-            ),
-            const SizedBox(height: 10),
-            TextFormField(controller: _c['categoria_toxicidad'],
-                decoration: _deco('Categoría de toxicidad (si aplica)')),
-
-            _seccion('Sección 8 — EPP y controles'),
-            TextFormField(controller: _c['epp'], decoration: _deco('Elementos de protección personal'),
-                maxLines: 3),
-            const SizedBox(height: 10),
-            TextFormField(controller: _c['controles_tecnicos'],
-                decoration: _deco('Controles técnicos'), maxLines: 2),
-
-            _seccion('Secciones 4-6 — Respuesta a emergencias'),
-            TextFormField(controller: _c['primeros_auxilios'],
-                decoration: _deco('Primeros auxilios'), maxLines: 4),
-            const SizedBox(height: 10),
-            TextFormField(controller: _c['lucha_incendios'],
-                decoration: _deco('Lucha contra incendios'), maxLines: 3),
-            const SizedBox(height: 10),
-            TextFormField(controller: _c['vertido_accidental'],
-                decoration: _deco('Vertido accidental'), maxLines: 3),
-
-            _seccion('Sección 9 — Propiedades físicas'),
-            DropdownButtonFormField<String>(
-              initialValue: _c['estado_fisico']!.text.isEmpty
-                  ? null : _c['estado_fisico']!.text,
-              decoration: _deco('Estado físico'),
-              items: ['SÓLIDO', 'LÍQUIDO', 'GASEOSO', 'PASTA', 'GEL'].map((v) =>
-                  DropdownMenuItem(value: v, child: Text(v))).toList(),
-              onChanged: (v) => _c['estado_fisico']!.text = v ?? '',
-            ),
-
-            _seccion('Sección 10 — Estabilidad'),
-            TextFormField(controller: _c['estabilidad_reactividad'],
-                decoration: _deco('Estabilidad y reactividad'), maxLines: 3),
-
-            _seccion('Sección 14 — Transporte UN'),
-            TextFormField(controller: _c['numero_un'], decoration: _deco('Número UN')),
-
-            _seccion('Rombo NFPA 704'),
-            Row(children: [
-              Expanded(child: _nfpaDropdown('Salud', _nfpaSalud,
-                  (v) => setState(() => _nfpaSalud = v))),
-              const SizedBox(width: 10),
-              Expanded(child: _nfpaDropdown('Inflamable', _nfpaInflamable,
-                  (v) => setState(() => _nfpaInflamable = v))),
-              const SizedBox(width: 10),
-              Expanded(child: _nfpaDropdown('Reactivo', _nfpaReactivo,
-                  (v) => setState(() => _nfpaReactivo = v))),
-            ]),
-            const SizedBox(height: 10),
-            SwitchListTile(
-              title: const Text('Corrosivo (W especial)'),
-              value: _nfpaCorrosivo,
-              activeThumbColor: kPrimary,
-              onChanged: (v) => setState(() => _nfpaCorrosivo = v),
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-            ),
-
-            _seccion('Vencimiento del lote'),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_outlined, color: kPrimary),
-              title: Text(_fechaVencimiento != null
-                  ? '${_fechaVencimiento!.day.toString().padLeft(2,'0')}/'
-                    '${_fechaVencimiento!.month.toString().padLeft(2,'0')}/'
-                    '${_fechaVencimiento!.year}'
-                  : 'Sin fecha de vencimiento'),
-              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                TextButton(
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _fechaVencimiento ?? DateTime.now(),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2099),
-                    );
-                    if (picked != null) setState(() => _fechaVencimiento = picked);
-                  },
-                  child: const Text('Seleccionar'),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── S1 Identificación ───────────────────────────────────────
+                _SgaCard(
+                  titulo: 'S1 — Identificación',
+                  icon: Icons.info_outline,
+                  headerColor: kPrimary,
+                  child: Column(children: [
+                    TextFormField(
+                        controller: _c['nombre_producto'],
+                        decoration: _deco('Nombre del producto')),
+                    const SizedBox(height: 10),
+                    Row(children: [
+                      Expanded(child: TextFormField(
+                          controller: _c['formula_quimica'],
+                          decoration: _deco('Fórmula química'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextFormField(
+                          controller: _c['numero_cas'],
+                          decoration: _deco('Número CAS'))),
+                    ]),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                        controller: _c['nombre_proveedor'],
+                        decoration: _deco('Nombre del proveedor')),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                        controller: _c['direccion_proveedor'],
+                        decoration: _deco('Dirección del proveedor')),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _c['fds_drive_url'],
+                      decoration: _deco('URL de la FDS en Google Drive'),
+                      keyboardType: TextInputType.url,
+                    ),
+                  ]),
                 ),
-                if (_fechaVencimiento != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear, size: 18),
-                    onPressed: () => setState(() => _fechaVencimiento = null),
+                const SizedBox(height: 14),
+
+                // ── S2 Peligros ─────────────────────────────────────────────
+                _SgaCard(
+                  titulo: 'S2 — Peligros',
+                  icon: Icons.warning_amber_rounded,
+                  headerColor: kDanger,
+                  child: Column(children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: _c['palabra_advertencia']!.text.isEmpty
+                          ? null : _c['palabra_advertencia']!.text,
+                      decoration: _deco('Palabra de advertencia'),
+                      items: ['PELIGRO', 'ATENCIÓN'].map((v) =>
+                          DropdownMenuItem(value: v, child: Text(v))).toList(),
+                      onChanged: (v) => _c['palabra_advertencia']!.text = v ?? '',
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                        controller: _c['categoria_toxicidad'],
+                        decoration: _deco('Categoría de toxicidad (si aplica)')),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+
+                // ── S4-6 Respuesta a emergencias ────────────────────────────
+                _SgaCard(
+                  titulo: 'S4-6 — Respuesta a emergencias',
+                  icon: Icons.local_hospital_outlined,
+                  headerColor: kSuccess,
+                  child: Column(children: [
+                    TextFormField(controller: _c['primeros_auxilios'],
+                        decoration: _deco('Primeros auxilios'), maxLines: 4),
+                    const SizedBox(height: 10),
+                    TextFormField(controller: _c['lucha_incendios'],
+                        decoration: _deco('Lucha contra incendios'), maxLines: 3),
+                    const SizedBox(height: 10),
+                    TextFormField(controller: _c['vertido_accidental'],
+                        decoration: _deco('Vertido accidental'), maxLines: 3),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+
+                // ── S8 EPP y controles ──────────────────────────────────────
+                _SgaCard(
+                  titulo: 'S8 — EPP y controles de exposición',
+                  icon: Icons.security_outlined,
+                  headerColor: kPrimary,
+                  child: Column(children: [
+                    TextFormField(controller: _c['epp'],
+                        decoration: _deco('Elementos de protección personal'),
+                        maxLines: 3),
+                    const SizedBox(height: 10),
+                    TextFormField(controller: _c['controles_tecnicos'],
+                        decoration: _deco('Controles técnicos'), maxLines: 2),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+
+                // ── S9 + S10 Propiedades ────────────────────────────────────
+                _SgaCard(
+                  titulo: 'S9-10 — Propiedades físicas y estabilidad',
+                  icon: Icons.science_outlined,
+                  headerColor: kPrimary,
+                  child: Column(children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: _c['estado_fisico']!.text.isEmpty
+                          ? null : _c['estado_fisico']!.text,
+                      decoration: _deco('Estado físico'),
+                      items: ['SÓLIDO', 'LÍQUIDO', 'GASEOSO', 'PASTA', 'GEL'].map((v) =>
+                          DropdownMenuItem(value: v, child: Text(v))).toList(),
+                      onChanged: (v) => _c['estado_fisico']!.text = v ?? '',
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(controller: _c['estabilidad_reactividad'],
+                        decoration: _deco('Estabilidad y reactividad'),
+                        maxLines: 3),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+
+                // ── S14 + NFPA ──────────────────────────────────────────────
+                _SgaCard(
+                  titulo: 'S14 — Transporte y Rombo NFPA 704',
+                  icon: Icons.local_shipping_outlined,
+                  headerColor: const Color(0xFF8B0000),
+                  child: Column(children: [
+                    TextFormField(controller: _c['numero_un'],
+                        decoration: _deco('Número UN')),
+                    const SizedBox(height: 14),
+                    Row(children: [
+                      Expanded(child: _nfpaDropdown('Salud', _nfpaSalud,
+                          (v) => setState(() => _nfpaSalud = v), Colors.blue.shade700)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _nfpaDropdown('Inflamable', _nfpaInflamable,
+                          (v) => setState(() => _nfpaInflamable = v), Colors.red.shade700)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _nfpaDropdown('Reactivo', _nfpaReactivo,
+                          (v) => setState(() => _nfpaReactivo = v), Colors.yellow.shade800)),
+                    ]),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      title: const Text('Corrosivo (W especial)',
+                          style: TextStyle(fontSize: 13)),
+                      value: _nfpaCorrosivo,
+                      activeThumbColor: kPrimary,
+                      onChanged: (v) => setState(() => _nfpaCorrosivo = v),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 14),
+
+                // ── Vencimiento ─────────────────────────────────────────────
+                _SgaCard(
+                  titulo: 'Vencimiento del lote',
+                  icon: Icons.event_outlined,
+                  headerColor: kTextMuted,
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.event_outlined, color: kPrimary),
+                    title: Text(_fechaVencimiento != null
+                        ? '${_fechaVencimiento!.day.toString().padLeft(2, '0')}/'
+                          '${_fechaVencimiento!.month.toString().padLeft(2, '0')}/'
+                          '${_fechaVencimiento!.year}'
+                        : 'Sin fecha de vencimiento'),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      TextButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _fechaVencimiento ?? DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2099),
+                          );
+                          if (picked != null) setState(() => _fechaVencimiento = picked);
+                        },
+                        child: const Text('Seleccionar'),
+                      ),
+                      if (_fechaVencimiento != null)
+                        IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => setState(() => _fechaVencimiento = null),
+                        ),
+                    ]),
                   ),
-              ]),
-            ),
-
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _guardando ? null : _guardar,
-                icon: _guardando
-                    ? const SizedBox(width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.save_outlined),
-                label: const Text('Guardar datos SGA'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                 ),
-              ),
+
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _guardando ? null : _guardar,
+                    icon: _guardando
+                        ? const SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.save_outlined),
+                    label: const Text('Guardar cambios'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
             ),
-            const SizedBox(height: 24),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _seccion(String title) => Padding(
-    padding: const EdgeInsets.only(top: 20, bottom: 10),
-    child: Text(title,
-        style: const TextStyle(fontWeight: FontWeight.bold, color: kPrimary, fontSize: 14)),
-  );
-
-  Widget _nfpaDropdown(String label, int? value, void Function(int?) onChanged) =>
+  Widget _nfpaDropdown(String label, int? value,
+      void Function(int?) onChanged, Color color) =>
     DropdownButtonFormField<int?>(
       initialValue: value,
-      decoration: _deco(label),
+      decoration: _deco(label).copyWith(
+        labelStyle: TextStyle(color: color, fontWeight: FontWeight.w600),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: const BorderRadius.all(Radius.circular(8)),
+          borderSide: BorderSide(color: color, width: 1.5),
+        ),
+      ),
       items: [
         const DropdownMenuItem(value: null, child: Text('–')),
         ...List.generate(5, (i) => DropdownMenuItem(value: i, child: Text(i.toString()))),
@@ -822,23 +952,11 @@ class _ColmenaTab extends StatelessWidget {
 
   Widget _buildSeccionColmena(String key, dynamic value) {
     if (value is! Map) return const SizedBox.shrink();
-    final map = Map<String, dynamic>.from(value);
+    final map    = Map<String, dynamic>.from(value);
     final titulo = map.remove('titulo')?.toString() ?? key;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 3, offset: Offset(0, 1))],
-      ),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-        title: Text(titulo,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kPrimary)),
-        children: map.entries.map((e) => _buildCampo(e.key, e.value)).toList(),
-      ),
+    return _ColmenaSeccion(
+      titulo: titulo,
+      children: map.entries.map((e) => _buildCampo(e.key, e.value)).toList(),
     );
   }
 
@@ -921,6 +1039,109 @@ class _ColmenaTab extends StatelessWidget {
       ],
     ),
   );
+}
+
+// ── Card con header de sección (estilo Stitch) ────────────────────────────────
+
+class _SgaCard extends StatelessWidget {
+  final String titulo;
+  final IconData icon;
+  final Color headerColor;
+  final Widget child;
+  final EdgeInsets? padding;
+
+  const _SgaCard({
+    required this.titulo,
+    required this.icon,
+    required this.headerColor,
+    required this.child,
+    this.padding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      color: Colors.white,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            color: headerColor,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(children: [
+              Icon(icon, color: Colors.white, size: 16),
+              const SizedBox(width: 8),
+              Text(titulo, style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+            ]),
+          ),
+          Padding(
+            padding: padding ?? const EdgeInsets.all(14),
+            child: child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Sección acordeón para Colmena ARL ─────────────────────────────────────────
+
+class _ColmenaSeccion extends StatefulWidget {
+  final String titulo;
+  final List<Widget> children;
+  const _ColmenaSeccion({required this.titulo, required this.children});
+
+  @override
+  State<_ColmenaSeccion> createState() => _ColmenaSeccionState();
+}
+
+class _ColmenaSeccionState extends State<_ColmenaSeccion> {
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Container(
+              color: kPrimary,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(children: [
+                const Icon(Icons.assignment_outlined, color: Colors.white, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(widget.titulo, style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+                Icon(_expanded ? Icons.expand_less : Icons.expand_more,
+                    color: Colors.white, size: 20),
+              ]),
+            ),
+          ),
+          if (_expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: widget.children,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Diálogo de confirmación de extracción FDS ─────────────────────────────────
