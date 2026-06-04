@@ -88,7 +88,7 @@ class ConfiguracionScreenState extends State<ConfiguracionScreen>
           _GuiasTab(),
           _AreasTab(),
           _AsignaturasTab(),
-          const _LabConfigTab(),
+          _LabConfigTab(),
         ],
       ),
     );
@@ -104,12 +104,14 @@ class _CrudList extends StatefulWidget {
   final Widget Function(Map, VoidCallback onEdit, VoidCallback onDelete) itemBuilder;
   final Future<void> Function(Map<String, dynamic>? item, BuildContext ctx,
       Future<void> Function(Map<String, dynamic>) onSave) formDialog;
+  final double cardHeight;
 
   const _CrudList({
     required this.endpoint,
     required this.titulo,
     required this.itemBuilder,
     required this.formDialog,
+    this.cardHeight = 68,
   });
 
   @override
@@ -182,39 +184,68 @@ class _CrudListState extends State<_CrudList> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator(color: kPrimary));
 
-    return Scaffold(
-      backgroundColor: kBackground,
-      body: _items.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.inbox_outlined, size: 56, color: kTextMuted),
-                  const SizedBox(height: 8),
-                  Text('Sin ${widget.titulo.toLowerCase()} registradas',
-                      style: const TextStyle(color: kTextMuted)),
-                ],
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header con botón ──────────────────────────────────────────
+          Row(children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(widget.titulo,
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('${_items.length} registro${_items.length != 1 ? "s" : ""}',
+                  style: const TextStyle(fontSize: 12, color: kTextMuted)),
+            ]),
+            const Spacer(),
+            ElevatedButton.icon(
+              onPressed: () => widget.formDialog(null, context, (data) => _save(data)),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Nuevo'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              itemCount: _items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 4),
-              itemBuilder: (ctx, i) {
-                final item = _items[i];
-                final id   = item['id'].toString();
-                return widget.itemBuilder(
-                  item,
-                  () => widget.formDialog(item, context,
-                      (data) => _save(data, id: id)),
-                  () => _delete(id),
-                );
-              },
             ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: kPrimary,
-        child: const Icon(Icons.add, color: Colors.white),
-        onPressed: () => widget.formDialog(null, context, (data) => _save(data)),
+          ]),
+          const SizedBox(height: 16),
+
+          // ── Contenido ─────────────────────────────────────────────────
+          if (_items.isEmpty)
+            Expanded(child: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.inbox_outlined, size: 56, color: kTextMuted),
+                const SizedBox(height: 8),
+                Text('Sin ${widget.titulo.toLowerCase()} registradas',
+                    style: const TextStyle(color: kTextMuted)),
+              ]),
+            ))
+          else
+            Expanded(
+              child: LayoutBuilder(builder: (ctx, constraints) {
+                final cols = constraints.maxWidth > 600 ? 2 : 1;
+                return GridView.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: widget.cardHeight,
+                  ),
+                  itemCount: _items.length,
+                  itemBuilder: (ctx, i) {
+                    final item = _items[i];
+                    final id   = item['id'].toString();
+                    return widget.itemBuilder(
+                      item,
+                      () => widget.formDialog(item, context, (data) => _save(data, id: id)),
+                      () => _delete(id),
+                    );
+                  },
+                );
+              }),
+            ),
+        ],
       ),
     );
   }
@@ -281,24 +312,11 @@ class _UbicacionesTab extends StatelessWidget {
       endpoint: 'inventario/ubicaciones/',
       titulo: 'Ubicaciones',
       formDialog: _dialog,
-      itemBuilder: (item, onEdit, onDelete) => Card(
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-          leading: const CircleAvatar(
-            radius: 16,
-            backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.place_outlined, color: kPrimary, size: 18),
-          ),
-          title: Text(item['codigo_ubicacion'],
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: item['descripcion_ubicacion'] != null &&
-                  (item['descripcion_ubicacion'] as String).isNotEmpty
-              ? Text(item['descripcion_ubicacion'])
-              : null,
-          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
-        ),
+      itemBuilder: (item, onEdit, onDelete) => _ItemCard(
+        icon: Icons.place_outlined,
+        title: item['codigo_ubicacion'] ?? '',
+        subtitle: item['descripcion_ubicacion'] as String? ?? '',
+        trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
       ),
     );
   }
@@ -349,20 +367,10 @@ class _UnidadesTab extends StatelessWidget {
       endpoint: 'inventario/unidades/',
       titulo: 'Unidades',
       formDialog: _dialog,
-      itemBuilder: (item, onEdit, onDelete) => Card(
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-          leading: const CircleAvatar(
-            radius: 16,
-            backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.straighten_outlined, color: kPrimary, size: 18),
-          ),
-          title: Text(item['nombre_unidad'],
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
-        ),
+      itemBuilder: (item, onEdit, onDelete) => _ItemCard(
+        icon: Icons.straighten_outlined,
+        title: item['nombre_unidad'] ?? '',
+        trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
       ),
     );
   }
@@ -412,23 +420,12 @@ class _ProgramasTab extends StatelessWidget {
       endpoint: 'academico/programas/',
       titulo: 'Programas',
       formDialog: _dialog,
-      itemBuilder: (item, onEdit, onDelete) => Card(
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-          leading: const CircleAvatar(
-            radius: 16,
-            backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.school_outlined, color: kPrimary, size: 18),
-          ),
-          title: Text(item['nombre'] ?? '',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: (item['activo'] == false)
-              ? const Text('Inactivo', style: TextStyle(color: kDanger, fontSize: 12))
-              : null,
-          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
-        ),
+      itemBuilder: (item, onEdit, onDelete) => _ItemCard(
+        icon: Icons.school_outlined,
+        title: item['nombre'] ?? '',
+        subtitle: item['activo'] == false ? 'Inactivo' : '',
+        subtitleColor: item['activo'] == false ? kDanger : null,
+        trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
       ),
     );
   }
@@ -587,39 +584,34 @@ class _DocentesTabState extends State<_DocentesTab> {
       endpoint: 'academico/docentes/',
       titulo: 'Docentes',
       formDialog: _dialog,
+      cardHeight: 110,
       itemBuilder: (item, onEdit, onDelete) {
         final programasNombres = (item['programas_nombres'] as List? ?? [])
             .map((e) => e.toString()).join(', ');
         final asignaturasNombres = (item['asignaturas_nombres'] as List? ?? [])
             .map((e) => e.toString()).join(', ');
-        return Card(
-          child: ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            leading: const CircleAvatar(
-              radius: 16,
-              backgroundColor: Color(0x1A007BFF),
-              child: Icon(Icons.person_pin_outlined, color: kPrimary, size: 18),
-            ),
-            title: Text(item['nombre_completo'] ?? '',
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(item['correo'] ?? '', style: const TextStyle(fontSize: 12)),
-                if (programasNombres.isNotEmpty)
-                  Text(programasNombres,
-                      style: const TextStyle(fontSize: 11, color: kPrimary),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (asignaturasNombres.isNotEmpty)
-                  Text(asignaturasNombres,
-                      style: const TextStyle(fontSize: 11, color: kTextMuted),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+        return _ItemCard(
+          icon: Icons.person_pin_outlined,
+          title: item['nombre_completo'] ?? '',
+          trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
+          extra: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(item['correo'] ?? '',
+                  style: const TextStyle(fontSize: 12, color: kTextMuted)),
+              if (programasNombres.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(programasNombres,
+                    style: const TextStyle(fontSize: 11, color: kPrimary),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
               ],
-            ),
-            isThreeLine: programasNombres.isNotEmpty || asignaturasNombres.isNotEmpty,
-            trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
+              if (asignaturasNombres.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(asignaturasNombres,
+                    style: const TextStyle(fontSize: 11, color: kTextMuted),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ],
           ),
         );
       },
@@ -812,7 +804,7 @@ class _GuiasTabState extends State<_GuiasTab> {
                     child: ListView.separated(
                       shrinkWrap: true,
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (context, i) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final ig = items[i];
                         return ListTile(
@@ -921,54 +913,44 @@ class _GuiasTabState extends State<_GuiasTab> {
       endpoint: 'academico/guias/',
       titulo: 'Guías',
       formDialog: _dialog,
+      cardHeight: 76,
       itemBuilder: (item, onEdit, onDelete) {
         final guiaId = item['id'].toString();
         final nombre = item['nombre_guia'] ?? '';
         final asig   = item['nombre_asignatura'] ?? '';
         final url    = (item['url_guia'] ?? '').toString();
-        return Card(
-          child: ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            leading: const CircleAvatar(
-              radius: 16,
-              backgroundColor: Color(0x1A007BFF),
-              child: Icon(Icons.menu_book_outlined, color: kPrimary, size: 18),
-            ),
-            title: Text(nombre,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(asig,
-                style: const TextStyle(fontSize: 12, color: kTextMuted)),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (url.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.open_in_new, size: 18, color: kTextMuted),
-                    tooltip: 'Abrir guía',
-                    onPressed: () async {
-                      final uri = Uri.tryParse(url);
-                      if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    },
-                  ),
+        return _ItemCard(
+          icon: Icons.menu_book_outlined,
+          title: nombre,
+          subtitle: asig,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (url.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.science_outlined, size: 20, color: kPrimary),
-                  tooltip: 'Insumos requeridos',
-                  onPressed: () => _showInsumoGuiaDialog(context, guiaId, nombre),
+                  icon: const Icon(Icons.open_in_new, size: 18, color: kTextMuted),
+                  tooltip: 'Abrir guía',
+                  onPressed: () async {
+                    final uri = Uri.tryParse(url);
+                    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 20, color: kPrimary),
-                  tooltip: 'Editar',
-                  onPressed: onEdit,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20, color: kDanger),
-                  tooltip: 'Eliminar',
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
+              IconButton(
+                icon: const Icon(Icons.science_outlined, size: 20, color: kPrimary),
+                tooltip: 'Insumos requeridos',
+                onPressed: () => _showInsumoGuiaDialog(context, guiaId, nombre),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined, size: 20, color: kPrimary),
+                tooltip: 'Editar',
+                onPressed: onEdit,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20, color: kDanger),
+                tooltip: 'Eliminar',
+                onPressed: onDelete,
+              ),
+            ],
           ),
         );
       },
@@ -1020,27 +1002,17 @@ class _AreasTab extends StatelessWidget {
       endpoint: 'academico/areas/',
       titulo: 'Áreas',
       formDialog: _dialog,
-      itemBuilder: (item, onEdit, onDelete) => Card(
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-          leading: const CircleAvatar(
-            radius: 16,
-            backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.category_outlined, color: kPrimary, size: 18),
-          ),
-          title: Text(item['nombre_area'] ?? '',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: () {
-            final total = item['total_asignaturas'];
-            if (total == null) return null;
-            return Text('$total asignatura${total == 1 ? '' : 's'}',
-                style: const TextStyle(fontSize: 12, color: kTextMuted));
-          }(),
+      itemBuilder: (item, onEdit, onDelete) {
+        final total = item['total_asignaturas'];
+        return _ItemCard(
+          icon: Icons.category_outlined,
+          title: item['nombre_area'] ?? '',
+          subtitle: total != null
+              ? '$total asignatura${total == 1 ? '' : 's'}'
+              : '',
           trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -1159,28 +1131,90 @@ class _AsignaturasTabState extends State<_AsignaturasTab> {
       endpoint: 'academico/asignaturas/',
       titulo: 'Asignaturas',
       formDialog: _dialog,
-      itemBuilder: (item, onEdit, onDelete) => Card(
-        child: ListTile(
-          dense: true,
-          visualDensity: VisualDensity.compact,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-          leading: const CircleAvatar(
-            radius: 16,
-            backgroundColor: Color(0x1A007BFF),
-            child: Icon(Icons.science_outlined, color: kPrimary, size: 18),
-          ),
-          title: Text(item['nombre_asignatura'] ?? '',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: () {
-            final area  = item['nombre_area'] ?? '';
-            final guias = item['total_guias'];
-            if (area.isEmpty) return null;
-            return Text(
-              guias != null ? '$area · $guias guía${guias == 1 ? '' : 's'}' : area,
-              style: const TextStyle(fontSize: 12, color: kTextMuted),
-            );
-          }(),
+      cardHeight: 76,
+      itemBuilder: (item, onEdit, onDelete) {
+        final area  = item['nombre_area'] ?? '';
+        final guias = item['total_guias'];
+        final sub   = area.isEmpty
+            ? ''
+            : guias != null
+                ? '$area · $guias guía${guias == 1 ? '' : 's'}'
+                : area;
+        return _ItemCard(
+          icon: Icons.science_outlined,
+          title: item['nombre_asignatura'] ?? '',
+          subtitle: sub,
           trailing: _AccionesRow(onEdit: onEdit, onDelete: onDelete),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Card genérica estilo Stitch para items CRUD
+// ─────────────────────────────────────────
+class _ItemCard extends StatelessWidget {
+  final IconData icon;
+  final String   title;
+  final String   subtitle;
+  final Color?   subtitleColor;
+  final Widget   trailing;
+  final Widget?  extra;
+
+  const _ItemCard({
+    required this.icon,
+    required this.title,
+    this.subtitle = '',
+    this.subtitleColor,
+    required this.trailing,
+    this.extra,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0x1A007BFF),
+              child: Icon(icon, color: kPrimary, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: subtitleColor ?? kTextMuted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                  if (extra != null) ...[
+                    const SizedBox(height: 2),
+                    Flexible(child: extra!),
+                  ],
+                ],
+              ),
+            ),
+            trailing,
+          ],
         ),
       ),
     );
@@ -1269,6 +1303,60 @@ class _AccionesRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────
+// Sección con card para el formulario de Lab
+// ─────────────────────────────────────────
+class _LabSection extends StatelessWidget {
+  final IconData icon;
+  final String titulo;
+  final String? subtitulo;
+  final List<Widget> children;
+
+  const _LabSection({
+    required this.icon,
+    required this.titulo,
+    this.subtitulo,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: const Color(0x1A007BFF),
+                child: Icon(icon, color: kPrimary, size: 16),
+              ),
+              const SizedBox(width: 10),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(titulo,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14, color: kPrimary)),
+                if (subtitulo != null)
+                  Text(subtitulo!,
+                      style: const TextStyle(fontSize: 11, color: kTextMuted)),
+              ]),
+            ]),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────
 // Tab: Configuración del Laboratorio
 // ─────────────────────────────────────────
 class _LabConfigTab extends StatefulWidget {
@@ -1347,11 +1435,14 @@ class _LabConfigTabState extends State<_LabConfigTab> {
     }
   }
 
-  InputDecoration _deco(String label, {String? hint}) => InputDecoration(
+  InputDecoration _deco(String label, {String? hint, IconData? icon}) => InputDecoration(
     labelText: label,
     hintText: hint,
-    border: const OutlineInputBorder(),
+    prefixIcon: icon != null ? Icon(icon, size: 18, color: kTextMuted) : null,
+    border: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8))),
     focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(8)),
         borderSide: BorderSide(color: kPrimary)),
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
   );
@@ -1377,59 +1468,92 @@ class _LabConfigTabState extends State<_LabConfigTab> {
       child: Form(
         key: _formKey,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
+          constraints: const BoxConstraints(maxWidth: 640),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Datos del laboratorio',
-                  style: TextStyle(fontWeight: FontWeight.bold,
-                      color: kPrimary, fontSize: 15)),
+              // ── Header ────────────────────────────────────────────────
+              Row(children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Configuración del Laboratorio',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('Datos que aparecen en las etiquetas SGA y documentos',
+                      style: TextStyle(fontSize: 12, color: kTextMuted)),
+                ]),
+                const Spacer(),
+                if (!puedeEditar)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: kSemaforoAmarillo.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: kSemaforoAmarillo.withValues(alpha: 0.4)),
+                    ),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.lock_outline, color: kSemaforoAmarillo, size: 14),
+                      SizedBox(width: 6),
+                      Text('Solo admins / laboratoristas',
+                          style: TextStyle(fontSize: 11, color: kSemaforoAmarillo)),
+                    ]),
+                  ),
+              ]),
+              const SizedBox(height: 20),
+
+              // ── Sección 1: Datos del laboratorio ───────────────────────
+              _LabSection(
+                icon: Icons.science_outlined,
+                titulo: 'Datos del laboratorio',
+                children: [
+                  TextFormField(
+                    controller: _c['nombre_laboratorio'],
+                    enabled: puedeEditar,
+                    decoration: _deco('Nombre del laboratorio *'),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Campo requerido' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _c['direccion_laboratorio'],
+                    enabled: puedeEditar,
+                    decoration: _deco('Dirección'),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _c['telefono_emergencia'],
+                    enabled: puedeEditar,
+                    decoration: _deco('Teléfono de emergencias',
+                        hint: 'Ej: 119 — Bomberos Rionegro',
+                        icon: Icons.phone_outlined),
+                    keyboardType: TextInputType.phone,
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _c['nombre_laboratorio'],
-                enabled: puedeEditar,
-                decoration: _deco('Nombre del laboratorio'),
-                validator: (v) => (v == null || v.trim().isEmpty)
-                    ? 'Campo requerido' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _c['direccion_laboratorio'],
-                enabled: puedeEditar,
-                decoration: _deco('Dirección'),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _c['telefono_emergencia'],
-                enabled: puedeEditar,
-                decoration: _deco('Teléfono de emergencias',
-                    hint: 'Ej: 119 — Bomberos Rionegro'),
-                keyboardType: TextInputType.phone,
-              ),
-
-              const SizedBox(height: 24),
-              const Text('Proveedor por defecto (etiquetas SGA)',
-                  style: TextStyle(fontWeight: FontWeight.bold,
-                      color: kPrimary, fontSize: 15)),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _c['nombre_proveedor_defecto'],
-                enabled: puedeEditar,
-                decoration: _deco('Nombre del proveedor'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _c['direccion_proveedor_defecto'],
-                enabled: puedeEditar,
-                decoration: _deco('Dirección del proveedor'),
-                maxLines: 2,
+              // ── Sección 2: Proveedor por defecto ───────────────────────
+              _LabSection(
+                icon: Icons.business_outlined,
+                titulo: 'Proveedor por defecto',
+                subtitulo: 'Aparece en etiquetas SGA cuando no hay proveedor específico',
+                children: [
+                  TextFormField(
+                    controller: _c['nombre_proveedor_defecto'],
+                    enabled: puedeEditar,
+                    decoration: _deco('Nombre del proveedor'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _c['direccion_proveedor_defecto'],
+                    enabled: puedeEditar,
+                    decoration: _deco('Dirección del proveedor'),
+                    maxLines: 2,
+                  ),
+                ],
               ),
 
               if (puedeEditar) ...[
-                const SizedBox(height: 28),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -1445,27 +1569,9 @@ class _LabConfigTabState extends State<_LabConfigTab> {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6)),
+                          borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-                ),
-              ] else ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: kSemaforoAmarillo.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                        color: kSemaforoAmarillo.withValues(alpha: 0.4)),
-                  ),
-                  child: const Row(children: [
-                    Icon(Icons.lock_outline, color: kSemaforoAmarillo, size: 16),
-                    SizedBox(width: 8),
-                    Text('Solo administradores y laboratoristas pueden editar.',
-                        style: TextStyle(
-                            fontSize: 12, color: kSemaforoAmarillo)),
-                  ]),
                 ),
               ],
             ],

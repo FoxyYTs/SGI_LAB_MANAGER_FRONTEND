@@ -177,37 +177,66 @@ class _InventarioContentState extends State<InventarioContent> {
                   ),
                 ] else
                   Row(children: [
-                    Text(
-                      esQuimico ? 'Inventario de Químicos' : 'Inventario',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          esQuimico ? 'Inventario de Químicos' : 'Inventario',
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                        ),
+                        const Text('Gestión de insumos del laboratorio',
+                            style: TextStyle(fontSize: 12, color: kTextMuted)),
+                      ],
                     ),
                     const Spacer(),
                     SizedBox(
-                      width: 260,
+                      width: 240,
                       child: TextField(
                         controller: _searchController,
                         decoration: InputDecoration(
-                          hintText: 'Buscar...',
+                          hintText: 'Buscar insumo...',
                           prefixIcon: const Icon(Icons.search, color: kPrimary),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                          focusedBorder: const OutlineInputBorder(
-                              borderSide: BorderSide(color: kPrimary)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: const BorderSide(color: kPrimary)),
                           contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                          filled: true, fillColor: Colors.white,
                         ),
                         onChanged: _onSearchChanged,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton.icon(
-                      onPressed: () => provider.fetchInsumos(auth.token),
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Actualizar'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimary, foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6))),
-                    ),
+                    if (auth.can(Perm.inventarioGestionar)) ...[
+                      const SizedBox(width: 10),
+                      ElevatedButton.icon(
+                        onPressed: () => _abrirFormulario(context, provider, auth.token),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Nuevo Insumo'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimary, foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                      ),
+                    ],
                   ]),
                 const SizedBox(height: 12),
+
+                // ── Fila: chips resumen + chips filtro ────────────────────────
+                if (!isMobile)
+                  Row(children: [
+                    // Chips informativos
+                    _resumenChip(Icons.inventory_2_outlined,
+                        'Total: ${provider.insumos.length}',
+                        const Color(0xFF6C757D), const Color(0xFFF0F0F0)),
+                    const SizedBox(width: 8),
+                    _resumenChip(Icons.circle, 'Críticos: ${provider.insumos.where((i) => i.semaforo == "ROJO").length}',
+                        kSemaforoRojo, const Color(0xFFFFEBEE)),
+                    const SizedBox(width: 8),
+                    _resumenChip(Icons.circle, 'Bajos: ${provider.insumos.where((i) => i.semaforo == "AMARILLO").length}',
+                        const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+                    const Spacer(),
+                  ]),
+                if (!isMobile) const SizedBox(height: 10),
 
                 // ── Chips de filtro por tipo ──────────────────────────────────
                 SingleChildScrollView(
@@ -290,18 +319,6 @@ class _InventarioContentState extends State<InventarioContent> {
             ),
           ),
 
-          // ── FAB ───────────────────────────────────────────────────────────
-          if (auth.can(Perm.inventarioGestionar))
-            Positioned(
-              bottom: 24, right: 24,
-              child: FloatingActionButton.extended(
-                backgroundColor: kPrimary,
-                foregroundColor: Colors.white,
-                icon: const Icon(Icons.add),
-                label: const Text('Nuevo insumo'),
-                onPressed: () => _abrirFormulario(context, provider, auth.token),
-              ),
-            ),
         ]);
         }); // LayoutBuilder
       },
@@ -564,16 +581,24 @@ class _InventarioContentState extends State<InventarioContent> {
     return InkWell(onTap: onTap, child: content);
   }
 
-  Widget _semaforo(String s) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-    child: Center(
-      child: Container(
-        width: 14, height: 14,
-        decoration: BoxDecoration(
-            color: _semaforoColor(s), shape: BoxShape.circle),
+  Widget _semaforo(String s) {
+    final (label, color, bg) = switch (s) {
+      'ROJO'     => ('CRÍTICO', kSemaforoRojo,    const Color(0xFFFFEBEE)),
+      'AMARILLO' => ('BAJO',    const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+      _          => ('OK',      kSemaforoVerde,   const Color(0xFFE8F5E9)),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+          child: Text(label,
+              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _sgaBtn(BuildContext context, Insumo insumo) => Tooltip(
     message: 'Ver ficha SGA',
@@ -627,4 +652,15 @@ class _InventarioContentState extends State<InventarioContent> {
     const SizedBox(width: 4),
     Text(label, style: const TextStyle(fontSize: 12, color: kTextMuted)),
   ]);
+
+  Widget _resumenChip(IconData icon, String label, Color color, Color bg) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500)),
+        ]),
+      );
 }

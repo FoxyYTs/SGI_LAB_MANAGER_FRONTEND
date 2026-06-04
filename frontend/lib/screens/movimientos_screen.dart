@@ -25,6 +25,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
   bool      _mostrarForm = false;
   bool      _desdeCache  = false;
   DateTime? _cachedAt;
+  String    _filtroEstado = 'Todos';
 
   @override
   void initState() {
@@ -167,9 +168,13 @@ class _MovimientosContentState extends State<MovimientosContent> {
           ],
           // ── Encabezado ───────────────────────────────────────────────────
           Row(children: [
-            const Expanded(child: Text('Movimientos y Préstamos',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis)),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Movimientos y Préstamos',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text('Gestión de solicitudes de préstamo',
+                  style: TextStyle(fontSize: 12, color: kTextMuted)),
+            ]),
+            const Spacer(),
             IconButton(
               icon: const Icon(Icons.refresh, color: kPrimary, size: 20),
               tooltip: 'Actualizar',
@@ -178,16 +183,30 @@ class _MovimientosContentState extends State<MovimientosContent> {
             FilledButton.icon(
               onPressed: () => setState(() => _mostrarForm = !_mostrarForm),
               icon: Icon(_mostrarForm ? Icons.close : Icons.add, size: 16),
-              label: Text(_mostrarForm ? 'Cancelar' : 'Nuevo',
+              label: Text(_mostrarForm ? 'Cancelar' : 'Nuevo Préstamo',
                   style: const TextStyle(fontSize: 13)),
               style: FilledButton.styleFrom(
                 backgroundColor: _mostrarForm ? kTextMuted : kPrimary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ]),
+          const SizedBox(height: 12),
+
+          // ── Chips de filtro por estado ────────────────────────────────────
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              ..._buildFiltroChips(),
+              const SizedBox(width: 16),
+              Text(
+                '${_prestamosFiltrados().length} préstamos',
+                style: const TextStyle(fontSize: 12, color: kTextMuted),
+              ),
+            ]),
+          ),
           const SizedBox(height: 12),
 
           // ── Formulario colapsable ────────────────────────────────────────
@@ -204,18 +223,15 @@ class _MovimientosContentState extends State<MovimientosContent> {
           // ── Lista de préstamos ───────────────────────────────────────────
           Expanded(
             child: _cargando
-                ? const Center(
-                    child: CircularProgressIndicator(color: kPrimary))
-                : _prestamos.isEmpty
+                ? const Center(child: CircularProgressIndicator(color: kPrimary))
+                : _prestamosFiltrados().isEmpty
                     ? _buildEmpty()
                     : ListView.separated(
-                        itemCount: _prestamos.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                        itemCount: _prestamosFiltrados().length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (ctx, i) => _PrestamoCard(
-                          prestamo: _prestamos[i],
-                          puedeGestionar:
-                              auth.can(Perm.prestamosGestionar),
+                          prestamo: _prestamosFiltrados()[i],
+                          puedeGestionar: auth.can(Perm.prestamosGestionar),
                           onAprobar: _aprobar,
                           onRechazar: _rechazar,
                           onDevuelto: _fetchPrestamos,
@@ -226,6 +242,56 @@ class _MovimientosContentState extends State<MovimientosContent> {
       ),
     );
     });
+  }
+
+  List<Map<String, dynamic>> _prestamosFiltrados() {
+    if (_filtroEstado == 'Todos') return _prestamos;
+    return _prestamos.where((p) => p['estado'] == _filtroEstado).toList();
+  }
+
+  static const _estadoFiltros = ['Todos', 'PENDIENTE', 'ACTIVO', 'DEVUELTO', 'RECHAZADO'];
+  static const _estadoFiltroLabels = {
+    'Todos':     'Todos',
+    'PENDIENTE': 'PENDIENTE',
+    'ACTIVO':    'ACTIVO',
+    'DEVUELTO':  'DEVUELTO',
+    'RECHAZADO': 'RECHAZADO',
+  };
+  static const _estadoFiltroColors = {
+    'Todos':     kPrimary,
+    'PENDIENTE': kWarning,
+    'ACTIVO':    kPrimary,
+    'DEVUELTO':  kSemaforoVerde,
+    'RECHAZADO': kDanger,
+  };
+
+  List<Widget> _buildFiltroChips() {
+    return _estadoFiltros.map((estado) {
+      final sel   = _filtroEstado == estado;
+      final color = _estadoFiltroColors[estado] ?? kPrimary;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: GestureDetector(
+          onTap: () => setState(() => _filtroEstado = estado),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: sel ? color : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: sel ? color : const Color(0xFFDEE2E6)),
+            ),
+            child: Text(
+              _estadoFiltroLabels[estado] ?? estado,
+              style: TextStyle(
+                fontSize: 12,
+                color: sel ? Colors.white : kTextMuted,
+                fontWeight: sel ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildEmpty() => Center(
@@ -664,6 +730,13 @@ class _PrestamoCard extends StatelessWidget {
     'RECHAZADO': kDanger,
   };
 
+  static const _estadoBorderColors = {
+    'PENDIENTE': kWarning,
+    'ACTIVO':    kPrimary,
+    'DEVUELTO':  kSemaforoVerde,
+    'RECHAZADO': kDanger,
+  };
+
   static const _estadoBg = {
     'PENDIENTE': Color(0xFFFFF8E1),
     'ACTIVO':    Color(0xFFE3F2FD),
@@ -690,12 +763,20 @@ class _PrestamoCard extends StatelessWidget {
         .replaceFirst('T', ' ')
         .substring(0, 16);
 
+    final borderColor = _estadoBorderColors[estado] ?? kTextMuted;
+    final isInactive  = estado == 'DEVUELTO' || estado == 'RECHAZADO';
+
     return Material(
-      color: Colors.white,
+      color: isInactive ? Colors.white.withValues(alpha: 0.85) : Colors.white,
       borderRadius: BorderRadius.circular(10),
       elevation: 1,
       shadowColor: Colors.black12,
-      child: Padding(
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: borderColor, width: 4)),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -797,6 +878,7 @@ class _PrestamoCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
       ),
     );
   }

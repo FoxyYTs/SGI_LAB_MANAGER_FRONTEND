@@ -32,20 +32,31 @@ class Insumo {
     this.fotoUrl,
   });
 
-  factory Insumo.fromJson(Map<String, dynamic> json) => Insumo(
-    id:          json['id'] as String,
-    nombre:      json['nombre_insumo'] as String,
-    tipo:        json['tipo_nombre'] as String? ?? 'General',
-    ubicacion:   json['ubicacion_nombre'] as String? ?? 'Sin ubicación',
-    unidad:      json['unidad_abreviatura'] as String? ?? '',
-    stockActual: double.parse(json['stock_actual'].toString()),
-    stockMinimo: double.parse(json['stock_minimo'].toString()),
-    semaforo:    json['semaforo'] as String,
-    activo:      json['activo'] as bool? ?? true,
-    tieneSga:    json['tiene_sga'] as bool? ?? false,
-    observaciones: json['observaciones'] as String?,
-    fotoUrl:     json['foto'] as String?,
-  );
+  factory Insumo.fromJson(Map<String, dynamic> json) {
+    // La unidad viene de la primera presentación (nuevo modelo multi-presentación)
+    final presentaciones = json['presentaciones'] as List?;
+    final primeraUnidad  = presentaciones?.isNotEmpty == true
+        ? (presentaciones!.first as Map<String, dynamic>)['unidad_nombre'] as String? ?? ''
+        : json['unidad_abreviatura'] as String? ?? '';
+
+    // stock_total es la suma de presentaciones; fallback a stock_actual legacy
+    final stockRaw = json['stock_total'] ?? json['stock_actual'] ?? 0;
+
+    return Insumo(
+      id:          json['id'] as String,
+      nombre:      json['nombre_insumo'] as String,
+      tipo:        json['tipo_nombre'] as String? ?? 'General',
+      ubicacion:   json['ubicacion_nombre'] as String? ?? 'Sin ubicación',
+      unidad:      primeraUnidad,
+      stockActual: double.parse(stockRaw.toString()),
+      stockMinimo: double.parse(json['stock_minimo'].toString()),
+      semaforo:    json['semaforo'] as String,
+      activo:      json['activo'] as bool? ?? true,
+      tieneSga:    json['tiene_sga'] as bool? ?? false,
+      observaciones: json['observaciones'] as String?,
+      fotoUrl:     json['foto'] as String?,
+    );
+  }
 
   factory Insumo.fromLocal(Map<String, dynamic> row) => Insumo(
     id:          row['id'] as String,

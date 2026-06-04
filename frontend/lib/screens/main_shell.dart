@@ -77,7 +77,7 @@ class _MainShellState extends State<MainShell> {
   }
 
   List<_TabDef> _tabs(AuthProvider auth) => [
-    const _TabDef(Icons.home_outlined,            'Inicio',        DashboardContent()),
+    _TabDef(Icons.home_outlined,            'Inicio',        DashboardContent(onNavigateTo: (i) => setState(() => _idx = i))),
     if (auth.can(Perm.inventarioVer))
       const _TabDef(Icons.inventory_2_outlined,   'Inventario',    InventarioContent()),
     if (auth.can(Perm.prestamosVer))

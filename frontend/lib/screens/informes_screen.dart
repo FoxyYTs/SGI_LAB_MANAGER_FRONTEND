@@ -292,142 +292,146 @@ class _InformeTileState extends State<_InformeTile> {
 
   @override
   Widget build(BuildContext context) {
-    final ultimaVez = _formatUltimo(widget.ultimo?['generado_en']?.toString());
+    final ultimaVez  = _formatUltimo(widget.ultimo?['generado_en']?.toString());
+    final nunca      = widget.ultimo?['generado_en'] == null;
 
     return Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Cabecera: icono + título ───────────────────────────────
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: kPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(widget.tipo.icon, color: kPrimary, size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(widget.tipo.label,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 13),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
-                  Text('Último: $ultimaVez',
-                      style: const TextStyle(color: Colors.black38, fontSize: 10),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                ],
-              )),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header azul ───────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: kPrimary,
+            child: Row(children: [
+              Icon(widget.tipo.icon, color: Colors.white, size: 18),
+              const SizedBox(width: 8),
+              Expanded(child: Text(widget.tipo.label,
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  overflow: TextOverflow.ellipsis)),
             ]),
-
-            const SizedBox(height: 8),
-
-            // ── Filtros de fecha (si aplica) ──────────────────────────
-            if (widget.tipo.conFechas) ...[
-              Row(children: [
-                Expanded(child: _FechaBtn(
-                  label: _desde != null ? _label(_desde!) : 'Desde',
-                  onTap: () => _seleccionarFecha(true),
-                  onClear: _desde != null ? () => setState(() => _desde = null) : null,
-                )),
-                const SizedBox(width: 6),
-                Expanded(child: _FechaBtn(
-                  label: _hasta != null ? _label(_hasta!) : 'Hasta',
-                  onTap: () => _seleccionarFecha(false),
-                  onClear: _hasta != null ? () => setState(() => _hasta = null) : null,
-                )),
-              ]),
-              const SizedBox(height: 8),
-            ],
-
-            // ── Botones de descarga ───────────────────────────────────
-            Row(children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _descargando ? null : _descargar,
-                  icon: _descargando
-                      ? const SizedBox(width: 12, height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.picture_as_pdf_outlined, size: 14),
-                  label: Text(_descargando ? '…' : 'PDF',
-                      style: const TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 9),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                  ),
-                ),
-              ),
-              if (widget.tipo.endpointExcel != null) ...[
-                const SizedBox(width: 6),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _descargandoExcel ? null : _descargarExcel,
-                    icon: _descargandoExcel
-                        ? const SizedBox(width: 12, height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.table_chart_outlined, size: 14),
-                    label: Text(_descargandoExcel ? '…' : 'Excel',
-                        style: const TextStyle(fontSize: 12)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF217346),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                    ),
-                  ),
-                ),
-              ],
-            ]),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FechaBtn extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final VoidCallback? onClear;
-
-  const _FechaBtn({required this.label, required this.onTap, this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    return OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        foregroundColor: kPrimary,
-        side: const BorderSide(color: Color(0xFFCCCCCC)),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        textStyle: const TextStyle(fontSize: 11),
-      ),
-      onPressed: onTap,
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.calendar_today_outlined, size: 13),
-        const SizedBox(width: 4),
-        Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
-        if (onClear != null) ...[
-          const SizedBox(width: 4),
-          GestureDetector(
-            onTap: onClear,
-            child: const Icon(Icons.close, size: 13, color: Colors.black54),
           ),
+          // ── Cuerpo ────────────────────────────────────────────────────
+          Expanded(child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Último generado
+                Row(children: [
+                  Icon(Icons.access_time_outlined, size: 13,
+                      color: nunca ? kTextMuted : kPrimary),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text(
+                    'Último: $ultimaVez',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: nunca ? kTextMuted : const Color(0xFF223542),
+                        fontStyle: nunca ? FontStyle.italic : FontStyle.normal),
+                    overflow: TextOverflow.ellipsis,
+                  )),
+                ]),
+                const Spacer(),
+
+                // Filtros de fecha (si aplica)
+                if (widget.tipo.conFechas) ...[
+                  Row(children: [
+                    Expanded(child: _fechaBtn(
+                        _desde != null ? _label(_desde!) : 'Desde',
+                        () => _seleccionarFecha(true),
+                        _desde != null)),
+                    const SizedBox(width: 6),
+                    Expanded(child: _fechaBtn(
+                        _hasta != null ? _label(_hasta!) : 'Hasta',
+                        () => _seleccionarFecha(false),
+                        _hasta != null)),
+                  ]),
+                  const SizedBox(height: 8),
+                ],
+
+                // Botones PDF + Excel
+                Row(children: [
+                  Expanded(child: _btnDescarga(
+                    label: 'PDF',
+                    icon: Icons.picture_as_pdf_outlined,
+                    color: kDanger,
+                    loading: _descargando,
+                    onTap: _descargar,
+                  )),
+                  if (widget.tipo.endpointExcel != null) ...[
+                    const SizedBox(width: 6),
+                    Expanded(child: _btnDescarga(
+                      label: 'Excel',
+                      icon: Icons.table_chart_outlined,
+                      color: kSemaforoVerde,
+                      loading: _descargandoExcel,
+                      onTap: _descargarExcel,
+                    )),
+                  ],
+                ]),
+              ],
+            ),
+          )),
         ],
-      ]),
+      ),
     );
   }
+
+  Widget _fechaBtn(String label, VoidCallback onTap, bool activo) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: activo ? kPrimary.withValues(alpha: 0.08) : Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+                color: activo ? kPrimary : const Color(0xFFCED4DA)),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.calendar_today_outlined, size: 12,
+                color: activo ? kPrimary : kTextMuted),
+            const SizedBox(width: 4),
+            Flexible(child: Text(label,
+                style: TextStyle(
+                    fontSize: 11,
+                    color: activo ? kPrimary : kTextMuted,
+                    fontWeight: activo ? FontWeight.w600 : FontWeight.normal),
+                overflow: TextOverflow.ellipsis)),
+          ]),
+        ),
+      );
+
+  Widget _btnDescarga({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool loading,
+    required VoidCallback onTap,
+  }) =>
+      GestureDetector(
+        onTap: loading ? null : onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: loading
+              ? const Center(child: SizedBox(width: 14, height: 14,
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
+              : Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(icon, color: Colors.white, size: 14),
+                  const SizedBox(width: 5),
+                  Text(label, style: const TextStyle(
+                      color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                ]),
+        ),
+      );
+
 }
