@@ -161,11 +161,9 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _abrirEtiquetaUrl() async {
-    // La URL de la etiqueta requiere auth; abrimos con token en header no es posible
-    // desde navegador. En su lugar construimos la URL con el token como query param
-    // (el backend podría soportarlo). Por ahora informamos al usuario.
     final url = Uri.parse(
-      '${ApiClient.instance.baseUrl}inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/',
+      '${ApiClient.instance.baseUrl}inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/'
+      '?token=$_token',
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
