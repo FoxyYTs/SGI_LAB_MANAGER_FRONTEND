@@ -70,7 +70,6 @@ class AuthProvider with ChangeNotifier {
         }
       }
 
-      if (_token != null) await SyncService.instance.init(_token);
       _refreshToken = await _storage.read(key: 'refresh_token');
       _rol          = await _storage.read(key: 'rol');
       _username     = await _storage.read(key: 'username');
@@ -79,6 +78,18 @@ class AuthProvider with ChangeNotifier {
       final permsJson = await _storage.read(key: 'permisos');
       if (permsJson != null) {
         _permisos = Set<String>.from(jsonDecode(permsJson) as List);
+      }
+
+      if (_token != null) {
+        await SyncService.instance.init(_token);
+        if (_refreshToken != null) {
+          ApiClient.instance.setTokens(
+            _token!,
+            _refreshToken!,
+            onRefreshed: _actualizarToken,
+            onLogout:    () => logout(),
+          );
+        }
       }
 
       if (_token != null && kIsWeb) _programarCierreMedianoche();
@@ -114,6 +125,12 @@ class AuthProvider with ChangeNotifier {
 
       await _cargarPermisos();
       await SyncService.instance.init(_token);
+      ApiClient.instance.setTokens(
+        _token!,
+        _refreshToken!,
+        onRefreshed: _actualizarToken,
+        onLogout:    () => logout(),
+      );
       if (kIsWeb) _programarCierreMedianoche();
 
       // Notificaciones y tareas de fondo solo en Android
@@ -170,6 +187,14 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Callback invocado por ApiClient cuando obtiene un nuevo access token.
+  /// Actualiza el token en memoria y en el almacenamiento seguro.
+  Future<void> _actualizarToken(String newToken) async {
+    _token = newToken;
+    await _storage.write(key: 'token', value: newToken);
+    debugPrint('[AuthProvider] Access token actualizado por refresco automático.');
+  }
+
   /// Recarga solo la foto de perfil (llamar desde MiPerfilScreen tras subir foto).
   Future<void> recargarFoto() async {
     try {
@@ -210,6 +235,8 @@ class AuthProvider with ChangeNotifier {
         );
       } catch (_) {}
     }
+
+    ApiClient.instance.clearTokens();
 
     try {
       await _storage.deleteAll();
