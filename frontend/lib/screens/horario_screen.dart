@@ -532,6 +532,12 @@ class _TabEncargadosState extends State<_TabEncargados>
     );
   }
 
+  String _horaAmPm(int hora) {
+    if (hora == 12) return '12 PM';
+    if (hora > 12) return '${hora - 12} PM';
+    return '$hora AM';
+  }
+
   Widget _buildHoraRow(int hora, bool puedeEditar) {
     return IntrinsicHeight(
       child: Row(
@@ -545,7 +551,7 @@ class _TabEncargadosState extends State<_TabEncargados>
             decoration: const BoxDecoration(
               border: Border(right: BorderSide(color: Color(0xFFDEE2E6))),
             ),
-            child: Text('${hora.toString().padLeft(2, '0')}:00',
+            child: Text(_horaAmPm(hora),
                 style: const TextStyle(fontSize: 11, color: kTextMuted, fontWeight: FontWeight.w600)),
           ),
           // Celdas por día
