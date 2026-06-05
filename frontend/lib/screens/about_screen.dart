@@ -58,8 +58,18 @@ class _AboutDialog extends StatelessWidget {
                 const Icon(Icons.person_outline, size: 16, color: kTextMuted),
                 const SizedBox(width: 6),
                 const Text('Desarrollado por ', style: TextStyle(fontSize: 13, color: kTextMuted)),
-                const Text('FoxyYTs',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: kPrimary)),
+                GestureDetector(
+                  onTap: () async {
+                    final uri = Uri.parse('https://foxyyts.github.io/gitprofile/');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  child: const Text('FoxyYTs',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.bold,
+                          color: kPrimary, decoration: TextDecoration.underline)),
+                ),
               ]),
               const SizedBox(height: 20),
 
