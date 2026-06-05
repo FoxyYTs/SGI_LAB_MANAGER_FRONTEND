@@ -467,6 +467,176 @@ class _TabEncargadosState extends State<_TabEncargados>
     } catch (_) {}
   }
 
+  Future<void> _editarEncargado(int dia, int hora, Map<String, dynamic> item) async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.can(Perm.academicoGestionar)) return;
+
+    final accion = await showDialog<String>(
+      context: context,
+      builder: (_) {
+        final nombre = item['nombre_completo']?.toString() ?? item['username']?.toString() ?? '?';
+        final rol    = item['rol']?.toString() ?? '';
+        return AlertDialog(
+          title: Text(nombre, style: const TextStyle(color: kPrimary, fontSize: 15)),
+          content: Text('$rol · ${_dias[dia]} ${_horaAmPm(hora)}',
+              style: const TextStyle(color: kTextMuted, fontSize: 12)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'cambiar'),
+              child: const Text('Cambiar encargado'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'quitar'),
+              child: const Text('Quitar', style: TextStyle(color: kDanger)),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted) return;
+
+    if (accion == 'quitar') {
+      await _eliminar(dia, hora, item);
+    } else if (accion == 'cambiar') {
+      final yaAsignados = _grid[dia]?[hora]?.map((e) => e['usuario'] as int).toSet() ?? {};
+      final opciones = _disponibles.where((u) => !yaAsignados.contains(u['id'] as int)).toList();
+      if (opciones.isEmpty) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No hay otros encargados disponibles para este bloque.')));
+        return;
+      }
+      final sel = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (_) => _SelectorEncargadoDialog(opciones: opciones),
+      );
+      if (sel == null || !mounted) return;
+      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      try {
+        final r = await dio.patch('academico/horario-encargado/${item['id']}/', data: {
+          'usuario': sel['id'],
+          'dia_semana': dia,
+          'hora': hora,
+        });
+        setState(() {
+          final list = _grid[dia]?[hora];
+          if (list != null) {
+            final idx = list.indexWhere((e) => e['id'] == item['id']);
+            if (idx >= 0) list[idx] = r.data as Map<String, dynamic>;
+          }
+        });
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al actualizar'), backgroundColor: kDanger));
+      }
+    }
+  }
+
+  // Tabla de conteo de horas por encargado
+  Widget _buildTablaHoras() {
+    // Contar cuántas celdas aparece cada usuario en el grid
+    final conteo = <int, int>{};
+    final nombres = <int, String>{};
+    final roles   = <int, String>{};
+    for (final diaMap in _grid.values) {
+      for (final items in diaMap.values) {
+        for (final item in items) {
+          final uid = item['usuario'] as int? ?? item['id'] as int? ?? 0;
+          conteo[uid] = (conteo[uid] ?? 0) + 1;
+          nombres[uid] ??= item['nombre_completo']?.toString() ?? item['username']?.toString() ?? '?';
+          roles[uid]   ??= item['rol']?.toString() ?? '';
+        }
+      }
+    }
+    if (conteo.isEmpty) return const SizedBox.shrink();
+
+    final sorted = conteo.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(height: 24),
+          const Text('HORAS SEMANALES POR ENCARGADO',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold,
+                  color: kTextMuted, letterSpacing: 1.1)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFDEE2E6)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Table(
+              columnWidths: const {
+                0: FlexColumnWidth(3),
+                1: FlexColumnWidth(1),
+                2: IntrinsicColumnWidth(),
+              },
+              children: [
+                TableRow(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF8F9FA),
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                  ),
+                  children: const [
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Text('Encargado', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Text('Rol', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Text('Horas', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)),
+                    ),
+                  ],
+                ),
+                ...sorted.map((e) {
+                  final uid   = e.key;
+                  final horas = e.value;
+                  final nombre = nombres[uid] ?? '?';
+                  final rol    = roles[uid]   ?? '';
+                  final color  = rol == 'LAB' ? kSuccess : (rol == 'ADMIN' ? kWarning : kPrimary);
+                  return TableRow(
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
+                    ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        child: Text(nombre, style: const TextStyle(fontSize: 12)),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(rol,
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Text('$horas h',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimary)),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -504,9 +674,15 @@ class _TabEncargadosState extends State<_TabEncargados>
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: _buildGrid(puedeEditar),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: _buildGrid(puedeEditar),
+                ),
+                _buildTablaHoras(),
+              ],
             ),
           ),
         ),
@@ -600,9 +776,9 @@ class _TabEncargadosState extends State<_TabEncargados>
     final iniciales = nombre.split(' ').take(2).map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
 
     return GestureDetector(
-      onLongPress: puedeEditar ? () => _eliminar(dia, hora, item) : null,
+      onTap: puedeEditar ? () => _editarEncargado(dia, hora, item) : null,
       child: Tooltip(
-        message: '$nombre ($rol)\nMantén presionado para quitar',
+        message: '$nombre ($rol)',
         child: Chip(
           label: Text(iniciales.isEmpty ? nombre.substring(0, 1).toUpperCase() : iniciales,
               style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
@@ -814,6 +990,141 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     }
   }
 
+  Future<void> _editarBloque(int dia, _Bloque b) async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.can(Perm.academicoGestionar)) return;
+    final item = b.itemsByHora[0][0];
+
+    final accion = await showDialog<String>(
+      context: context,
+      builder: (_) {
+        final nombre   = item['nombre_asignatura']?.toString() ?? '?';
+        final docente  = item['docente']?.toString() ?? '';
+        final grupo    = item['grupo']?.toString() ?? '';
+        final subtitle = [if (docente.isNotEmpty) docente, if (grupo.isNotEmpty) grupo].join(' · ');
+        return AlertDialog(
+          title: Text(nombre, style: const TextStyle(color: kPrimary, fontSize: 15)),
+          content: Text(
+            '${_dias[dia]} ${_horaAmPm(_horas[b.horaIdx])}'
+            '${b.duracion > 1 ? ' · ${b.duracion}h' : ''}'
+            '${subtitle.isNotEmpty ? '\n$subtitle' : ''}',
+            style: const TextStyle(color: kTextMuted, fontSize: 12),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'editar'),
+              child: const Text('Editar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'quitar'),
+              child: const Text('Quitar', style: TextStyle(color: kDanger)),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted) return;
+
+    if (accion == 'quitar') {
+      await _eliminarBloque(dia, b);
+    } else if (accion == 'editar') {
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (_) => _FormAsignaturaDialog(
+          asignaturas: _asignaturas,
+          initialAsignaturaId: item['asignatura']?.toString(),
+          initialDocente: item['docente']?.toString() ?? '',
+          initialGrupo:   item['grupo']?.toString()   ?? '',
+        ),
+      );
+      if (result == null || !mounted) return;
+      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      // Actualizar todas las filas del bloque con los nuevos datos
+      for (int k = 0; k < b.duracion; k++) {
+        final hora    = _horas[b.horaIdx + k];
+        final rowItem = b.itemsByHora[k][0];
+        try {
+          final r = await dio.patch('academico/horario-asignatura/${rowItem['id']}/', data: {
+            'asignatura': result['asignatura_id'],
+            'docente':    result['docente'],
+            'grupo':      result['grupo'],
+          });
+          setState(() {
+            final list = _grid[dia]?[hora];
+            if (list != null) {
+              final idx = list.indexWhere((e) => e['id'] == rowItem['id']);
+              if (idx >= 0) list[idx] = r.data as Map<String, dynamic>;
+            }
+          });
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _editarItem(int dia, int hora, Map<String, dynamic> item) async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.can(Perm.academicoGestionar)) return;
+
+    final accion = await showDialog<String>(
+      context: context,
+      builder: (_) {
+        final nombre  = item['nombre_asignatura']?.toString() ?? '?';
+        final docente = item['docente']?.toString() ?? '';
+        final grupo   = item['grupo']?.toString() ?? '';
+        final subtitle = [if (docente.isNotEmpty) docente, if (grupo.isNotEmpty) grupo].join(' · ');
+        return AlertDialog(
+          title: Text(nombre, style: const TextStyle(color: kPrimary, fontSize: 15)),
+          content: Text(
+            '${_dias[dia]} ${_horaAmPm(hora)}${subtitle.isNotEmpty ? '\n$subtitle' : ''}',
+            style: const TextStyle(color: kTextMuted, fontSize: 12),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+            TextButton(onPressed: () => Navigator.pop(context, 'editar'), child: const Text('Editar')),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'quitar'),
+              child: const Text('Quitar', style: TextStyle(color: kDanger)),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted) return;
+    if (accion == 'quitar') {
+      await _eliminar(dia, hora, item);
+    } else if (accion == 'editar') {
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (_) => _FormAsignaturaDialog(
+          asignaturas: _asignaturas,
+          initialAsignaturaId: item['asignatura']?.toString(),
+          initialDocente: item['docente']?.toString() ?? '',
+          initialGrupo:   item['grupo']?.toString()   ?? '',
+        ),
+      );
+      if (result == null || !mounted) return;
+      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      try {
+        final r = await dio.patch('academico/horario-asignatura/${item['id']}/', data: {
+          'asignatura': result['asignatura_id'],
+          'docente':    result['docente'],
+          'grupo':      result['grupo'],
+        });
+        setState(() {
+          final list = _grid[dia]?[hora];
+          if (list != null) {
+            final idx = list.indexWhere((e) => e['id'] == item['id']);
+            if (idx >= 0) list[idx] = r.data as Map<String, dynamic>;
+          }
+        });
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al actualizar'), backgroundColor: kDanger));
+      }
+    }
+  }
+
   // ── Grid con layout Stack (soporta celdas fusionadas) ────────────────────────
 
   Widget _buildGrid(bool puedeEditar) {
@@ -958,11 +1269,10 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final color    = _colorBloque(nombre);
 
     return GestureDetector(
-      onLongPress: puedeEditar ? () => _eliminarBloque(dia, b) : null,
+      onTap: puedeEditar ? () => _editarBloque(dia, b) : null,
       child: Tooltip(
         message: '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}'
-            '${isMulti ? '\n${b.duracion} horas consecutivas' : ''}'
-            '\nMantén presionado para quitar',
+            '${isMulti ? '\n${b.duracion} horas consecutivas' : ''}',
         child: Container(
           width: double.infinity,
           height: double.infinity,
@@ -1023,9 +1333,9 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final color    = _colorBloque(nombre);
 
     return GestureDetector(
-      onLongPress: puedeEditar ? () => _eliminar(dia, hora, item) : null,
+      onTap: puedeEditar ? () => _editarItem(dia, hora, item) : null,
       child: Tooltip(
-        message: '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}\nMantén presionado para quitar',
+        message: '$nombre${subtitle.isNotEmpty ? '\n$subtitle' : ''}',
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           decoration: BoxDecoration(
@@ -1541,22 +1851,41 @@ class _SelectorEncargadoDialog extends StatelessWidget {
 
 class _FormAsignaturaDialog extends StatefulWidget {
   final List<Map<String, dynamic>> asignaturas;
-  const _FormAsignaturaDialog({required this.asignaturas});
+  final String? initialAsignaturaId;
+  final String  initialDocente;
+  final String  initialGrupo;
+  const _FormAsignaturaDialog({
+    required this.asignaturas,
+    this.initialAsignaturaId,
+    this.initialDocente = '',
+    this.initialGrupo   = '',
+  });
   @override State<_FormAsignaturaDialog> createState() => _FormAsignaturaDialogState();
 }
 
 class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
   String?  _asignaturaId;
-  final _docenteCtrl = TextEditingController();
-  final _grupoCtrl   = TextEditingController();
+  late final TextEditingController _docenteCtrl;
+  late final TextEditingController _grupoCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _asignaturaId = widget.initialAsignaturaId;
+    _docenteCtrl  = TextEditingController(text: widget.initialDocente);
+    _grupoCtrl    = TextEditingController(text: widget.initialGrupo);
+  }
 
   @override
   void dispose() { _docenteCtrl.dispose(); _grupoCtrl.dispose(); super.dispose(); }
 
+  bool get _esEdicion => widget.initialAsignaturaId != null;
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Agregar asignatura', style: TextStyle(color: kPrimary)),
+      title: Text(_esEdicion ? 'Editar asignatura' : 'Agregar asignatura',
+          style: const TextStyle(color: kPrimary)),
       content: SizedBox(
         width: 320,
         child: Column(
@@ -1608,7 +1937,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
               'grupo':   _grupoCtrl.text.trim(),
             });
           },
-          child: const Text('Agregar'),
+          child: Text(_esEdicion ? 'Guardar' : 'Agregar'),
         ),
       ],
     );
