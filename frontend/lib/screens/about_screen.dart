@@ -92,7 +92,7 @@ class _AboutDialog extends StatelessWidget {
 
               // Licencia
               const Text(
-                'Proyecto de código abierto — MIT License',
+                'Licencia GNU AGPL v3 — Código abierto',
                 style: TextStyle(fontSize: 11, color: kTextMuted),
               ),
               const SizedBox(height: 16),
