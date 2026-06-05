@@ -280,25 +280,24 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  // Fusiona horas consecutivas con el mismo contenido para enc o asg
-  List<({int idx, int dur, List<Map<String, dynamic>> items})> _bloques(
-      Map<int, List<Map<String, dynamic>>>? porHora, bool esEnc) {
+  // Fusiona horas consecutivas con el mismo contenido para ASG
+  List<({int idx, int dur, List<Map<String, dynamic>> items})> _bloquesAsg(
+      Map<int, List<Map<String, dynamic>>>? porHora) {
     final result = <({int idx, int dur, List<Map<String, dynamic>> items})>[];
     int i = 0;
     while (i < _horas.length) {
       final hora  = _horas[i];
       final items = porHora?[hora] ?? [];
       if (items.isEmpty) { i++; continue; }
-
-      String _key(Map<String, dynamic> item) => esEnc
-          ? (item['usuario']?.toString() ?? '')
-          : '${item['asignatura']}|${item['docente']}|${item['grupo']}';
-
-      final keys = items.map(_key).toSet();
+      String key(Map<String, dynamic> item) =>
+          '${item['asignatura']}|${item['docente']}|${item['grupo']}';
+      final keys = items.map(key).toSet();
       int dur = 1;
       while (i + dur < _horas.length) {
         final next = porHora?[_horas[i + dur]] ?? [];
-        if (next.isNotEmpty && next.map(_key).toSet().containsAll(keys) && keys.containsAll(next.map(_key).toSet())) {
+        if (next.isNotEmpty &&
+            next.map(key).toSet().containsAll(keys) &&
+            keys.containsAll(next.map(key).toSet())) {
           dur++;
         } else break;
       }
@@ -308,10 +307,22 @@ class _DashboardContentState extends State<DashboardContent> {
     return result;
   }
 
+  // Color único por encargado basado en su username
+  static Color _colorEncargado(String username) {
+    const palette = [
+      Color(0xFF1565C0), Color(0xFF6A1B9A), Color(0xFF00695C),
+      Color(0xFFE65100), Color(0xFF880E4F), Color(0xFF004D40),
+      Color(0xFF1A237E), Color(0xFF4E342E),
+    ];
+    final hash = username.codeUnits.fold(0, (a, b) => a + b);
+    return palette[hash % palette.length];
+  }
+
   Widget _buildGridSemanal(int diaHoy, int horaActual) {
     const labelWidth = 52.0;
     const colWidth   = 110.0;
     const rowHeight  = 44.0;
+    const encLaneW   = 18.0; // ancho de cada franja de encargado
     final totalH = _horas.length * rowHeight;
 
     return Column(
@@ -335,7 +346,6 @@ class _DashboardContentState extends State<DashboardContent> {
             );
           }),
         ]),
-        // Cuerpo con Stack por columna
         SizedBox(
           height: totalH,
           child: Row(
@@ -350,9 +360,7 @@ class _DashboardContentState extends State<DashboardContent> {
                     final hora    = e.value;
                     final esAhora = hora == horaActual && diaHoy >= 0 && diaHoy <= 5;
                     return Positioned(
-                      top: e.key * rowHeight,
-                      left: 0, right: 0,
-                      height: rowHeight,
+                      top: e.key * rowHeight, left: 0, right: 0, height: rowHeight,
                       child: Container(
                         alignment: Alignment.topCenter,
                         padding: const EdgeInsets.only(top: 6),
@@ -373,36 +381,54 @@ class _DashboardContentState extends State<DashboardContent> {
               ),
               // Columnas por día
               ..._dias.asMap().entries.map((dEntry) {
-                final dia        = dEntry.key;
-                final esHoy      = dia == diaHoy;
-                final bloquesEnc = _bloques(_encByDia[dia], true);
-                final bloquesAsg = _bloques(_asgByDia[dia], false);
+                final dia   = dEntry.key;
+                final esHoy = dia == diaHoy;
 
-                // Índices ocupados por cualquier bloque
-                final ocupados = {
-                  for (final b in [...bloquesEnc, ...bloquesAsg])
-                    for (int k = 0; k < b.dur; k++) b.idx + k,
-                };
+                // Encargados únicos del día ordenados por username (posición estable)
+                final encUsers = <int, Map<String, dynamic>>{};
+                for (final items in (_encByDia[dia] ?? {}).values) {
+                  for (final item in items) {
+                    final uid = item['usuario'] as int? ?? 0;
+                    encUsers[uid] ??= item;
+                  }
+                }
+                final encSorted = encUsers.keys.toList()..sort();
+                final numLanes  = encSorted.length;
+                final encTotalW = numLanes * encLaneW;
+                final asgLeft   = encTotalW + 1;
+                final asgRight  = 2.0;
 
-                // Para cada bloque de asignatura, busca encargados solapados
-                List<Map<String, dynamic>> _encsEnRango(int idx, int dur) {
-                  final result = <Map<String, dynamic>>[];
-                  for (final be in bloquesEnc) {
-                    final solapan = be.idx < idx + dur && be.idx + be.dur > idx;
-                    if (solapan) result.addAll(be.items);
+                // Bloques por usuario (franjas individuales independientes)
+                List<({int idx, int dur})> _bloquesUser(int uid) {
+                  final porHora = _encByDia[dia] ?? {};
+                  final result  = <({int idx, int dur})>[];
+                  int i = 0;
+                  while (i < _horas.length) {
+                    final hora  = _horas[i];
+                    final tiene = (porHora[hora] ?? []).any((e) => e['usuario'] == uid);
+                    if (!tiene) { i++; continue; }
+                    int dur = 1;
+                    while (i + dur < _horas.length &&
+                        (porHora[_horas[i + dur]] ?? []).any((e) => e['usuario'] == uid)) {
+                      dur++;
+                    }
+                    result.add((idx: i, dur: dur));
+                    i += dur;
                   }
                   return result;
                 }
 
-                // Índices de encargados que ya están cubiertos por un bloque de asg
-                final encCubiertos = <int>{};
-                for (final ba in bloquesAsg) {
-                  for (final be in bloquesEnc) {
-                    if (be.idx < ba.idx + ba.dur && be.idx + be.dur > ba.idx) {
-                      encCubiertos.add(bloquesEnc.indexOf(be));
-                    }
-                  }
-                }
+                final bloquesAsg = _bloquesAsg(_asgByDia[dia]);
+                final ocupadosAsg = {
+                  for (final b in bloquesAsg)
+                    for (int k = 0; k < b.dur; k++) b.idx + k,
+                };
+                final ocupadosEnc = {
+                  for (final uid in encSorted)
+                    for (final b in _bloquesUser(uid)) ...[
+                      for (int k = 0; k < b.dur; k++) b.idx + k,
+                    ],
+                };
 
                 return SizedBox(
                   width: colWidth,
@@ -413,13 +439,14 @@ class _DashboardContentState extends State<DashboardContent> {
                       ...List.generate(_horas.length, (i) {
                         final hora    = _horas[i];
                         final esAhora = hora == horaActual && esHoy;
+                        final ocupado = ocupadosAsg.contains(i) || ocupadosEnc.contains(i);
                         return Positioned(
                           top: i * rowHeight, left: 0, right: 0, height: rowHeight,
                           child: Container(
                             decoration: BoxDecoration(
                               color: esAhora
                                   ? const Color(0xFFD4E8FF)
-                                  : esHoy && !ocupados.contains(i)
+                                  : esHoy && !ocupado
                                       ? const Color(0xFFF0F7FF)
                                       : i.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
                               border: Border(
@@ -433,28 +460,75 @@ class _DashboardContentState extends State<DashboardContent> {
                           ),
                         );
                       }),
-                      // Bloques asignaturas con encargados incrustados
+                      // Franjas de encargados (izquierda, una por usuario)
+                      ...encSorted.asMap().entries.expand((laneEntry) {
+                        final laneIdx = laneEntry.key;
+                        final uid     = laneEntry.value;
+                        final enc     = encUsers[uid]!;
+                        final username = enc['username']?.toString() ?? '?';
+                        final nombre   = enc['nombre_completo']?.toString() ?? username;
+                        final color    = _colorEncargado(username);
+                        final left     = laneIdx * encLaneW;
+                        return _bloquesUser(uid).map((b) => Positioned(
+                          top:    b.idx * rowHeight + 1,
+                          left:   left + 1,
+                          width:  encLaneW - 2,
+                          height: b.dur * rowHeight - 2,
+                          child: Tooltip(
+                            message: '$nombre\n${b.dur}h',
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              alignment: Alignment.topCenter,
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Text(
+                                username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                style: const TextStyle(color: Colors.white,
+                                    fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ));
+                      }),
+                      // Bloques de asignatura (derecha, tras las franjas)
                       ...bloquesAsg.map((b) {
-                        final encs = _encsEnRango(b.idx, b.dur);
+                        final a      = b.items.first;
+                        final nombre = a['nombre_asignatura'] as String? ?? '?';
+                        final grupo  = a['grupo'] as String? ?? '';
                         return Positioned(
-                          top: b.idx * rowHeight + 2,
-                          left: 2, right: 2,
+                          top:    b.idx * rowHeight + 2,
+                          left:   asgLeft,
+                          right:  asgRight,
                           height: b.dur * rowHeight - 4,
-                          child: _bloqueAsigConEnc(b.items, b.dur, encs),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(4, 3, 3, 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(3),
+                              border: const Border(
+                                left: BorderSide(color: kSuccess, width: 2),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text('$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}',
+                                    style: const TextStyle(color: kSuccess,
+                                        fontSize: 9, fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: b.dur > 1 ? 2 : 1),
+                                if (b.dur > 1)
+                                  Text('${b.dur}h',
+                                      style: const TextStyle(color: kSuccess,
+                                          fontSize: 8)),
+                              ],
+                            ),
+                          ),
                         );
                       }),
-                      // Bloques encargados SIN asignatura asociada
-                      ...bloquesEnc.asMap().entries
-                          .where((e) => !encCubiertos.contains(e.key))
-                          .map((e) {
-                            final b = e.value;
-                            return Positioned(
-                              top: b.idx * rowHeight + 2,
-                              left: 2, right: 2,
-                              height: b.dur * rowHeight - 4,
-                              child: _bloqueEncSolo(b.items, b.dur),
-                            );
-                          }),
                     ],
                   ),
                 );
@@ -463,147 +537,6 @@ class _DashboardContentState extends State<DashboardContent> {
           ),
         ),
       ],
-    );
-  }
-
-  // Color único por encargado basado en su username
-  static Color _colorEncargado(String username) {
-    const palette = [
-      Color(0xFF1565C0), // azul oscuro
-      Color(0xFF6A1B9A), // violeta
-      Color(0xFF00695C), // verde azulado
-      Color(0xFFE65100), // naranja
-      Color(0xFF880E4F), // rosa oscuro
-      Color(0xFF004D40), // verde oscuro
-      Color(0xFF1A237E), // índigo
-      Color(0xFF4E342E), // marrón
-    ];
-    final hash = username.codeUnits.fold(0, (a, b) => a + b);
-    return palette[hash % palette.length];
-  }
-
-  // Bloque: asignatura principal + avatares de encargados en esquina
-  Widget _bloqueAsigConEnc(List<Map<String, dynamic>> asgItems, int dur,
-      List<Map<String, dynamic>> encs) {
-    final a      = asgItems.first;
-    final nombre = a['nombre_asignatura'] as String? ?? '?';
-    final grupo  = a['grupo'] as String? ?? '';
-    const color  = kSuccess;
-    const bg     = Color(0xFFE8F5E9);
-
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      padding: const EdgeInsets.fromLTRB(5, 3, 5, 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(4),
-        border: Border(
-          left:   const BorderSide(color: color, width: 3),
-          top:    BorderSide(color: color.withValues(alpha: 0.3)),
-          right:  BorderSide(color: color.withValues(alpha: 0.3)),
-          bottom: BorderSide(color: color.withValues(alpha: 0.3)),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Nombre asignatura + grupo
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}',
-                    style: const TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: dur > 1 ? 2 : 1),
-                if (dur > 1)
-                  Text('${dur}h',
-                      style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 9)),
-              ],
-            ),
-          ),
-          // Avatares de encargados
-          if (encs.isNotEmpty)
-            Wrap(
-              spacing: 2,
-              children: encs.map((enc) {
-                final username = enc['username']?.toString() ?? '?';
-                final nombre2  = enc['nombre_completo']?.toString() ?? username;
-                final iniciales = nombre2.split(' ').take(2)
-                    .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
-                final color2 = _colorEncargado(username);
-                return Tooltip(
-                  message: nombre2,
-                  child: Container(
-                    width: 16, height: 16,
-                    decoration: BoxDecoration(color: color2, shape: BoxShape.circle),
-                    alignment: Alignment.center,
-                    child: Text(
-                      iniciales.isNotEmpty ? iniciales[0] : username[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.white, fontSize: 8,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // Bloque: solo encargados (sin asignatura)
-  Widget _bloqueEncSolo(List<Map<String, dynamic>> items, int dur) {
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      padding: const EdgeInsets.fromLTRB(5, 3, 5, 3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE3F2FD),
-        borderRadius: BorderRadius.circular(4),
-        border: Border(
-          left:   const BorderSide(color: kPrimary, width: 3),
-          top:    BorderSide(color: kPrimary.withValues(alpha: 0.3)),
-          right:  BorderSide(color: kPrimary.withValues(alpha: 0.3)),
-          bottom: BorderSide(color: kPrimary.withValues(alpha: 0.3)),
-        ),
-      ),
-      child: Wrap(
-        spacing: 3,
-        runSpacing: 3,
-        children: items.map((enc) {
-          final username = enc['username']?.toString() ?? '?';
-          final nombre   = enc['nombre_completo']?.toString() ?? username;
-          final iniciales = nombre.split(' ').take(2)
-              .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
-          final color = _colorEncargado(username);
-          return Tooltip(
-            message: nombre,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 14, height: 14,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: Text(
-                    iniciales.isNotEmpty ? iniciales[0] : username[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 7,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(width: 3),
-                Text(username,
-                    style: TextStyle(color: color, fontSize: 9,
-                        fontWeight: FontWeight.w600)),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
     );
   }
 
