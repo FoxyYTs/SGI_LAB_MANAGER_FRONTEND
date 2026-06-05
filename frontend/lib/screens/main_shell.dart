@@ -7,6 +7,7 @@ import '../core/sync/sync_service.dart';
 import '../services/monitor_reminder_service.dart';
 import '../services/update_service.dart';
 import '../widgets/update_dialog.dart';
+import 'about_screen.dart';
 import 'dashboard_screen.dart';
 import 'inventario_screen.dart';
 import 'movimientos_screen.dart';
@@ -360,6 +361,13 @@ class _MainShellState extends State<MainShell> {
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15,
                 letterSpacing: 0.8, color: _kOnSurface)),
         const Spacer(),
+        // Botón Acerca de
+        IconButton(
+          tooltip: 'Acerca de',
+          icon: const Icon(Icons.info_outline, size: 20, color: kTextMuted),
+          onPressed: () => showSgiAboutDialog(context),
+        ),
+        const SizedBox(width: 4),
         // Usuario + avatar
         GestureDetector(
           onTap: () => Navigator.pushNamed(context, '/mi-perfil'),
@@ -421,6 +429,11 @@ class _MainShellState extends State<MainShell> {
               color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.white, size: 20),
+            tooltip: 'Acerca de',
+            onPressed: () => showSgiAboutDialog(context),
+          ),
           _syncIndicator(sync),
           const SizedBox(width: 8),
         ],
