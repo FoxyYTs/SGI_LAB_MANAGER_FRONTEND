@@ -125,9 +125,12 @@ class _MainShellState extends State<MainShell> {
     final sync  = context.watch<SyncService>();
     final tabs  = _tabs(auth);
     final idx   = _idx.clamp(0, tabs.length - 1);
-    final width = MediaQuery.of(context).size.width;
+    final size   = MediaQuery.of(context).size;
+    final width  = size.width;
+    // En landscape en teléfono (pantalla < 900px, ancho > alto) usamos layout mobile
+    final isLandscapePhone = width < 900 && width > size.height;
 
-    if (width < 700) return _buildMobile(context, auth, sync, tabs, idx);
+    if (width < 700 || isLandscapePhone) return _buildMobile(context, auth, sync, tabs, idx);
     return _buildDesktop(context, auth, sync, tabs);
   }
 
