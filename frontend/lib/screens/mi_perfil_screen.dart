@@ -257,6 +257,47 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     }
   }
 
+  Widget _buildAvatar(String? iniciales, {double radius = 48}) {
+    final bg = kPrimary.withValues(alpha: 0.15);
+    if (_subiendoFoto) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: bg,
+        child: SizedBox(
+          width: 28, height: 28,
+          child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2.5),
+        ),
+      );
+    }
+    if (_fotoUrl != null) {
+      return ClipOval(
+        child: Image.network(
+          _fotoUrl!,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          errorBuilder: (_, e, __) {
+            debugPrint('MiPerfil: error cargando foto $_fotoUrl — $e');
+            return CircleAvatar(
+              radius: radius,
+              backgroundColor: bg,
+              child: iniciales != null
+                  ? Text(iniciales, style: TextStyle(fontSize: radius * 0.58, fontWeight: FontWeight.bold, color: kPrimary))
+                  : Icon(Icons.person, size: radius * 0.92, color: kPrimary),
+            );
+          },
+        ),
+      );
+    }
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: bg,
+      child: iniciales != null
+          ? Text(iniciales, style: TextStyle(fontSize: radius * 0.58, fontWeight: FontWeight.bold, color: kPrimary))
+          : Icon(Icons.person, size: radius * 0.92, color: kPrimary),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -322,18 +363,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
         GestureDetector(
           onTap: _subiendoFoto ? null : _seleccionarFoto,
           child: Stack(alignment: Alignment.bottomRight, children: [
-            CircleAvatar(
-              radius: 48,
-              backgroundColor: kPrimary.withValues(alpha: 0.15),
-              backgroundImage: _fotoUrl != null ? NetworkImage(_fotoUrl!) : null,
-              child: _subiendoFoto
-                  ? const SizedBox(width: 28, height: 28,
-                      child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2.5))
-                  : (_fotoUrl == null
-                      ? Text(iniciales,
-                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: kPrimary))
-                      : null),
-            ),
+            _buildAvatar(iniciales, radius: 48),
             Container(
               decoration: BoxDecoration(
                   color: kPrimary, shape: BoxShape.circle,
@@ -430,17 +460,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       GestureDetector(
         onTap: _subiendoFoto ? null : _seleccionarFoto,
         child: Stack(alignment: Alignment.bottomRight, children: [
-          CircleAvatar(
-            radius: 42,
-            backgroundColor: kPrimary.withValues(alpha: 0.15),
-            backgroundImage: _fotoUrl != null ? NetworkImage(_fotoUrl!) : null,
-            child: _subiendoFoto
-                ? const SizedBox(width: 28, height: 28,
-                    child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2.5))
-                : (_fotoUrl == null
-                    ? const Icon(Icons.person, size: 44, color: kPrimary)
-                    : null),
-          ),
+          _buildAvatar(null, radius: 42),
           Container(
             decoration: BoxDecoration(
                 color: kPrimary, shape: BoxShape.circle,
