@@ -115,7 +115,11 @@ class _DashboardContentState extends State<DashboardContent> {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      final isMobile = constraints.maxWidth < 650;
+      // En landscape en móvil (ancho > alto pero pantalla pequeña) tratamos como móvil
+      final screenSize = MediaQuery.of(context).size;
+      final isLandscapePhone = screenSize.width < 900 &&
+          screenSize.width > screenSize.height;
+      final isMobile = constraints.maxWidth < 650 || isLandscapePhone;
       final pad = isMobile ? 14.0 : 24.0;
       return SingleChildScrollView(
         padding: EdgeInsets.all(pad),
@@ -707,12 +711,12 @@ class _DashboardContentState extends State<DashboardContent> {
           ),
           // Tabla
           SingleChildScrollView(
-            scrollDirection: isMobile ? Axis.horizontal : Axis.vertical,
+            scrollDirection: Axis.horizontal,
             child: ConstrainedBox(
-              constraints: BoxConstraints(minWidth: isMobile ? 360 : 0),
+              constraints: const BoxConstraints(minWidth: 460),
               child: Table(
                 columnWidths: const {
-                  0: FlexColumnWidth(3),
+                  0: FixedColumnWidth(170),
                   1: FixedColumnWidth(110),
                   2: FixedColumnWidth(100),
                   3: FixedColumnWidth(90),
