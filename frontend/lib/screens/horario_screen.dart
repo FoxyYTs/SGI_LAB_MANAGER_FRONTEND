@@ -11,6 +11,12 @@ import '../providers/auth_provider.dart';
 const _dias = ['Lunes', 'Martes', 'Miérc.', 'Jueves', 'Viernes', 'Sábado'];
 const _horas = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21];
 
+String _horaAmPm(int hora) {
+  if (hora == 12) return '12 PM';
+  if (hora > 12) return '${hora - 12} PM';
+  return '$hora AM';
+}
+
 const double _colWidth   = 140;
 const double _labelWidth = 54;
 const double _rowHeight  = 40;
@@ -532,12 +538,6 @@ class _TabEncargadosState extends State<_TabEncargados>
     );
   }
 
-  String _horaAmPm(int hora) {
-    if (hora == 12) return '12 PM';
-    if (hora > 12) return '${hora - 12} PM';
-    return '$hora AM';
-  }
-
   Widget _buildHoraRow(int hora, bool puedeEditar) {
     return IntrinsicHeight(
       child: Row(
@@ -859,7 +859,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
                         ),
                       ),
                       child: Text(
-                        '${_horas[e.key].toString().padLeft(2, '0')}:00',
+                        _horaAmPm(_horas[e.key]),
                         style: const TextStyle(
                             fontSize: 10, color: kTextMuted, fontWeight: FontWeight.w600),
                       ),
