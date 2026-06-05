@@ -232,7 +232,7 @@ class _DashboardContentState extends State<DashboardContent> {
   // ── Horario semanal ───────────────────────────────────────────────────────
 
   static const _dias   = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-  static const _horas  = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+  static const _horas  = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
   Widget _buildHorarioSemanal(bool isMobile) {
     final diaHoy     = DateTime.now().weekday - 1; // 0=Lun … 5=Sáb
@@ -289,7 +289,7 @@ class _DashboardContentState extends State<DashboardContent> {
 
   Widget _buildGridSemanal(int diaHoy, int horaActual) {
     const labelWidth = 52.0;
-    const colWidth   = 130.0;
+    const colWidth   = 110.0;
     const rowHeight  = 44.0;
 
     return Column(
