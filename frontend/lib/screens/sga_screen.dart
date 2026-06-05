@@ -161,9 +161,44 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _abrirEtiquetaUrl() async {
+    // Diálogo para elegir el tamaño de etiqueta
+    final formatos = [
+      {'value': 'pequena', 'label': 'Pequeña',    'sub': '52 × 74 mm'},
+      {'value': '50l',     'label': 'Máx. 50 L',  'sub': '74 × 105 mm'},
+      {'value': '500l',    'label': 'Máx. 500 L', 'sub': '105 × 148 mm'},
+      {'value': 'grande',  'label': 'Más de 500 L','sub': '148 × 210 mm'},
+    ];
+
+    final elegido = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Seleccionar tamaño de etiqueta',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: formatos.map((f) => ListTile(
+            dense: true,
+            leading: const Icon(Icons.label_outline, color: Color(0xFF1E73BE)),
+            title: Text(f['label']!, style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(f['sub']!),
+            onTap: () => Navigator.pop(ctx, f['value']),
+          )).toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+        ],
+      ),
+    );
+
+    if (elegido == null || !mounted) return;
+
     final url = Uri.parse(
       '${ApiClient.instance.baseUrl}inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/'
-      '?token=$_token',
+      '?token=$_token&formato=$elegido',
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
