@@ -806,6 +806,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
   // [dia][hora] → List<{id, nombre_asignatura, docente, grupo}>
   Map<int, Map<int, List<Map<String, dynamic>>>> _grid = {};
   List<Map<String, dynamic>> _asignaturas = [];
+  List<Map<String, dynamic>> _docentes    = [];
   bool _cargando = true;
 
   @override
@@ -839,6 +840,14 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       setState(() => _asignaturas = asignaturas);
     } catch (_) {}
 
+    try {
+      final resp = await dio.get('academico/docentes/');
+      final docentes = List<Map<String, dynamic>>.from(
+          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      if (!mounted) return;
+      setState(() => _docentes = docentes.where((d) => d['activo'] == true).toList());
+    } catch (_) {}
+
     if (!mounted) return;
     setState(() => _cargando = false);
   }
@@ -859,7 +868,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => _FormAsignaturaDialog(asignaturas: _asignaturas),
+      builder: (_) => _FormAsignaturaDialog(asignaturas: _asignaturas, docentes: _docentes),
     );
     if (result == null || !mounted) return;
 
@@ -1033,6 +1042,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
         context: context,
         builder: (_) => _FormAsignaturaDialog(
           asignaturas: _asignaturas,
+          docentes: _docentes,
           initialAsignaturaId: item['asignatura']?.toString(),
           initialDocente: item['docente']?.toString() ?? '',
           initialGrupo:   item['grupo']?.toString()   ?? '',
@@ -1098,6 +1108,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
         context: context,
         builder: (_) => _FormAsignaturaDialog(
           asignaturas: _asignaturas,
+          docentes: _docentes,
           initialAsignaturaId: item['asignatura']?.toString(),
           initialDocente: item['docente']?.toString() ?? '',
           initialGrupo:   item['grupo']?.toString()   ?? '',
@@ -1847,42 +1858,78 @@ class _SelectorEncargadoDialog extends StatelessWidget {
   }
 }
 
-// ── Diálogo: agregar asignatura ───────────────────────────────────────────────
+// ── Diálogo: agregar / editar asignatura en horario ──────────────────────────
+
+const _kOtros = '__otros__';
 
 class _FormAsignaturaDialog extends StatefulWidget {
   final List<Map<String, dynamic>> asignaturas;
+  final List<Map<String, dynamic>> docentes;
   final String? initialAsignaturaId;
   final String  initialDocente;
   final String  initialGrupo;
   const _FormAsignaturaDialog({
     required this.asignaturas,
+    this.docentes            = const [],
     this.initialAsignaturaId,
-    this.initialDocente = '',
-    this.initialGrupo   = '',
+    this.initialDocente      = '',
+    this.initialGrupo        = '',
   });
   @override State<_FormAsignaturaDialog> createState() => _FormAsignaturaDialogState();
 }
 
 class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
   String?  _asignaturaId;
-  late final TextEditingController _docenteCtrl;
+  // El valor del dropdown: id del docente, o _kOtros, o null
+  String?  _docenteDropdown;
+  late final TextEditingController _docenteOtroCtrl;
   late final TextEditingController _grupoCtrl;
 
   @override
   void initState() {
     super.initState();
     _asignaturaId = widget.initialAsignaturaId;
-    _docenteCtrl  = TextEditingController(text: widget.initialDocente);
     _grupoCtrl    = TextEditingController(text: widget.initialGrupo);
+    _docenteOtroCtrl = TextEditingController();
+
+    // Determinar si el valor inicial coincide con algún docente de la lista
+    if (widget.initialDocente.isNotEmpty) {
+      final match = widget.docentes.firstWhere(
+        (d) => (d['nombre_completo'] as String? ?? '') == widget.initialDocente,
+        orElse: () => {},
+      );
+      if (match.isNotEmpty) {
+        _docenteDropdown = match['id'].toString();
+      } else {
+        _docenteDropdown = _kOtros;
+        _docenteOtroCtrl.text = widget.initialDocente;
+      }
+    }
   }
 
   @override
-  void dispose() { _docenteCtrl.dispose(); _grupoCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _docenteOtroCtrl.dispose();
+    _grupoCtrl.dispose();
+    super.dispose();
+  }
 
   bool get _esEdicion => widget.initialAsignaturaId != null;
 
+  String _nombreDocente() {
+    if (_docenteDropdown == null) return '';
+    if (_docenteDropdown == _kOtros) return _docenteOtroCtrl.text.trim();
+    final doc = widget.docentes.firstWhere(
+      (d) => d['id'].toString() == _docenteDropdown,
+      orElse: () => {},
+    );
+    return doc['nombre_completo'] as String? ?? '';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final mostrarOtroField = _docenteDropdown == _kOtros;
+
     return AlertDialog(
       title: Text(_esEdicion ? 'Editar asignatura' : 'Agregar asignatura',
           style: const TextStyle(color: kPrimary)),
@@ -1891,8 +1938,9 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Asignatura
             DropdownButtonFormField<String>(
-              initialValue: _asignaturaId,
+              value: _asignaturaId,
               decoration: const InputDecoration(
                 labelText: 'Asignatura *',
                 prefixIcon: Icon(Icons.school_outlined, color: kPrimary),
@@ -1905,15 +1953,45 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
               onChanged: (v) => setState(() => _asignaturaId = v),
             ),
             const SizedBox(height: 12),
-            TextField(
-              controller: _docenteCtrl,
+            // Docente — lista + Otros
+            DropdownButtonFormField<String>(
+              value: _docenteDropdown,
               decoration: const InputDecoration(
                 labelText: 'Docente',
                 prefixIcon: Icon(Icons.person_outline, color: kPrimary),
                 border: OutlineInputBorder(),
               ),
+              items: [
+                ...widget.docentes.map((d) => DropdownMenuItem(
+                  value: d['id'].toString(),
+                  child: Text(d['nombre_completo']?.toString() ?? '',
+                      overflow: TextOverflow.ellipsis),
+                )),
+                const DropdownMenuItem(
+                  value: _kOtros,
+                  child: Text('Otros...', style: TextStyle(color: kTextMuted, fontStyle: FontStyle.italic)),
+                ),
+              ],
+              onChanged: (v) => setState(() {
+                _docenteDropdown = v;
+                if (v != _kOtros) _docenteOtroCtrl.clear();
+              }),
             ),
+            // Campo libre cuando se elige "Otros..."
+            if (mostrarOtroField) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _docenteOtroCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre del docente',
+                  prefixIcon: Icon(Icons.edit_outlined, color: kPrimary),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
+            // Grupo
             TextField(
               controller: _grupoCtrl,
               decoration: const InputDecoration(
@@ -1933,7 +2011,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
           onPressed: _asignaturaId == null ? null : () {
             Navigator.pop(context, {
               'asignatura_id': _asignaturaId,
-              'docente': _docenteCtrl.text.trim(),
+              'docente': _nombreDocente(),
               'grupo':   _grupoCtrl.text.trim(),
             });
           },
