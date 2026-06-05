@@ -65,6 +65,8 @@ El mini-horario incorpora las mejoras del horario completo:
 - **Extensión horaria hasta las 8 PM** (20:00).
 - **Franjas de encargados adaptativas**: aparecen como bandas semitransparentes a la derecha del bloque de asignatura, con color único por encargado, solo cuando el encargado está activo en ese rango (sin espacio reservado vacío cuando no hay encargado).
 
+La tabla de **Insumos Críticos** en el dashboard usa `FixedColumnWidth(170)` para la columna de nombre, evitando que el texto se parta letra por letra dentro del `SingleChildScrollView` horizontal (el `FlexColumnWidth` no calcula bien el ancho en scroll horizontal).
+
 ### Informes
 
 Seis tipos de informe en PDF y Excel: inventario, préstamos, bitácora, horas monitor, prácticas docentes, deudores morosos. Filtros de fecha. Auditoría en `RegistroInforme`.
@@ -132,6 +134,10 @@ Cada notificación se dispara una sola vez por evento. Las tareas se cancelan al
 - La sesión persiste entre reinicios de la app (sin internet incluido).
 - En **web**, la sesión expira a medianoche del día de login.
 - Los clientes Android/Linux envían `X-App-Version` — si la versión es menor a la mínima configurada en servidor, la app muestra pantalla de actualización obligatoria (HTTP 426).
+
+### Layout adaptativo
+
+El umbral desktop/móvil es 700px. Adicionalmente, si el ancho < 900px **y** el ancho > alto (landscape en teléfono), se fuerza el layout mobile con hamburguesa aunque el ancho supere los 700px — evita que el sidebar de 256px aparezca en teléfonos girados.
 
 ---
 
