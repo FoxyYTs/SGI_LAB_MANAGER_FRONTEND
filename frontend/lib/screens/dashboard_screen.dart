@@ -24,9 +24,9 @@ class _DashboardContentState extends State<DashboardContent> {
 
   Map<String, dynamic>? _data;
 
-  // dia(0-5) → hora(6-21) → valor
-  Map<int, Map<int, String>> _encByDia  = {};
-  Map<int, Map<int, String>> _asgByDia  = {};
+  // dia(0-5) → hora(6-21) → lista de items
+  Map<int, Map<int, List<Map<String, dynamic>>>> _encByDia = {};
+  Map<int, Map<int, List<Map<String, dynamic>>>> _asgByDia = {};
 
   bool      _cargando   = true;
   bool      _desdeCache = false;
@@ -68,7 +68,7 @@ class _DashboardContentState extends State<DashboardContent> {
       await CacheService.instance.set(_cacheKey, data);
 
       // Indexar encargados por día y hora
-      final encByDia = <int, Map<int, String>>{};
+      final encByDia = <int, Map<int, List<Map<String, dynamic>>>>{};
       final rawEnc = results[1].data;
       final listaEnc = List<Map<String, dynamic>>.from(
           rawEnc is List ? rawEnc : (rawEnc['results'] ?? []));
@@ -76,26 +76,19 @@ class _DashboardContentState extends State<DashboardContent> {
         final dia  = e['dia_semana'] as int? ?? -1;
         final hora = e['hora'] as int? ?? -1;
         if (dia < 0 || hora < 0) continue;
-        final user = e['username'] as String? ?? '?';
-        final rol  = e['rol'] as String? ?? '';
-        encByDia.putIfAbsent(dia, () => {})[hora] =
-            '$user${rol.isNotEmpty ? ' · $rol' : ''}';
+        encByDia.putIfAbsent(dia, () => {}).putIfAbsent(hora, () => []).add(e);
       }
 
       // Indexar asignaturas por día y hora
-      final asgByDia = <int, Map<int, String>>{};
+      final asgByDia = <int, Map<int, List<Map<String, dynamic>>>>{};
       final rawAsg = results[2].data;
       final listaAsg = List<Map<String, dynamic>>.from(
           rawAsg is List ? rawAsg : (rawAsg['results'] ?? []));
       for (final a in listaAsg) {
-        final dia   = a['dia_semana'] as int? ?? -1;
-        final hora  = a['hora'] as int? ?? -1;
+        final dia  = a['dia_semana'] as int? ?? -1;
+        final hora = a['hora'] as int? ?? -1;
         if (dia < 0 || hora < 0) continue;
-        final nombre = a['nombre_asignatura'] as String?
-            ?? a['asignatura_nombre'] as String? ?? '?';
-        final grupo  = a['grupo'] as String? ?? '';
-        asgByDia.putIfAbsent(dia, () => {})[hora] =
-            '$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}';
+        asgByDia.putIfAbsent(dia, () => {}).putIfAbsent(hora, () => []).add(a);
       }
 
       if (!mounted) return;
@@ -287,10 +280,39 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
+  // Fusiona horas consecutivas con el mismo contenido para enc o asg
+  List<({int idx, int dur, List<Map<String, dynamic>> items})> _bloques(
+      Map<int, List<Map<String, dynamic>>>? porHora, bool esEnc) {
+    final result = <({int idx, int dur, List<Map<String, dynamic>> items})>[];
+    int i = 0;
+    while (i < _horas.length) {
+      final hora  = _horas[i];
+      final items = porHora?[hora] ?? [];
+      if (items.isEmpty) { i++; continue; }
+
+      String _key(Map<String, dynamic> item) => esEnc
+          ? (item['usuario']?.toString() ?? '')
+          : '${item['asignatura']}|${item['docente']}|${item['grupo']}';
+
+      final keys = items.map(_key).toSet();
+      int dur = 1;
+      while (i + dur < _horas.length) {
+        final next = porHora?[_horas[i + dur]] ?? [];
+        if (next.isNotEmpty && next.map(_key).toSet().containsAll(keys) && keys.containsAll(next.map(_key).toSet())) {
+          dur++;
+        } else break;
+      }
+      result.add((idx: i, dur: dur, items: items));
+      i += dur;
+    }
+    return result;
+  }
+
   Widget _buildGridSemanal(int diaHoy, int horaActual) {
     const labelWidth = 52.0;
     const colWidth   = 110.0;
     const rowHeight  = 44.0;
+    final totalH = _horas.length * rowHeight;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,95 +335,150 @@ class _DashboardContentState extends State<DashboardContent> {
             );
           }),
         ]),
-        // Filas de horas
-        ..._horas.asMap().entries.map((hEntry) {
-          final hora    = hEntry.value;
-          final esAhora = hora == horaActual && diaHoy >= 0 && diaHoy <= 5;
-          return Row(
+        // Cuerpo con Stack por columna
+        SizedBox(
+          height: totalH,
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Etiqueta hora
-              Container(
+              // Columna de horas
+              SizedBox(
                 width: labelWidth,
-                height: rowHeight,
-                alignment: Alignment.topCenter,
-                padding: const EdgeInsets.only(top: 6),
-                decoration: const BoxDecoration(
-                  border: Border(
-                    right:  BorderSide(color: Color(0xFFDEE2E6)),
-                    bottom: BorderSide(color: Color(0xFFDEE2E6)),
-                  ),
+                height: totalH,
+                child: Stack(
+                  children: _horas.asMap().entries.map((e) {
+                    final hora    = e.value;
+                    final esAhora = hora == horaActual && diaHoy >= 0 && diaHoy <= 5;
+                    return Positioned(
+                      top: e.key * rowHeight,
+                      left: 0, right: 0,
+                      height: rowHeight,
+                      child: Container(
+                        alignment: Alignment.topCenter,
+                        padding: const EdgeInsets.only(top: 6),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            right:  BorderSide(color: Color(0xFFDEE2E6)),
+                            bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                          ),
+                        ),
+                        child: Text(_horaAmPm(hora),
+                            style: TextStyle(
+                                fontSize: 10, fontWeight: FontWeight.w600,
+                                color: esAhora ? kPrimary : kTextMuted)),
+                      ),
+                    );
+                  }).toList(),
                 ),
-                child: Text(_horaAmPm(hora),
-                    style: TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w600,
-                        color: esAhora ? kPrimary : kTextMuted)),
               ),
-              // Celdas por día
+              // Columnas por día
               ..._dias.asMap().entries.map((dEntry) {
                 final dia   = dEntry.key;
                 final esHoy = dia == diaHoy;
-                final enc   = _encByDia[dia]?[hora];
-                final asg   = _asgByDia[dia]?[hora];
-                final tieneContenido = enc != null || asg != null;
+                final bloquesEnc = _bloques(_encByDia[dia], true);
+                final bloquesAsg = _bloques(_asgByDia[dia], false);
+                final ocupados = {
+                  for (final b in [...bloquesEnc, ...bloquesAsg])
+                    for (int k = 0; k < b.dur; k++) b.idx + k,
+                };
 
-                return Container(
+                return SizedBox(
                   width: colWidth,
-                  height: tieneContenido ? null : rowHeight,
-                  constraints: tieneContenido
-                      ? BoxConstraints(minHeight: rowHeight)
-                      : null,
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: esAhora && esHoy
-                        ? const Color(0xFFD4E8FF)
-                        : esHoy
-                            ? const Color(0xFFF0F7FF)
-                            : hEntry.key.isOdd
-                                ? const Color(0xFFF8F9FA)
-                                : Colors.white,
-                    border: Border(
-                      right:  const BorderSide(color: Color(0xFFDEE2E6)),
-                      bottom: const BorderSide(color: Color(0xFFDEE2E6)),
-                      left: esAhora && esHoy
-                          ? const BorderSide(color: kSemaforoRojo, width: 2)
-                          : BorderSide.none,
-                    ),
+                  height: totalH,
+                  child: Stack(
+                    children: [
+                      // Fondo por hora
+                      ...List.generate(_horas.length, (i) {
+                        final hora    = _horas[i];
+                        final esAhora = hora == horaActual && esHoy;
+                        return Positioned(
+                          top: i * rowHeight, left: 0, right: 0, height: rowHeight,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: esAhora
+                                  ? const Color(0xFFD4E8FF)
+                                  : esHoy && !ocupados.contains(i)
+                                      ? const Color(0xFFF0F7FF)
+                                      : i.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
+                              border: Border(
+                                right:  const BorderSide(color: Color(0xFFDEE2E6)),
+                                bottom: const BorderSide(color: Color(0xFFDEE2E6)),
+                                left: esAhora
+                                    ? const BorderSide(color: kSemaforoRojo, width: 2)
+                                    : BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                      // Bloques encargados
+                      ...bloquesEnc.map((b) => Positioned(
+                        top: b.idx * rowHeight + 2,
+                        left: 2, right: 2,
+                        height: b.dur * rowHeight - 4,
+                        child: _bloqueChip(b.items, b.dur, kPrimary, const Color(0xFFE3F2FD), esEnc: true),
+                      )),
+                      // Bloques asignaturas
+                      ...bloquesAsg.map((b) {
+                        // Si hay encargado en las mismas horas, ocupa solo la mitad inferior
+                        final tieneEnc = bloquesEnc.any((e) =>
+                            e.idx <= b.idx && e.idx + e.dur > b.idx);
+                        return Positioned(
+                          top: b.idx * rowHeight + (tieneEnc ? rowHeight * 0.5 : 2),
+                          left: 2, right: 2,
+                          height: b.dur * rowHeight - (tieneEnc ? rowHeight * 0.5 + 2 : 4),
+                          child: _bloqueChip(b.items, b.dur, kSuccess, const Color(0xFFE8F5E9), esEnc: false),
+                        );
+                      }),
+                    ],
                   ),
-                  child: tieneContenido
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (enc != null)
-                              _chipHorario(enc, kPrimary, const Color(0xFFE3F2FD)),
-                            if (enc != null && asg != null)
-                              const SizedBox(height: 2),
-                            if (asg != null)
-                              _chipHorario(asg, kSuccess, const Color(0xFFE8F5E9)),
-                          ],
-                        )
-                      : null,
                 );
               }),
             ],
-          );
-        }),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _chipHorario(String label, Color color, Color bg) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
+  Widget _bloqueChip(List<Map<String, dynamic>> items, int dur,
+      Color color, Color bg, {required bool esEnc}) {
+    final label = esEnc
+        ? items.map((e) => e['username']?.toString() ?? '?').join(', ')
+        : () {
+            final a = items.first;
+            final nombre = a['nombre_asignatura'] as String? ?? '?';
+            final grupo  = a['grupo'] as String? ?? '';
+            return '$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}';
+          }();
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(4),
-        border: Border(left: BorderSide(color: color, width: 2))),
-    child: Text(label,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w500),
-        overflow: TextOverflow.ellipsis,
-        maxLines: 1),
-  );
+        border: Border(
+          left:   BorderSide(color: color, width: 2),
+          top:    BorderSide(color: color.withValues(alpha: 0.3)),
+          right:  BorderSide(color: color.withValues(alpha: 0.3)),
+          bottom: BorderSide(color: color.withValues(alpha: 0.3)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(label,
+              style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+              maxLines: dur > 1 ? 2 : 1),
+          if (dur > 1)
+            Text('${dur}h', style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 9)),
+        ],
+      ),
+    );
+  }
 
   // ── Acciones rápidas ──────────────────────────────────────────────────────
 

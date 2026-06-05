@@ -437,23 +437,24 @@ class _TabEncargadosState extends State<_TabEncargados>
 
     final sel = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => _SelectorEncargadoDialog(opciones: opciones),
+      builder: (_) => _SelectorEncargadoDialog(opciones: opciones, horaInicio: hora),
     );
     if (sel == null || !mounted) return;
 
+    final horaFin = sel['hora_fin'] as int? ?? hora;
     final dio = ApiClient.instance.authenticatedDio(auth.token);
-    try {
-      final r = await dio.post('academico/horario-encargado/', data: {
-        'usuario': sel['id'],
-        'dia_semana': dia,
-        'hora': hora,
-      });
-      setState(() => _grid[dia]?[hora]?.add(r.data as Map<String, dynamic>));
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al guardar'), backgroundColor: kDanger));
-      }
+    for (int h = hora; h <= horaFin; h++) {
+      // No crear si ya hay un slot para este usuario en esta hora
+      final yaEsta = _grid[dia]?[h]?.any((e) => e['usuario'] == sel['id']) ?? false;
+      if (yaEsta) continue;
+      try {
+        final r = await dio.post('academico/horario-encargado/', data: {
+          'usuario': sel['id'],
+          'dia_semana': dia,
+          'hora': h,
+        });
+        if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
+      } catch (_) {}
     }
   }
 
@@ -508,7 +509,7 @@ class _TabEncargadosState extends State<_TabEncargados>
       }
       final sel = await showDialog<Map<String, dynamic>>(
         context: context,
-        builder: (_) => _SelectorEncargadoDialog(opciones: opciones),
+        builder: (_) => _SelectorEncargadoDialog(opciones: opciones, horaInicio: hora),
       );
       if (sel == null || !mounted) return;
       final dio = ApiClient.instance.authenticatedDio(auth.token);
@@ -868,25 +869,24 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
 
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (_) => _FormAsignaturaDialog(asignaturas: _asignaturas, docentes: _docentes),
+      builder: (_) => _FormAsignaturaDialog(
+          asignaturas: _asignaturas, docentes: _docentes, horaInicio: hora),
     );
     if (result == null || !mounted) return;
 
+    final horaFin = result['hora_fin'] as int? ?? hora;
     final dio = ApiClient.instance.authenticatedDio(auth.token);
-    try {
-      final r = await dio.post('academico/horario-asignatura/', data: {
-        'asignatura': result['asignatura_id'],
-        'dia_semana': dia,
-        'hora': hora,
-        'docente': result['docente'],
-        'grupo': result['grupo'],
-      });
-      setState(() => _grid[dia]?[hora]?.add(r.data as Map<String, dynamic>));
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error al guardar'), backgroundColor: kDanger));
-      }
+    for (int h = hora; h <= horaFin; h++) {
+      try {
+        final r = await dio.post('academico/horario-asignatura/', data: {
+          'asignatura': result['asignatura_id'],
+          'dia_semana': dia,
+          'hora': h,
+          'docente': result['docente'],
+          'grupo': result['grupo'],
+        });
+        if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
+      } catch (_) {}
     }
   }
 
@@ -1815,44 +1815,93 @@ class _TabGestionState extends State<_TabGestion>
 
 // ── Diálogo: seleccionar encargado ────────────────────────────────────────────
 
-class _SelectorEncargadoDialog extends StatelessWidget {
+class _SelectorEncargadoDialog extends StatefulWidget {
   final List<Map<String, dynamic>> opciones;
-  const _SelectorEncargadoDialog({required this.opciones});
+  final int horaInicio;
+  const _SelectorEncargadoDialog({required this.opciones, required this.horaInicio});
+  @override
+  State<_SelectorEncargadoDialog> createState() => _SelectorEncargadoDialogState();
+}
+
+class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
+  Map<String, dynamic>? _seleccionado;
+  int? _horaFin;
 
   @override
   Widget build(BuildContext context) {
+    final horasFin = [
+      for (int h = widget.horaInicio; h <= 21; h++) h
+    ];
+
     return AlertDialog(
       title: const Text('Agregar encargado', style: TextStyle(color: kPrimary)),
-      contentPadding: const EdgeInsets.symmetric(vertical: 8),
       content: SizedBox(
-        width: 300,
-        child: ListView.builder(
-          shrinkWrap: true,
-          itemCount: opciones.length,
-          itemBuilder: (_, i) {
-            final u = opciones[i];
-            final rol = u['rol']?.toString() ?? '';
-            return ListTile(
-              dense: true,
-              leading: CircleAvatar(
-                radius: 16,
-                backgroundColor: rol == 'LAB' ? kSuccess : kPrimary,
-                child: Text(
-                  (u['username'] as String).substring(0, 1).toUpperCase(),
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                ),
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Hora de fin
+            DropdownButtonFormField<int>(
+              value: _horaFin ?? widget.horaInicio,
+              decoration: const InputDecoration(
+                labelText: 'Hora de fin',
+                prefixIcon: Icon(Icons.schedule_outlined, color: kPrimary),
+                border: OutlineInputBorder(),
               ),
-              title: Text(u['nombre_completo']?.toString() ?? u['username'],
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: Text('@${u['username']} · $rol',
-                  style: const TextStyle(fontSize: 11, color: kTextMuted)),
-              onTap: () => Navigator.pop(context, u),
-            );
-          },
+              items: horasFin.map((h) => DropdownMenuItem(
+                value: h,
+                child: Text(_horaAmPm(h)),
+              )).toList(),
+              onChanged: (v) => setState(() => _horaFin = v),
+            ),
+            const SizedBox(height: 8),
+            // Lista de encargados
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 260),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.opciones.length,
+                itemBuilder: (_, i) {
+                  final u   = widget.opciones[i];
+                  final rol = u['rol']?.toString() ?? '';
+                  final sel = _seleccionado?['id'] == u['id'];
+                  return ListTile(
+                    dense: true,
+                    selected: sel,
+                    selectedTileColor: kPrimary.withValues(alpha: 0.08),
+                    leading: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: sel ? kPrimary : (rol == 'LAB' ? kSuccess : kPrimary).withValues(alpha: 0.7),
+                      child: Text(
+                        (u['username'] as String).substring(0, 1).toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    title: Text(u['nombre_completo']?.toString() ?? u['username'],
+                        style: const TextStyle(fontSize: 13)),
+                    subtitle: Text('@${u['username']} · $rol',
+                        style: const TextStyle(fontSize: 11, color: kTextMuted)),
+                    trailing: sel ? const Icon(Icons.check_circle, color: kPrimary, size: 18) : null,
+                    onTap: () => setState(() => _seleccionado = u),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+          onPressed: _seleccionado == null ? null : () {
+            Navigator.pop(context, {
+              ..._seleccionado!,
+              'hora_fin': _horaFin ?? widget.horaInicio,
+            });
+          },
+          child: const Text('Agregar'),
+        ),
       ],
     );
   }
@@ -1868,20 +1917,23 @@ class _FormAsignaturaDialog extends StatefulWidget {
   final String? initialAsignaturaId;
   final String  initialDocente;
   final String  initialGrupo;
+  // null = modo edición (sin selector de hora de fin)
+  final int?    horaInicio;
   const _FormAsignaturaDialog({
     required this.asignaturas,
     this.docentes            = const [],
     this.initialAsignaturaId,
     this.initialDocente      = '',
     this.initialGrupo        = '',
+    this.horaInicio,
   });
   @override State<_FormAsignaturaDialog> createState() => _FormAsignaturaDialogState();
 }
 
 class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
   String?  _asignaturaId;
-  // El valor del dropdown: id del docente, o _kOtros, o null
   String?  _docenteDropdown;
+  int?     _horaFin;
   late final TextEditingController _docenteOtroCtrl;
   late final TextEditingController _grupoCtrl;
 
@@ -1889,6 +1941,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
   void initState() {
     super.initState();
     _asignaturaId = widget.initialAsignaturaId;
+    _horaFin      = widget.horaInicio;
     _grupoCtrl    = TextEditingController(text: widget.initialGrupo);
     _docenteOtroCtrl = TextEditingController();
 
@@ -1991,6 +2044,23 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
               ),
             ],
             const SizedBox(height: 12),
+            // Hora de fin (solo al crear, no al editar)
+            if (widget.horaInicio != null) ...[
+              DropdownButtonFormField<int>(
+                value: _horaFin ?? widget.horaInicio,
+                decoration: const InputDecoration(
+                  labelText: 'Hora de fin',
+                  prefixIcon: Icon(Icons.schedule_outlined, color: kPrimary),
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (int h = widget.horaInicio!; h <= 21; h++)
+                    DropdownMenuItem(value: h, child: Text(_horaAmPm(h)))
+                ],
+                onChanged: (v) => setState(() => _horaFin = v),
+              ),
+              const SizedBox(height: 12),
+            ],
             // Grupo
             TextField(
               controller: _grupoCtrl,
@@ -2011,8 +2081,9 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
           onPressed: _asignaturaId == null ? null : () {
             Navigator.pop(context, {
               'asignatura_id': _asignaturaId,
-              'docente': _nombreDocente(),
-              'grupo':   _grupoCtrl.text.trim(),
+              'docente':  _nombreDocente(),
+              'grupo':    _grupoCtrl.text.trim(),
+              'hora_fin': _horaFin ?? widget.horaInicio,
             });
           },
           child: Text(_esEdicion ? 'Guardar' : 'Agregar'),
