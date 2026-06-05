@@ -373,14 +373,36 @@ class _DashboardContentState extends State<DashboardContent> {
               ),
               // Columnas por día
               ..._dias.asMap().entries.map((dEntry) {
-                final dia   = dEntry.key;
-                final esHoy = dia == diaHoy;
+                final dia        = dEntry.key;
+                final esHoy      = dia == diaHoy;
                 final bloquesEnc = _bloques(_encByDia[dia], true);
                 final bloquesAsg = _bloques(_asgByDia[dia], false);
+
+                // Índices ocupados por cualquier bloque
                 final ocupados = {
                   for (final b in [...bloquesEnc, ...bloquesAsg])
                     for (int k = 0; k < b.dur; k++) b.idx + k,
                 };
+
+                // Para cada bloque de asignatura, busca encargados solapados
+                List<Map<String, dynamic>> _encsEnRango(int idx, int dur) {
+                  final result = <Map<String, dynamic>>[];
+                  for (final be in bloquesEnc) {
+                    final solapan = be.idx < idx + dur && be.idx + be.dur > idx;
+                    if (solapan) result.addAll(be.items);
+                  }
+                  return result;
+                }
+
+                // Índices de encargados que ya están cubiertos por un bloque de asg
+                final encCubiertos = <int>{};
+                for (final ba in bloquesAsg) {
+                  for (final be in bloquesEnc) {
+                    if (be.idx < ba.idx + ba.dur && be.idx + be.dur > ba.idx) {
+                      encCubiertos.add(bloquesEnc.indexOf(be));
+                    }
+                  }
+                }
 
                 return SizedBox(
                   width: colWidth,
@@ -411,25 +433,28 @@ class _DashboardContentState extends State<DashboardContent> {
                           ),
                         );
                       }),
-                      // Bloques encargados
-                      ...bloquesEnc.map((b) => Positioned(
-                        top: b.idx * rowHeight + 2,
-                        left: 2, right: 2,
-                        height: b.dur * rowHeight - 4,
-                        child: _bloqueChip(b.items, b.dur, kPrimary, const Color(0xFFE3F2FD), esEnc: true),
-                      )),
-                      // Bloques asignaturas
+                      // Bloques asignaturas con encargados incrustados
                       ...bloquesAsg.map((b) {
-                        // Si hay encargado en las mismas horas, ocupa solo la mitad inferior
-                        final tieneEnc = bloquesEnc.any((e) =>
-                            e.idx <= b.idx && e.idx + e.dur > b.idx);
+                        final encs = _encsEnRango(b.idx, b.dur);
                         return Positioned(
-                          top: b.idx * rowHeight + (tieneEnc ? rowHeight * 0.5 : 2),
+                          top: b.idx * rowHeight + 2,
                           left: 2, right: 2,
-                          height: b.dur * rowHeight - (tieneEnc ? rowHeight * 0.5 + 2 : 4),
-                          child: _bloqueChip(b.items, b.dur, kSuccess, const Color(0xFFE8F5E9), esEnc: false),
+                          height: b.dur * rowHeight - 4,
+                          child: _bloqueAsigConEnc(b.items, b.dur, encs),
                         );
                       }),
+                      // Bloques encargados SIN asignatura asociada
+                      ...bloquesEnc.asMap().entries
+                          .where((e) => !encCubiertos.contains(e.key))
+                          .map((e) {
+                            final b = e.value;
+                            return Positioned(
+                              top: b.idx * rowHeight + 2,
+                              left: 2, right: 2,
+                              height: b.dur * rowHeight - 4,
+                              child: _bloqueEncSolo(b.items, b.dur),
+                            );
+                          }),
                     ],
                   ),
                 );
@@ -441,25 +466,40 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _bloqueChip(List<Map<String, dynamic>> items, int dur,
-      Color color, Color bg, {required bool esEnc}) {
-    final label = esEnc
-        ? items.map((e) => e['username']?.toString() ?? '?').join(', ')
-        : () {
-            final a = items.first;
-            final nombre = a['nombre_asignatura'] as String? ?? '?';
-            final grupo  = a['grupo'] as String? ?? '';
-            return '$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}';
-          }();
+  // Color único por encargado basado en su username
+  static Color _colorEncargado(String username) {
+    const palette = [
+      Color(0xFF1565C0), // azul oscuro
+      Color(0xFF6A1B9A), // violeta
+      Color(0xFF00695C), // verde azulado
+      Color(0xFFE65100), // naranja
+      Color(0xFF880E4F), // rosa oscuro
+      Color(0xFF004D40), // verde oscuro
+      Color(0xFF1A237E), // índigo
+      Color(0xFF4E342E), // marrón
+    ];
+    final hash = username.codeUnits.fold(0, (a, b) => a + b);
+    return palette[hash % palette.length];
+  }
+
+  // Bloque: asignatura principal + avatares de encargados en esquina
+  Widget _bloqueAsigConEnc(List<Map<String, dynamic>> asgItems, int dur,
+      List<Map<String, dynamic>> encs) {
+    final a      = asgItems.first;
+    final nombre = a['nombre_asignatura'] as String? ?? '?';
+    final grupo  = a['grupo'] as String? ?? '';
+    const color  = kSuccess;
+    const bg     = Color(0xFFE8F5E9);
+
     return Container(
       width: double.infinity,
       height: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      padding: const EdgeInsets.fromLTRB(5, 3, 5, 3),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(4),
         border: Border(
-          left:   BorderSide(color: color, width: 2),
+          left:   const BorderSide(color: color, width: 3),
           top:    BorderSide(color: color.withValues(alpha: 0.3)),
           right:  BorderSide(color: color.withValues(alpha: 0.3)),
           bottom: BorderSide(color: color.withValues(alpha: 0.3)),
@@ -467,15 +507,102 @@ class _DashboardContentState extends State<DashboardContent> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
-              overflow: TextOverflow.ellipsis,
-              maxLines: dur > 1 ? 2 : 1),
-          if (dur > 1)
-            Text('${dur}h', style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 9)),
+          // Nombre asignatura + grupo
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}',
+                    style: const TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: dur > 1 ? 2 : 1),
+                if (dur > 1)
+                  Text('${dur}h',
+                      style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 9)),
+              ],
+            ),
+          ),
+          // Avatares de encargados
+          if (encs.isNotEmpty)
+            Wrap(
+              spacing: 2,
+              children: encs.map((enc) {
+                final username = enc['username']?.toString() ?? '?';
+                final nombre2  = enc['nombre_completo']?.toString() ?? username;
+                final iniciales = nombre2.split(' ').take(2)
+                    .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
+                final color2 = _colorEncargado(username);
+                return Tooltip(
+                  message: nombre2,
+                  child: Container(
+                    width: 16, height: 16,
+                    decoration: BoxDecoration(color: color2, shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: Text(
+                      iniciales.isNotEmpty ? iniciales[0] : username[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white, fontSize: 8,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
         ],
+      ),
+    );
+  }
+
+  // Bloque: solo encargados (sin asignatura)
+  Widget _bloqueEncSolo(List<Map<String, dynamic>> items, int dur) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      padding: const EdgeInsets.fromLTRB(5, 3, 5, 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE3F2FD),
+        borderRadius: BorderRadius.circular(4),
+        border: Border(
+          left:   const BorderSide(color: kPrimary, width: 3),
+          top:    BorderSide(color: kPrimary.withValues(alpha: 0.3)),
+          right:  BorderSide(color: kPrimary.withValues(alpha: 0.3)),
+          bottom: BorderSide(color: kPrimary.withValues(alpha: 0.3)),
+        ),
+      ),
+      child: Wrap(
+        spacing: 3,
+        runSpacing: 3,
+        children: items.map((enc) {
+          final username = enc['username']?.toString() ?? '?';
+          final nombre   = enc['nombre_completo']?.toString() ?? username;
+          final iniciales = nombre.split(' ').take(2)
+              .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
+          final color = _colorEncargado(username);
+          return Tooltip(
+            message: nombre,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 14, height: 14,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: Text(
+                    iniciales.isNotEmpty ? iniciales[0] : username[0].toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 7,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 3),
+                Text(username,
+                    style: TextStyle(color: color, fontSize: 9,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
