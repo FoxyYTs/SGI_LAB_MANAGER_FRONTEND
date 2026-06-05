@@ -10,7 +10,7 @@ Aplicación multi-plataforma en **Flutter** para la gestión del laboratorio int
 | --- | --- |
 | Flutter / Dart | Framework UI multi-plataforma |
 | Provider | Gestión de estado reactivo |
-| Dio | Cliente HTTP con interceptor JWT |
+| Dio | Cliente HTTP con interceptor JWT y refresco automático de token |
 | sqflite + sqflite_common_ffi | SQLite local (modo offline — Android/Linux) |
 | connectivity_plus | Detección de red y sincronización automática |
 | workmanager | Tareas periódicas en background (solo Android) |
@@ -36,7 +36,7 @@ Ficha completa GHS organizada en tres pestañas:
 - **Editar** — formulario por secciones (S1–S14) agrupadas en cards con header de color.
 - **Colmena ARL** — acordeones S1–S14 para copiar datos al software de Colmena ARL.
 
-Extracción automática desde PDF de FDS con IA (**Groq/Llama**): flujo en 2 pasos — previsualización con diff de cambios y campos sin datos, confirmación sin re-procesar el PDF. Generación de etiqueta GHS en PDF.
+Extracción automática desde PDF de FDS con IA (**Groq/Llama**): flujo en 2 pasos — previsualización con diff de cambios y campos sin datos, confirmación sin re-procesar el PDF. Generación de etiqueta GHS en PDF en cuatro formatos (52×74 mm, 74×105 mm, 105×148 mm, 148×210 mm).
 
 ### Préstamos y Movimientos
 
@@ -44,11 +44,26 @@ Flujo completo: PENDIENTE → ACTIVO (con descuento de stock validado) → DEVUE
 
 ### Horario Semanal
 
-Cuadrícula Lun–Sáb × 6–21h. Vista de encargados y asignaturas. Re-fetch automático al recuperar conexión.
+Cuadrícula Lun–Sáb × 6–21h con dos vistas (encargados y asignaturas). Funcionalidades recientes:
+
+- **Horas en formato AM/PM** en todas las vistas (cuadrícula, formularios y mini-horario del dashboard).
+- **Edición de entradas**: tap en un chip abre un menú contextual con opciones "Editar" y "Quitar" (antes solo long press para eliminar).
+- **Hora de fin en formularios**: al agregar un encargado o asignatura se selecciona un rango de horas; el sistema crea automáticamente una fila por cada hora del rango.
+- **Tabla de horas semanales por encargado** debajo del grid de encargados.
+- **ADMIN** puede aparecer en el horario de encargados junto a LAB y MONITOR.
+- **Selector de docentes** en el formulario de asignatura: dropdown con la lista de docentes registrados más la opción "Otros..." para texto libre.
+
+Re-fetch automático al recuperar conexión.
 
 ### Dashboard
 
 Stats en tiempo real (insumos críticos/bajos, préstamos activos/pendientes). Horario semanal resumido (65% del ancho) + acciones rápidas con botón de Códigos QR prominente y grid 2×3 (35%). Tabla de insumos críticos al fondo.
+
+El mini-horario incorpora las mejoras del horario completo:
+
+- **Bloques fusionados**: asignaturas consecutivas con misma materia, docente y grupo se presentan como un único bloque visual.
+- **Extensión horaria hasta las 8 PM** (20:00).
+- **Franjas de encargados adaptativas**: aparecen como bandas semitransparentes a la derecha del bloque de asignatura, con color único por encargado, solo cuando el encargado está activo en ese rango (sin espacio reservado vacío cuando no hay encargado).
 
 ### Informes
 
@@ -60,12 +75,12 @@ Cuatro formularios sin login, responsivos (card centrado en desktop ≥700px, co
 
 - **Solicitud de préstamo** — accesible desde QR sin cuenta
 - **Registro de horas monitor** — check-in con duración y actividades
-- **Registro de práctica docente** — QR apunta a Google Forms externo
+- **Registro de práctica docente** — QR apunta a Google Forms externo (`https://forms.gle/HQsUXGpVa6u2dJVR7`); pantalla interna conservada como respaldo
 - **Reporte de rotura** — con selección de insumo y fecha
 
 ### Mi Perfil
 
-Edición de nombre, email, teléfono, semestre, programa. Subida de foto de perfil (multipart). Cambio de contraseña con verificación de la actual. El avatar del topbar se actualiza en tiempo real tras subir foto.
+Edición de nombre, email, teléfono, semestre, programa. Subida de foto de perfil (multipart). Cambio de contraseña con verificación de la actual. El avatar del topbar se actualiza en tiempo real tras subir foto. La foto se renderiza con `Image.network` y `errorBuilder` para evitar el placeholder vacío cuando la imagen falla.
 
 ### Configuración (8 tabs)
 
@@ -88,6 +103,10 @@ Roles diferenciados (ADMIN, LAB, MONITOR, ESTUDIANTE). Permisos por rol y permis
 
 Inventario, Dashboard, Bitácora y Movimientos cachean en SQLite. Al recuperar red, se dispara re-fetch automático en segundo plano. Cola de operaciones pendientes (aprobar/rechazar préstamos) que se ejecutan al reconectar. Login bloqueado sin red.
 
+### Diálogo "Acerca de"
+
+Botón ⓘ en la topbar (desktop y móvil). Muestra el autor **FoxyYTs** con enlace al portafolio personal, enlace al repositorio en GitHub y botón de descarga al último release publicado.
+
 ---
 
 ## Notificaciones Background (solo Android)
@@ -100,13 +119,14 @@ Tres tareas periódicas gestionadas por **WorkManager**:
 | `sgi_schedule_check` | 15 min | Recordatorio de fin de turno y práctica próxima |
 | `sgi_server_monitor` | 15 min | Notifica cuando el servidor cae o se recupera |
 
-Cada notificación se dispara una sola vez por evento. Las tareas se cancelan al cerrar sesión.
+Cada notificación se dispara una sola vez por evento. Las tareas se cancelan al cerrar sesión. WorkManager solo se inicializa en `Platform.isAndroid` para evitar `MissingPluginException` en Linux y Web.
 
 ---
 
 ## Seguridad y sesión
 
 - Token JWT access: 2 horas. Token refresh: 7 días.
+- **Refresco automático de token**: el interceptor de `ApiClient` captura respuestas HTTP 401, hace `POST /api/token/refresh/` de forma transparente, actualiza el token en `flutter_secure_storage` y reintenta la petición original. Si el refresh falla (token revocado o expirado), cierra sesión automáticamente. Esto elimina las sesiones que "se quedan en blanco" sin acción del usuario.
 - Logout invalida el refresh token en el servidor (blacklist JWT).
 - `flutter_secure_storage` almacena tokens, rol, permisos y foto de perfil.
 - La sesión persiste entre reinicios de la app (sin internet incluido).
@@ -133,6 +153,22 @@ flutter build apk --release \
 
 `DEV_MODE=true` habilita log a archivo y muestra detalles técnicos en mensajes de error.
 
+### Build web para el servidor de desarrollo
+
+El servidor de desarrollo (`172.27.0.2`) no tiene Flutter instalado. El flujo de despliegue es local:
+
+```bash
+flutter build web \
+  --dart-define=SERVER_URL=https://dev-apisgi.foxyyts.qzz.io \
+  --release
+
+rsync -az --delete frontend/build/web/ \
+  -e "ssh -i ~/.ssh/claude_sgi" \
+  foxyyts@172.27.0.2:~/SGI_LAB_MANAGER/FRONTEND/frontend/build/web/
+```
+
+El build web incluye **Google Analytics** (gtag `G-R2ZRX1FPZ4`) para telemetría de uso en producción.
+
 ---
 
 ## Arquitectura del código
@@ -140,7 +176,7 @@ flutter build apk --release \
 ```text
 frontend/lib/
 ├── core/
-│   ├── api/            api_client.dart — Dio singleton, URL base, interceptor JWT
+│   ├── api/            api_client.dart — Dio singleton, URL base, interceptor JWT con auto-refresh
 │   ├── cache/          cache_service.dart — caché SQLite genérico (json_cache)
 │   ├── database/       local_db.dart — SQLite nativo vs stub web
 │   ├── sync/           sync_service.dart — cola offline y reconexión
@@ -160,3 +196,9 @@ frontend/lib/
 ```
 
 La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) permite que SQLite y connectivity usen implementaciones reales en Linux/Android y stubs no-op en Web.
+
+---
+
+## Licencia
+
+Este proyecto se distribuye bajo la **GNU Affero General Public License v3.0 (AGPL-3.0)**. Cualquier versión modificada que se ofrezca como servicio en red debe publicar su código fuente bajo los mismos términos. Consulta el archivo [`LICENSE`](LICENSE) en la raíz del repositorio para el texto completo.
