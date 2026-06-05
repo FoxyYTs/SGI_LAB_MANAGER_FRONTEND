@@ -7,6 +7,12 @@ import '../providers/auth_provider.dart';
 import '../core/sync/sync_service.dart';
 import '../widgets/qr_generator_dialog.dart';
 
+String _horaAmPm(int hora) {
+  if (hora == 12) return '12 PM';
+  if (hora > 12) return '${hora - 12} PM';
+  return '$hora AM';
+}
+
 class DashboardContent extends StatefulWidget {
   final void Function(int tabIndex)? onNavigateTo;
   const DashboardContent({super.key, this.onNavigateTo});
@@ -326,7 +332,7 @@ class _DashboardContentState extends State<DashboardContent> {
                     bottom: BorderSide(color: Color(0xFFDEE2E6)),
                   ),
                 ),
-                child: Text('${hora.toString().padLeft(2, '0')}:00',
+                child: Text(_horaAmPm(hora),
                     style: TextStyle(
                         fontSize: 10, fontWeight: FontWeight.w600,
                         color: esAhora ? kPrimary : kTextMuted)),
