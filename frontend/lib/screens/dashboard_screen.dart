@@ -322,7 +322,8 @@ class _DashboardContentState extends State<DashboardContent> {
     const labelWidth = 52.0;
     const colWidth   = 110.0;
     const rowHeight  = 44.0;
-    const encLaneW   = 18.0; // ancho de cada franja de encargado
+    const stripW     = 14.0; // ancho de cada franja de encargado
+    const stripGap   =  2.0;
     final totalH = _horas.length * rowHeight;
 
     return Column(
@@ -384,51 +385,60 @@ class _DashboardContentState extends State<DashboardContent> {
                 final dia   = dEntry.key;
                 final esHoy = dia == diaHoy;
 
-                // Encargados únicos del día ordenados por username (posición estable)
-                final encUsers = <int, Map<String, dynamic>>{};
-                for (final items in (_encByDia[dia] ?? {}).values) {
-                  for (final item in items) {
-                    final uid = item['usuario'] as int? ?? 0;
-                    encUsers[uid] ??= item;
-                  }
-                }
-                final encSorted = encUsers.keys.toList()..sort();
-                final numLanes  = encSorted.length;
-                final encTotalW = numLanes * encLaneW;
-                final asgLeft   = encTotalW + 1;
-                final asgRight  = 2.0;
+                // Bloques fusionados de asignatura
+                final bloquesAsg = _bloquesAsg(_asgByDia[dia]);
 
-                // Bloques por usuario (franjas individuales independientes)
-                List<({int idx, int dur})> _bloquesUser(int uid) {
+                // Bloques consecutivos por usuario de encargado
+                List<({int idx, int dur, Map<String, dynamic> enc})> _bloquesEnc() {
+                  final result = <({int idx, int dur, Map<String, dynamic> enc})>[];
                   final porHora = _encByDia[dia] ?? {};
-                  final result  = <({int idx, int dur})>[];
-                  int i = 0;
-                  while (i < _horas.length) {
-                    final hora  = _horas[i];
-                    final tiene = (porHora[hora] ?? []).any((e) => e['usuario'] == uid);
-                    if (!tiene) { i++; continue; }
-                    int dur = 1;
-                    while (i + dur < _horas.length &&
-                        (porHora[_horas[i + dur]] ?? []).any((e) => e['usuario'] == uid)) {
-                      dur++;
+                  // Recoger usuarios únicos
+                  final encMap = <int, Map<String, dynamic>>{};
+                  for (final items in porHora.values) {
+                    for (final item in items) {
+                      encMap[item['usuario'] as int? ?? 0] ??= item;
                     }
-                    result.add((idx: i, dur: dur));
-                    i += dur;
+                  }
+                  for (final uid in encMap.keys) {
+                    int i = 0;
+                    while (i < _horas.length) {
+                      final tiene = (porHora[_horas[i]] ?? []).any((e) => e['usuario'] == uid);
+                      if (!tiene) { i++; continue; }
+                      int dur = 1;
+                      while (i + dur < _horas.length &&
+                          (porHora[_horas[i + dur]] ?? []).any((e) => e['usuario'] == uid)) {
+                        dur++;
+                      }
+                      result.add((idx: i, dur: dur, enc: encMap[uid]!));
+                      i += dur;
+                    }
                   }
                   return result;
                 }
 
-                final bloquesAsg = _bloquesAsg(_asgByDia[dia]);
-                final ocupadosAsg = {
-                  for (final b in bloquesAsg)
-                    for (int k = 0; k < b.dur; k++) b.idx + k,
+                final todosBloquesEnc = _bloquesEnc();
+                final ocupados = {
+                  for (final b in bloquesAsg) for (int k = 0; k < b.dur; k++) b.idx + k,
+                  for (final b in todosBloquesEnc) for (int k = 0; k < b.dur; k++) b.idx + k,
                 };
-                final ocupadosEnc = {
-                  for (final uid in encSorted)
-                    for (final b in _bloquesUser(uid)) ...[
-                      for (int k = 0; k < b.dur; k++) b.idx + k,
-                    ],
-                };
+
+                // Para cada bloque de enc, calcular cuántos otros enc se solapan
+                // y cuál es su posición (rank) entre ellos → determina el right offset
+                int _rankEnBloque(({int idx, int dur, Map<String, dynamic> enc}) target) {
+                  final uid = target.enc['usuario'] as int? ?? 0;
+                  final solapantes = todosBloquesEnc
+                      .where((b) {
+                        final bUid = b.enc['usuario'] as int? ?? 0;
+                        if (bUid == uid) return false;
+                        return b.idx < target.idx + target.dur && b.idx + b.dur > target.idx;
+                      })
+                      .map((b) => b.enc['usuario'] as int? ?? 0)
+                      .toSet()
+                      .toList()..sort();
+                  // rank = posición de este uid entre los solapantes + él mismo
+                  final todos = ([uid, ...solapantes])..sort();
+                  return todos.indexOf(uid);
+                }
 
                 return SizedBox(
                   width: colWidth,
@@ -439,14 +449,13 @@ class _DashboardContentState extends State<DashboardContent> {
                       ...List.generate(_horas.length, (i) {
                         final hora    = _horas[i];
                         final esAhora = hora == horaActual && esHoy;
-                        final ocupado = ocupadosAsg.contains(i) || ocupadosEnc.contains(i);
                         return Positioned(
                           top: i * rowHeight, left: 0, right: 0, height: rowHeight,
                           child: Container(
                             decoration: BoxDecoration(
                               color: esAhora
                                   ? const Color(0xFFD4E8FF)
-                                  : esHoy && !ocupado
+                                  : esHoy && !ocupados.contains(i)
                                       ? const Color(0xFFF0F7FF)
                                       : i.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
                               border: Border(
@@ -460,55 +469,25 @@ class _DashboardContentState extends State<DashboardContent> {
                           ),
                         );
                       }),
-                      // Franjas de encargados (izquierda, una por usuario)
-                      ...encSorted.asMap().entries.expand((laneEntry) {
-                        final laneIdx = laneEntry.key;
-                        final uid     = laneEntry.value;
-                        final enc     = encUsers[uid]!;
-                        final username = enc['username']?.toString() ?? '?';
-                        final nombre   = enc['nombre_completo']?.toString() ?? username;
-                        final color    = _colorEncargado(username);
-                        final left     = laneIdx * encLaneW;
-                        return _bloquesUser(uid).map((b) => Positioned(
-                          top:    b.idx * rowHeight + 1,
-                          left:   left + 1,
-                          width:  encLaneW - 2,
-                          height: b.dur * rowHeight - 2,
-                          child: Tooltip(
-                            message: '$nombre\n${b.dur}h',
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(3),
-                              ),
-                              alignment: Alignment.topCenter,
-                              padding: const EdgeInsets.only(top: 3),
-                              child: Text(
-                                username.isNotEmpty ? username[0].toUpperCase() : '?',
-                                style: const TextStyle(color: Colors.white,
-                                    fontSize: 9, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ));
-                      }),
-                      // Bloques de asignatura (derecha, tras las franjas)
+                      // Bloques de asignatura — izquierda, ancho completo
                       ...bloquesAsg.map((b) {
                         final a      = b.items.first;
                         final nombre = a['nombre_asignatura'] as String? ?? '?';
                         final grupo  = a['grupo'] as String? ?? '';
                         return Positioned(
-                          top:    b.idx * rowHeight + 2,
-                          left:   asgLeft,
-                          right:  asgRight,
+                          top: b.idx * rowHeight + 2,
+                          left: 2, right: 2,
                           height: b.dur * rowHeight - 4,
                           child: Container(
-                            padding: const EdgeInsets.fromLTRB(4, 3, 3, 3),
+                            padding: const EdgeInsets.fromLTRB(5, 3, 5, 3),
                             decoration: BoxDecoration(
                               color: const Color(0xFFE8F5E9),
-                              borderRadius: BorderRadius.circular(3),
+                              borderRadius: BorderRadius.circular(4),
                               border: const Border(
-                                left: BorderSide(color: kSuccess, width: 2),
+                                left: BorderSide(color: kSuccess, width: 3),
+                                top:    BorderSide(color: Color(0xFFB2DFDB)),
+                                right:  BorderSide(color: Color(0xFFB2DFDB)),
+                                bottom: BorderSide(color: Color(0xFFB2DFDB)),
                               ),
                             ),
                             child: Column(
@@ -517,14 +496,45 @@ class _DashboardContentState extends State<DashboardContent> {
                               children: [
                                 Text('$nombre${grupo.isNotEmpty ? ' Gr.$grupo' : ''}',
                                     style: const TextStyle(color: kSuccess,
-                                        fontSize: 9, fontWeight: FontWeight.w600),
+                                        fontSize: 10, fontWeight: FontWeight.w600),
                                     overflow: TextOverflow.ellipsis,
                                     maxLines: b.dur > 1 ? 2 : 1),
                                 if (b.dur > 1)
                                   Text('${b.dur}h',
-                                      style: const TextStyle(color: kSuccess,
-                                          fontSize: 8)),
+                                      style: TextStyle(
+                                          color: kSuccess.withValues(alpha: 0.7),
+                                          fontSize: 9)),
                               ],
+                            ),
+                          ),
+                        );
+                      }),
+                      // Franjas de encargados — derecha, semitransparentes, adaptativas
+                      ...todosBloquesEnc.map((b) {
+                        final username = b.enc['username']?.toString() ?? '?';
+                        final nombre   = b.enc['nombre_completo']?.toString() ?? username;
+                        final color    = _colorEncargado(username);
+                        final rank     = _rankEnBloque(b);
+                        final rightOff = 2.0 + rank * (stripW + stripGap);
+                        return Positioned(
+                          top:    b.idx * rowHeight + 2,
+                          right:  rightOff,
+                          width:  stripW,
+                          height: b.dur * rowHeight - 4,
+                          child: Tooltip(
+                            message: nombre,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.72),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              alignment: Alignment.topCenter,
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                style: const TextStyle(color: Colors.white,
+                                    fontSize: 9, fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         );
