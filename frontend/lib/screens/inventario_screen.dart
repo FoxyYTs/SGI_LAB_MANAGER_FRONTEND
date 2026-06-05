@@ -449,8 +449,8 @@ class _InventarioContentState extends State<InventarioContent> {
                         insumoNombre: insumo.nombre)))),
               _cell(insumo.tipo),
               _cell(insumo.ubicacion),
-              _cell(insumo.stockActual.toStringAsFixed(0)),
-              _cell(insumo.stockMinimo.toStringAsFixed(0)),
+              _cell('${insumo.stockActual.toStringAsFixed(0)} ${insumo.unidad}'),
+              _cell('${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
               _semaforo(insumo.semaforo),
               if (showSga)
                 Padding(
@@ -499,8 +499,8 @@ class _InventarioContentState extends State<InventarioContent> {
                         insumoId: insumo.id,
                         insumoNombre: insumo.nombre)))),
               _cell(insumo.ubicacion),
-              _cell(insumo.stockActual.toStringAsFixed(0)),
-              _cell(insumo.stockMinimo.toStringAsFixed(0)),
+              _cell('${insumo.stockActual.toStringAsFixed(0)} ${insumo.unidad}'),
+              _cell('${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
               _semaforo(insumo.semaforo),
               // Indicador SGA
               Padding(
