@@ -205,6 +205,30 @@ La exportación condicional (`dart.library.io` vs `dart.library.js_interop`) per
 
 ---
 
+## Tests de integración
+
+Suite de **22 tests end-to-end** que corren la app real en Linux contra el servidor de desarrollo (`dev-apisgi.foxyyts.qzz.io`). Cubren login, inventario, préstamos, bitácora y SGA.
+
+```bash
+flutter test integration_test/run_all_test.dart \
+  --dart-define=SERVER_URL=https://dev-apisgi.foxyyts.qzz.io \
+  --dart-define=TEST_USER=TuUsuario \
+  --dart-define=TEST_PASSWORD=TuClave \
+  -d linux
+```
+
+| Módulo | Tests | Qué verifica |
+| --- | --- | --- |
+| Login | 3 | Campos visibles, credenciales inválidas, login exitoso → sidebar |
+| Inventario | 4 | Carga de lista, filtro por tipo, chips críticos/bajos, apertura de detalle |
+| Préstamos | 4 | Lista carga, formulario abre, validación vacío, registro completo |
+| Bitácora | 5 | Carga, chips de filtro, filtrar Entrada, filtrar Salida, tiene movimientos |
+| SGA | 6 | Botón en tabla, 3 pestañas, Datos SGA, Editar, Colmena ARL, diálogo etiqueta GHS |
+
+Los archivos están en `frontend/integration_test/`. Las credenciales se pasan por `--dart-define` y nunca se guardan en el código.
+
+---
+
 ## Licencia
 
 Este proyecto se distribuye bajo la **GNU Affero General Public License v3.0 (AGPL-3.0)**. Cualquier versión modificada que se ofrezca como servicio en red debe publicar su código fuente bajo los mismos términos. Consulta el archivo [`LICENSE`](LICENSE) en la raíz del repositorio para el texto completo.
