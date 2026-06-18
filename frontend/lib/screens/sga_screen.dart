@@ -63,15 +63,17 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     setState(() { _cargando = true; _error = null; });
     try {
       final r = await _dio.get('inventario/lista/${widget.insumoId}/quimico/');
+      if (!mounted) return;
       setState(() { _datos = Map<String, dynamic>.from(r.data); });
     } catch (e) {
+      if (!mounted) return;
       if (e is DioException && e.response?.statusCode == 404) {
         setState(() { _datos = {}; });
       } else {
         setState(() { _error = 'Error cargando datos SGA'; });
       }
     } finally {
-      setState(() { _cargando = false; });
+      if (mounted) setState(() { _cargando = false; });
     }
   }
 
@@ -79,9 +81,9 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     if (_colmena != null) return;
     try {
       final r = await _dio.get('inventario/lista/${widget.insumoId}/sga/colmena/');
-      setState(() { _colmena = Map<String, dynamic>.from(r.data); });
+      if (mounted) setState(() { _colmena = Map<String, dynamic>.from(r.data); });
     } catch (_) {
-      setState(() { _colmena = {}; });
+      if (mounted) setState(() { _colmena = {}; });
     }
   }
 
@@ -101,12 +103,13 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
 
     // ── Paso 1: extraer sin guardar ──────────────────────────────────────────
     setState(() { _extrayendo = true; });
+    final dio = _dio;
     Map<String, dynamic> preview;
     try {
       final formData = FormData.fromMap({
         'fds': MultipartFile.fromBytes(bytes, filename: file.name),
       });
-      final r = await _dio.post(
+      final r = await dio.post(
         'inventario/lista/${widget.insumoId}/sga/extraer-fds/',
         data: formData,
         options: Options(receiveTimeout: const Duration(seconds: 60)),
@@ -114,7 +117,6 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
       preview = Map<String, dynamic>.from(r.data);
     } on DioException catch (e) {
       _snack(e.response?.data?['detail'] ?? 'Error al procesar el PDF.', kDanger);
-      setState(() { _extrayendo = false; });
       return;
     } finally {
       if (mounted) setState(() { _extrayendo = false; });
@@ -137,7 +139,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     // ── Paso 3: confirmar y guardar ──────────────────────────────────────────
     setState(() { _extrayendo = true; });
     try {
-      final r2 = await _dio.post(
+      final r2 = await dio.post(
         'inventario/lista/${widget.insumoId}/sga/extraer-fds/?confirmar=1',
         data: {'datos_extraidos': preview['datos_extraidos']},
         options: Options(
