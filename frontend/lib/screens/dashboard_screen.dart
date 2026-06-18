@@ -484,10 +484,9 @@ class _DashboardContentState extends State<DashboardContent> {
                           height: b.dur * rowHeight - 4,
                           child: Container(
                             padding: const EdgeInsets.fromLTRB(5, 3, 5, 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE8F5E9),
-                              borderRadius: BorderRadius.circular(4),
-                              border: const Border(
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFE8F5E9),
+                              border: Border(
                                 left: BorderSide(color: kSuccess, width: 3),
                                 top:    BorderSide(color: Color(0xFFB2DFDB)),
                                 right:  BorderSide(color: Color(0xFFB2DFDB)),
