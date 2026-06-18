@@ -86,8 +86,9 @@ class AuthProvider with ChangeNotifier {
           ApiClient.instance.setTokens(
             _token!,
             _refreshToken!,
-            onRefreshed: _actualizarToken,
-            onLogout:    () => logout(),
+            onRefreshed:       _actualizarToken,
+            onRefreshRotated:  _actualizarRefreshToken,
+            onLogout:          () => logout(),
           );
         }
       }
@@ -128,8 +129,9 @@ class AuthProvider with ChangeNotifier {
       ApiClient.instance.setTokens(
         _token!,
         _refreshToken!,
-        onRefreshed: _actualizarToken,
-        onLogout:    () => logout(),
+        onRefreshed:       _actualizarToken,
+        onRefreshRotated:  _actualizarRefreshToken,
+        onLogout:          () => logout(),
       );
       if (kIsWeb) _programarCierreMedianoche();
 
@@ -193,6 +195,13 @@ class AuthProvider with ChangeNotifier {
     _token = newToken;
     await _storage.write(key: 'token', value: newToken);
     debugPrint('[AuthProvider] Access token actualizado por refresco automático.');
+  }
+
+  /// Callback invocado cuando el backend rota el refresh token (ROTATE_REFRESH_TOKENS).
+  /// Persiste el nuevo refresh token para que la próxima rotación funcione.
+  Future<void> _actualizarRefreshToken(String newRefresh) async {
+    _refreshToken = newRefresh;
+    await _storage.write(key: 'refresh_token', value: newRefresh);
   }
 
   /// Recarga solo la foto de perfil (llamar desde MiPerfilScreen tras subir foto).

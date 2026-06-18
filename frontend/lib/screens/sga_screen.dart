@@ -196,9 +196,16 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
 
     if (elegido == null || !mounted) return;
 
+    final dlToken = await ApiClient.instance.obtenerTokenDescarga(_token);
+    if (!mounted) return;
+    if (dlToken == null) {
+      _snack('No se pudo generar el token de descarga.', kDanger);
+      return;
+    }
+
     final url = Uri.parse(
       '${ApiClient.instance.baseUrl}inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/'
-      '?token=$_token&formato=$elegido',
+      '?download_token=$dlToken&formato=$elegido',
     );
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);

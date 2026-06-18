@@ -12,6 +12,7 @@ class RegistroHorasScreen extends StatefulWidget {
 
 class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
   final _formKey     = GlobalKey<FormState>();
+  final _nitCtrl     = TextEditingController();
   final _celCtrl     = TextEditingController();
   final _descCtrl    = TextEditingController();
   final _durCtrl     = TextEditingController();
@@ -45,6 +46,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
 
   @override
   void dispose() {
+    _nitCtrl.dispose();
     _celCtrl.dispose();
     _descCtrl.dispose();
     _durCtrl.dispose();
@@ -67,7 +69,8 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
     if (m == null) return;
     setState(() {
       _monitorSel     = m;
-      _celCtrl.text   = m['celular']?.toString() ?? '';
+      _nitCtrl.clear();
+      _celCtrl.clear();
       _programaId     = m['programa_id']?.toString();
       _programaNombre = m['programa_nombre']?.toString() ?? '';
       _semestre       = m['semestre'] as int?;
@@ -96,7 +99,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
     try {
       await _dio.post('academico/registro-horas/', data: {
         'nombre_monitor':  _monitorSel!['nombre'],
-        'nit_monitor':     _monitorSel!['nit']?.toString() ?? '',
+        'nit_monitor':     _nitCtrl.text.trim(),
         'programa':        _programaId,
         'semestre':        _semestre,
         'celular':         _celCtrl.text.trim(),
@@ -273,6 +276,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
               _programaNombre = '';
               _semestre    = null;
               _fechaActividad = null;
+              _nitCtrl.clear();
               _celCtrl.clear();
               _descCtrl.clear();
               _durCtrl.clear();
@@ -348,6 +352,13 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
                   ],
                 ]),
               ),
+            const SizedBox(height: 10),
+            TextFormField(
+              controller: _nitCtrl,
+              keyboardType: TextInputType.number,
+              decoration: _deco('Número de identificación (NIT/Cédula) *', Icons.badge_outlined),
+              validator: (v) => v!.trim().isEmpty ? 'Requerido' : null,
+            ),
             const SizedBox(height: 10),
             TextFormField(
               controller: _celCtrl,

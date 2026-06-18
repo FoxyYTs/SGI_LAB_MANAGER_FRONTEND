@@ -31,7 +31,9 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   String? _programaId;
   final List<_ItemSolicitud> _items = [_ItemSolicitud()];
 
-  bool _cargando = true;
+  // true cuando el usuario completó nombre + NIT y presionó "Continuar"
+  bool _identificado = false;
+  bool _cargando = false;
   bool _enviando = false;
   bool _enviado  = false;
 
@@ -45,7 +47,6 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));
-    _cargar();
   }
 
   @override
@@ -56,19 +57,26 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
     super.dispose();
   }
 
-  Future<void> _cargar() async {
+  Future<void> _continuar() async {
+    final nit   = _nitCtrl.text.trim();
+    final nombre = _nomCtrl.text.trim();
+    if (nit.isEmpty || nombre.isEmpty) return;
+    setState(() => _cargando = true);
     try {
       final results = await Future.wait([
         _dio.get('inventario/lista/'),
         _dio.get('academico/programas-publico/'),
       ]);
       final d = results[0].data;
+      if (!mounted) return;
       setState(() {
-        _insumos   = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-        _programas = List<Map<String, dynamic>>.from(results[1].data);
-        _cargando  = false;
+        _insumos      = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _programas    = List<Map<String, dynamic>>.from(results[1].data);
+        _identificado = true;
+        _cargando     = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _cargando = false);
     }
   }
@@ -205,7 +213,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   Widget _buildScrollBody(bool wide) {
     final content = Column(children: [
       _header(),
-      _buildFormBody(wide),
+      _identificado ? _buildFormBody(wide) : _buildIdentificacion(wide),
     ]);
 
     if (!wide) {
@@ -216,7 +224,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
+          constraints: BoxConstraints(maxWidth: _identificado ? 680 : 480),
           child: Card(
             elevation: 3,
             shadowColor: Colors.black26,
@@ -226,6 +234,49 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildIdentificacion(bool wide) {
+    final padding = wide
+        ? const EdgeInsets.fromLTRB(28, 24, 28, 28)
+        : const EdgeInsets.all(16);
+
+    return Padding(
+      padding: padding,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text(
+          'Para solicitar material, primero identifícate.',
+          style: TextStyle(fontSize: 14, color: Colors.black54),
+        ),
+        const SizedBox(height: 20),
+        TextFormField(
+          controller: _nitCtrl,
+          keyboardType: TextInputType.number,
+          decoration: _deco('Cédula / Carnet *', Icons.badge_outlined),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _nomCtrl,
+          decoration: _deco('Nombre y apellido *', Icons.person_outline),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _cargando ? null : _continuar,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kPrimary, foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: _cargando
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ]),
     );
   }
 
@@ -254,7 +305,10 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () => setState(() {
-              _enviado = false;
+              _enviado      = false;
+              _identificado = false;
+              _insumos      = [];
+              _programas    = [];
               _nitCtrl.clear(); _nomCtrl.clear(); _corrCtrl.clear();
               _celCtrl.clear(); _asgCtrl.clear(); _obsCtrl.clear();
               _programaId = null;
