@@ -31,11 +31,14 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   String? _programaId;
   final List<_ItemSolicitud> _items = [_ItemSolicitud()];
 
-  // true cuando el usuario completó nombre + NIT y presionó "Continuar"
+  // true cuando el usuario completó la identificación y presionó "Continuar"
   bool _identificado = false;
   bool _cargando = false;
   bool _enviando = false;
   bool _enviado  = false;
+  bool _idValidado = false;   // activa los mensajes de error en la identificación
+
+  final _idFormKey = GlobalKey<FormState>();
 
   late final Dio _dio;
 
@@ -47,6 +50,15 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));
+    _cargarProgramas();
+  }
+
+  Future<void> _cargarProgramas() async {
+    try {
+      final r = await _dio.get('academico/programas-publico/');
+      if (!mounted) return;
+      setState(() => _programas = List<Map<String, dynamic>>.from(r.data));
+    } catch (_) {}
   }
 
   @override
@@ -58,20 +70,15 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   }
 
   Future<void> _continuar() async {
-    final nit   = _nitCtrl.text.trim();
-    final nombre = _nomCtrl.text.trim();
-    if (nit.isEmpty || nombre.isEmpty) return;
+    setState(() => _idValidado = true);
+    if (!(_idFormKey.currentState?.validate() ?? false)) return;
     setState(() => _cargando = true);
     try {
-      final results = await Future.wait([
-        _dio.get('inventario/lista/'),
-        _dio.get('academico/programas-publico/'),
-      ]);
-      final d = results[0].data;
+      final r = await _dio.get('inventario/lista/');
       if (!mounted) return;
+      final d = r.data;
       setState(() {
         _insumos      = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-        _programas    = List<Map<String, dynamic>>.from(results[1].data);
         _identificado = true;
         _cargando     = false;
       });
@@ -249,7 +256,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: _identificado ? 680 : 480),
+          constraints: BoxConstraints(maxWidth: _identificado ? 680 : 600),
           child: Card(
             elevation: 3,
             shadowColor: Colors.black26,
@@ -267,41 +274,101 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
         ? const EdgeInsets.fromLTRB(28, 24, 28, 28)
         : const EdgeInsets.all(16);
 
-    return Padding(
-      padding: padding,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text(
-          'Para solicitar material, primero identifícate.',
-          style: TextStyle(fontSize: 14, color: Colors.black54),
-        ),
-        const SizedBox(height: 20),
+    Widget field(TextEditingController ctrl, String label, IconData icon, {
+      TextInputType? kb,
+      String? Function(String?)? validator,
+    }) =>
         TextFormField(
-          controller: _nitCtrl,
-          keyboardType: TextInputType.number,
-          decoration: _deco('Cédula / Carnet *', Icons.badge_outlined),
-        ),
-        const SizedBox(height: 12),
-        TextFormField(
-          controller: _nomCtrl,
-          decoration: _deco('Nombre y apellido *', Icons.person_outline),
-        ),
-        const SizedBox(height: 24),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _cargando ? null : _continuar,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary, foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: _cargando
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold)),
+          controller: ctrl,
+          keyboardType: kb,
+          autovalidateMode: _idValidado
+              ? AutovalidateMode.onUserInteraction
+              : AutovalidateMode.disabled,
+          decoration: _deco(label, icon),
+          validator: validator,
+        );
+
+    Widget row2(Widget a, Widget b) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [Expanded(child: a), const SizedBox(width: 14), Expanded(child: b)],
+    );
+
+    final fNit = field(_nitCtrl, 'Cédula / Carnet *', Icons.badge_outlined,
+        kb: TextInputType.number,
+        validator: (v) => v!.trim().isEmpty ? 'Requerido' : null);
+
+    final fNom = field(_nomCtrl, 'Nombre y apellido *', Icons.person_outline,
+        validator: (v) => v!.trim().isEmpty ? 'Requerido' : null);
+
+    final fCorr = field(_corrCtrl, 'Correo electrónico *', Icons.email_outlined,
+        kb: TextInputType.emailAddress,
+        validator: (v) {
+          if (v!.trim().isEmpty) return 'Requerido';
+          if (!v.contains('@')) return 'Correo inválido';
+          return null;
+        });
+
+    final fCel = field(_celCtrl, 'Número de celular *', Icons.phone_outlined,
+        kb: TextInputType.phone,
+        validator: (v) => v!.trim().isEmpty ? 'Requerido' : null);
+
+    final fProg = DropdownButtonFormField<String>(
+      initialValue: _programaId,
+      autovalidateMode: _idValidado
+          ? AutovalidateMode.onUserInteraction
+          : AutovalidateMode.disabled,
+      decoration: _deco('Programa académico *', Icons.school_outlined),
+      items: _programas.map((p) => DropdownMenuItem(
+        value: p['id'].toString(),
+        child: Text(p['nombre'] ?? '', style: const TextStyle(fontSize: 13)),
+      )).toList(),
+      onChanged: (v) => setState(() => _programaId = v),
+      validator: (_) => _programaId == null ? 'Selecciona tu programa' : null,
+    );
+
+    return Form(
+      key: _idFormKey,
+      child: Padding(
+        padding: padding,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text(
+            'Para solicitar material, primero completa tus datos.',
+            style: TextStyle(fontSize: 14, color: Colors.black54),
           ),
-        ),
-      ]),
+          const SizedBox(height: 20),
+          if (wide) ...[
+            row2(fNit, fNom),
+            const SizedBox(height: 12),
+            row2(fCorr, fCel),
+          ] else ...[
+            fNit, const SizedBox(height: 10),
+            fNom, const SizedBox(height: 10),
+            fCorr, const SizedBox(height: 10),
+            fCel,
+          ],
+          const SizedBox(height: 12),
+          _programas.isEmpty
+              ? const Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary)))
+              : fProg,
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _cargando ? null : _continuar,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: _cargando
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 
@@ -329,17 +396,20 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            onPressed: () => setState(() {
-              _enviado      = false;
-              _identificado = false;
-              _insumos      = [];
-              _programas    = [];
-              _nitCtrl.clear(); _nomCtrl.clear(); _corrCtrl.clear();
-              _celCtrl.clear(); _asgCtrl.clear(); _obsCtrl.clear();
-              _programaId = null;
-              for (final i in _items) { i.dispose(); }
-              _items..clear()..add(_ItemSolicitud());
-            }),
+            onPressed: () {
+              setState(() {
+                _enviado      = false;
+                _identificado = false;
+                _idValidado   = false;
+                _insumos      = [];
+                _nitCtrl.clear(); _nomCtrl.clear(); _corrCtrl.clear();
+                _celCtrl.clear(); _asgCtrl.clear(); _obsCtrl.clear();
+                _programaId = null;
+                for (final i in _items) { i.dispose(); }
+                _items..clear()..add(_ItemSolicitud());
+              });
+              _cargarProgramas();
+            },
             child: const Text('Nueva solicitud'),
           ),
         ),
