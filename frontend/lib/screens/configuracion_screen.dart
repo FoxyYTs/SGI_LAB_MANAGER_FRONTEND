@@ -467,7 +467,9 @@ class _DocentesTabState extends State<_DocentesTab> {
           _asignaturas = List<Map<String, dynamic>>.from(da is List ? da : (da['results'] ?? []));
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[DocenteTab] Error al cargar catálogos: $e');
+    }
   }
 
   Future<void> _dialog(Map? item, BuildContext ctx,
@@ -655,7 +657,9 @@ class _GuiasTabState extends State<_GuiasTab> {
           _insumos     = List<Map<String, dynamic>>.from(di is List ? di : (di['results'] ?? []));
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[GuiaTab] Error al cargar catálogos: $e');
+    }
   }
 
   Future<void> _dialog(Map? item, BuildContext ctx,
@@ -760,7 +764,9 @@ class _GuiasTabState extends State<_GuiasTab> {
           queryParameters: {'guia': guiaId});
       final d = resp.data;
       items = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[InsumoGuiaDialog] Error al cargar insumos de guía: $e');
+    }
 
     if (!mounted || !ctx.mounted) return;
 
@@ -823,7 +829,9 @@ class _GuiasTabState extends State<_GuiasTab> {
                               try {
                                 await dio.delete('academico/insumos-guia/${ig['id']}/');
                                 setSt(() => items.removeWhere((e) => e['id'] == ig['id']));
-                              } catch (_) {}
+                              } catch (e) {
+                                debugPrint('[InsumoGuiaDialog] Error al eliminar: $e');
+                              }
                             },
                           ),
                         );
@@ -889,7 +897,9 @@ class _GuiasTabState extends State<_GuiasTab> {
                                 selInsumo = null;
                                 cantCtrl.clear();
                               });
-                            } catch (_) {}
+                            } catch (e) {
+                              debugPrint('[InsumoGuiaDialog] Error al agregar insumo: $e');
+                            }
                           },
                   ),
                 ),
@@ -1047,7 +1057,9 @@ class _AsignaturasTabState extends State<_AsignaturasTab> {
           _areas = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AsignaturaTab] Error al cargar áreas: $e');
+    }
   }
 
   Future<void> _dialog(Map? item, BuildContext ctx,

@@ -15,7 +15,8 @@ class InsumoRepository {
     try {
       final dio  = ApiClient.instance.authenticatedDio(token);
       final resp = await dio.get('inventario/lista/');
-      final data = resp.data as List<dynamic>;
+      final raw  = resp.data;
+      final data = raw is List ? raw : ((raw as Map)['results'] as List? ?? []);
       final insumos = data.map((j) => Insumo.fromJson(j as Map<String, dynamic>)).toList();
       if (!kIsWeb) {
         try {

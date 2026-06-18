@@ -138,6 +138,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final filtrados = _prestamosFiltrados();
     return LayoutBuilder(builder: (context, constraints) {
     final pad = constraints.maxWidth < 650 ? 14.0 : 24.0;
     return Padding(
@@ -202,7 +203,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
               ..._buildFiltroChips(),
               const SizedBox(width: 16),
               Text(
-                '${_prestamosFiltrados().length} préstamos',
+                '${filtrados.length} préstamos',
                 style: const TextStyle(fontSize: 12, color: kTextMuted),
               ),
             ]),
@@ -224,13 +225,13 @@ class _MovimientosContentState extends State<MovimientosContent> {
           Expanded(
             child: _cargando
                 ? const Center(child: CircularProgressIndicator(color: kPrimary))
-                : _prestamosFiltrados().isEmpty
+                : filtrados.isEmpty
                     ? _buildEmpty()
                     : ListView.separated(
-                        itemCount: _prestamosFiltrados().length,
+                        itemCount: filtrados.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (ctx, i) => _PrestamoCard(
-                          prestamo: _prestamosFiltrados()[i],
+                          prestamo: filtrados[i],
                           puedeGestionar: auth.can(Perm.prestamosGestionar),
                           onAprobar: _aprobar,
                           onRechazar: _rechazar,
