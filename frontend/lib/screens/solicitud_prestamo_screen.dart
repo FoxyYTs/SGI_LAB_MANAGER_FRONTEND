@@ -104,12 +104,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       if (e.response?.statusCode == 429) {
         msg = 'Se excedió la cantidad de registros que puedes hacer por hora. Por favor, intenta más tarde.';
       } else {
-        final data = e.response?.data;
-        if (data is Map && data.isNotEmpty) {
-          msg = data.values.first.toString();
-        } else {
-          msg = 'Error al enviar la solicitud. Intenta de nuevo.';
-        }
+        msg = _extraerMensajeError(e.response?.data);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -119,6 +114,36 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
+  }
+
+  // Extrae el primer texto legible de las respuestas de error de DRF,
+  // que pueden ser strings, listas o mapas anidados (ej: {detalles:[{presentacion:[...]}]}).
+  String _extraerMensajeError(dynamic data) {
+    if (data == null) return 'Error al enviar la solicitud. Intenta de nuevo.';
+    if (data is String) return data.isNotEmpty ? data : 'Error al enviar la solicitud.';
+    if (data is List) {
+      if (data.isEmpty) return 'Error al enviar la solicitud.';
+      return _extraerMensajeError(data.first);
+    }
+    if (data is Map) {
+      // Claves de error de alto nivel primero
+      for (final k in ['detail', 'error', 'non_field_errors']) {
+        if (data.containsKey(k)) return _extraerMensajeError(data[k]);
+      }
+      // Errores en los detalles del préstamo: {detalles: [{campo: ["msg"]}]}
+      if (data.containsKey('detalles')) {
+        final d = data['detalles'];
+        if (d is List && d.isNotEmpty && d.first is Map) {
+          final primerDetalle = d.first as Map;
+          if (primerDetalle.isNotEmpty) {
+            return _extraerMensajeError(primerDetalle.values.first);
+          }
+        }
+      }
+      // Cualquier otro campo de validación
+      if (data.isNotEmpty) return _extraerMensajeError(data.values.first);
+    }
+    return 'Error al enviar la solicitud. Intenta de nuevo.';
   }
 
   // ── UI helpers ──────────────────────────────────────────────────────────────
@@ -567,7 +592,9 @@ class _DialogMaterialState extends State<_DialogMaterial> {
   @override
   Widget build(BuildContext context) {
     final filtrados = widget.insumos
-        .where((i) => (i['nombre_insumo']?.toString() ?? '').toLowerCase().contains(_query.toLowerCase()))
+        .where((i) =>
+            ((i['presentaciones'] as List?)?.isNotEmpty ?? false) &&
+            (i['nombre_insumo']?.toString() ?? '').toLowerCase().contains(_query.toLowerCase()))
         .toList();
     return AlertDialog(
       title: const Text('Seleccionar material', style: TextStyle(color: kPrimary, fontSize: 16)),
