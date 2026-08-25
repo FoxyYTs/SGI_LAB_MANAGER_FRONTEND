@@ -1,17 +1,145 @@
-# frontend
+# SGI LAB MANAGER — Frontend
 
-A new Flutter project.
+Aplicación multiplataforma (Android · Web · Linux) para la gestión del **Laboratorio Integrado** del Politécnico Colombiano Jaime Isaza Cadavid (PCJIC), Rionegro, Colombia.
 
-## Getting Started
+Desarrollada en **Flutter/Dart** con arquitectura Provider, sincronización offline y soporte completo de seguridad química SGA/GHS.
 
-This project is a starting point for a Flutter application.
+[![Licencia AGPL v3](https://img.shields.io/badge/Licencia-AGPL%20v3-blue.svg)](LICENSE)
+[![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter)](https://flutter.dev)
+[![Backend](https://img.shields.io/badge/API-Django%20REST-092E20?logo=django)](https://github.com/FoxyYTs/SGI_LAB_MANAGER_BACKEND)
 
-A few resources to get you started if this is your first Flutter project:
+---
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Capturas de pantalla
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+<table>
+  <tr>
+    <td align="center"><b>Login</b></td>
+    <td align="center"><b>Dashboard</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/01_login.png" alt="Login" width="480"/></td>
+    <td><img src="docs/screenshots/02_dashboard.png" alt="Dashboard" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Inventario</b></td>
+    <td align="center"><b>Detalle de insumo</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/03_inventario.png" alt="Inventario" width="480"/></td>
+    <td><img src="docs/screenshots/05_detalle_insumo.png" alt="Detalle insumo" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Ficha SGA/GHS</b></td>
+    <td align="center"><b>Horario semanal — Asignaturas</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/04_ficha_sga.png" alt="Ficha SGA" width="480"/></td>
+    <td><img src="docs/screenshots/07_horario_asignaturas.png" alt="Horario" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Informes PDF/Excel</b></td>
+    <td align="center"><b>Configuración — Docentes</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/08_informes.png" alt="Informes" width="480"/></td>
+    <td><img src="docs/screenshots/09_configuracion_docentes.png" alt="Configuración" width="480"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Gestión de permisos</b></td>
+    <td align="center"><b>Mi Perfil</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/10_permisos.png" alt="Permisos" width="480"/></td>
+    <td><img src="docs/screenshots/11_mi_perfil.png" alt="Mi Perfil" width="480"/></td>
+  </tr>
+</table>
+
+---
+
+## Stack tecnológico
+
+| Tecnología | Uso |
+|---|---|
+| Flutter 3.x / Dart | Framework multiplataforma (Android, Web, Linux) |
+| Provider | Gestión de estado global |
+| Dio | Cliente HTTP con interceptor JWT y auto-refresh |
+| flutter_secure_storage | Almacenamiento seguro de tokens (AES-GCM en web, keyring en Linux) |
+| sqflite / sqflite_common_ffi | Base de datos SQLite local (caché y cola offline) |
+| connectivity_plus | Detección de red para sincronización offline |
+| workmanager | Tareas en background para Android (notificaciones de stock) |
+
+---
+
+## Módulos
+
+| Módulo | Descripción |
+|---|---|
+| **Inventario** | Control de insumos (Implementos, Vidriería, Químicos, Equipos) con semáforo de stock y múltiples presentaciones por insumo |
+| **SGA/GHS** | Ficha de seguridad química: pictogramas GHS, frases H/P, NFPA 704, extracción automática de FDS con IA (Groq/Llama), generación de etiqueta PDF |
+| **Préstamos** | Flujo PENDIENTE → ACTIVO → DEVUELTO con descuento de stock y formulario público por QR |
+| **Bitácora** | Historial de movimientos (ENTRADA, SALIDA, AJUSTE, ROTURA, CONSUMO_PRÁCTICA) |
+| **Horario** | Cuadrícula semanal Lun–Sáb × 6–21h para encargados y asignaturas con franjas de color |
+| **Informes** | 6 tipos de PDF/Excel con filtros por fecha (inventario, préstamos, horas monitor, prácticas, deudores) |
+| **Configuración** | Ubicaciones, unidades, programas, docentes, guías, áreas, asignaturas, laboratorio |
+| **Permisos** | Gestión granular por rol (ADMIN, LAB, MONITOR, ESTUDIANTE) y por usuario individual |
+| **Mi Perfil** | Edición de datos personales, foto de perfil y cambio de contraseña |
+
+---
+
+## Características técnicas destacadas
+
+- **Offline-first**: cola SQLite sincroniza acciones cuando vuelve la red. Login bloqueado sin conexión.
+- **JWT con refresco transparente**: interceptor Dio renueva el token y reintenta la petición sin interrumpir al usuario. Lifetime 2h.
+- **Soporte multiplataforma**: stubs condicionales para sqflite y connectivity en Web (sin romper la build).
+- **Notificaciones Android**: Workmanager dispara alertas de stock crítico, fin de turno de monitor y cambio de estado del servidor.
+- **Formularios QR públicos**: solicitud de préstamo, registro de horas monitor y reporte de rotura — sin necesidad de login.
+- **Layout adaptativo**: sidebar fijo en desktop/tablet, drawer en móvil, detección de landscape.
+
+---
+
+## Instalación y desarrollo
+
+```bash
+# Clonar
+git clone https://github.com/FoxyYTs/SGI_LAB_MANAGER_FRONTEND.git
+cd SGI_LAB_MANAGER_FRONTEND/frontend
+
+# Instalar dependencias
+flutter pub get
+
+# Ejecutar en Linux (desarrollo — requiere backend corriendo en localhost:8000)
+flutter run -d linux --dart-define=SERVER_URL=http://localhost:8000
+
+# Build web para producción
+flutter build web --dart-define=SERVER_URL=https://apisgi.foxyyts.qzz.io --release
+
+# Build Android (release)
+flutter build apk --release --dart-define=SERVER_URL=https://apisgi.foxyyts.qzz.io
+
+# APK de diagnóstico (logs a archivo + detalles técnicos en UI)
+flutter build apk --release \
+  --dart-define=DEV_MODE=true \
+  --dart-define=SERVER_URL=https://apisgi.foxyyts.qzz.io
+```
+
+Requiere el [backend](https://github.com/FoxyYTs/SGI_LAB_MANAGER_BACKEND) corriendo.
+
+---
+
+## Demo en producción
+
+| Entorno | URL |
+|---|---|
+| Web (producción) | [sgilabmanager.foxyyts.qzz.io](https://sgilabmanager.foxyyts.qzz.io) |
+| API | [apisgi.foxyyts.qzz.io](https://apisgi.foxyyts.qzz.io) |
+
+Infraestructura: Docker Compose · Gunicorn · Nginx · Cloudflare Zero Trust Tunnel.
+
+---
+
+## Licencia
+
+GNU Affero General Public License v3.0 — ver [LICENSE](LICENSE).
+
+Desarrollado por [FoxyYTs](https://foxyyts.qzz.io) · 2025–2026
