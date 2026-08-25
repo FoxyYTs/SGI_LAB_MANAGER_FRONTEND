@@ -18,6 +18,7 @@ import 'screens/permisos_screen.dart';
 import 'screens/insumo_form_screen.dart';
 import 'screens/mi_perfil_screen.dart';
 import 'screens/actualizacion_requerida_screen.dart';
+import 'screens/politica_privacidad_screen.dart';
 import 'core/theme/colors.dart';
 import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
@@ -133,6 +134,7 @@ class MyApp extends StatelessWidget {
         '/insumo-form': (ctx) => const _Guard(child: InsumoFormScreen()),
         '/mi-perfil':   (ctx) => const _Guard(child: MiPerfilScreen()),
         '/actualizacion-requerida': (ctx) => const ActualizacionRequeridaScreen(),
+        '/politica-privacidad':    (ctx) => const PoliticaPrivacidadScreen(),
         // ── Rutas públicas (accesibles sin login) ─────────────────────────────
         '/solicitud':          (ctx) => const SolicitudPrestamoScreen(),
         '/registro-horas':     (ctx) => const RegistroHorasScreen(),
