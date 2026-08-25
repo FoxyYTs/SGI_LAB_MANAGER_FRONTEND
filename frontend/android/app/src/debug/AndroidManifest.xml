@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Allow plain HTTP to local/dev servers (SERVER_IP builds). Release builds
+         do NOT inherit this because the main manifest no longer sets it. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>
