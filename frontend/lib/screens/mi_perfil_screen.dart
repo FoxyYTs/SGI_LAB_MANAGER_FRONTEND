@@ -511,19 +511,13 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(child: TextFormField(
-              controller: _firstNameCtrl,
-              decoration: _inputDec('Nombre', Icons.person_outline),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: TextFormField(
-              controller: _lastNameCtrl,
-              decoration: _inputDec('Apellido', Icons.person_outline),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null,
-            )),
-          ]),
+          Builder(builder: (ctx) {
+            final isWide = MediaQuery.sizeOf(ctx).width >= 500;
+            final nombre = TextFormField(controller: _firstNameCtrl, decoration: _inputDec('Nombre', Icons.person_outline), validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null);
+            final apellido = TextFormField(controller: _lastNameCtrl, decoration: _inputDec('Apellido', Icons.person_outline), validator: (v) => (v == null || v.trim().isEmpty) ? 'Requerido' : null);
+            if (isWide) return Row(children: [Expanded(child: nombre), const SizedBox(width: 12), Expanded(child: apellido)]);
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [nombre, const SizedBox(height: 12), apellido]);
+          }),
           const SizedBox(height: 12),
           TextFormField(
             controller: _emailCtrl,
@@ -639,8 +633,9 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Row(children: [
-            Expanded(child: TextFormField(
+          Builder(builder: (ctx) {
+            final isWide = MediaQuery.sizeOf(ctx).width >= 500;
+            final passNueva = TextFormField(
               controller: _passNuevaCtrl,
               obscureText: !_verPassNueva,
               decoration: _inputDec('Nueva contraseña', Icons.lock_person_outlined).copyWith(
@@ -649,9 +644,8 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                   onPressed: () => setState(() => _verPassNueva = !_verPassNueva),
                 ),
               ),
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: TextFormField(
+            );
+            final passConfirm = TextFormField(
               controller: _passNueva2Ctrl,
               obscureText: !_verPassNueva2,
               decoration: _inputDec('Confirmar contraseña', Icons.lock_reset_outlined).copyWith(
@@ -660,8 +654,10 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                   onPressed: () => setState(() => _verPassNueva2 = !_verPassNueva2),
                 ),
               ),
-            )),
-          ]),
+            );
+            if (isWide) return Row(children: [Expanded(child: passNueva), const SizedBox(width: 12), Expanded(child: passConfirm)]);
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [passNueva, const SizedBox(height: 10), passConfirm]);
+          }),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
