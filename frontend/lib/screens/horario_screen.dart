@@ -1627,14 +1627,11 @@ class _TabGestionState extends State<_TabGestion>
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Columna Áreas ────────────────────────────────────────────
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+            child: LayoutBuilder(builder: (_, box) {
+              final isWide = box.maxWidth >= 600;
+              final Widget areasCol = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       Row(children: [
                         const Text('ÁREAS',
                             style: TextStyle(
@@ -1673,6 +1670,8 @@ class _TabGestionState extends State<_TabGestion>
                                     color: kPrimary, size: 13),
                               ),
                               title: Text(a['nombre_area']?.toString() ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                       fontSize: 13, fontWeight: FontWeight.w600)),
                               subtitle: Text('$countAsig asignatura${countAsig != 1 ? 's' : ''}',
@@ -1703,16 +1702,11 @@ class _TabGestionState extends State<_TabGestion>
                             ),
                           );
                         }),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 24),
-                // ── Columna Asignaturas ──────────────────────────────────────
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  ]);
+              // ── Columna Asignaturas ──────────────────────────────────────
+              final Widget asigCol = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       Row(children: [
                         const Text('ASIGNATURAS',
                             style: TextStyle(
@@ -1747,6 +1741,8 @@ class _TabGestionState extends State<_TabGestion>
                                       color: kPrimary, size: 13),
                                 ),
                                 title: Text(s['nombre_asignatura']?.toString() ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                         fontSize: 13, fontWeight: FontWeight.w600)),
                                 subtitle: Text(
@@ -1801,11 +1797,25 @@ class _TabGestionState extends State<_TabGestion>
                                   ),
                               ),
                             )),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                  ]);
+              return isWide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: areasCol),
+                        const SizedBox(width: 24),
+                        Expanded(flex: 2, child: asigCol),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        areasCol,
+                        const SizedBox(height: 20),
+                        asigCol,
+                      ],
+                    );
+            }),
           ),
         ),
       ],

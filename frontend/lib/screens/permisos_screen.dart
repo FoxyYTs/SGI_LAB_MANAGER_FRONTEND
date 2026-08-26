@@ -161,15 +161,19 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
           const Text('ADMIN siempre tiene todos los permisos y no puede modificarse.',
               style: TextStyle(color: kTextMuted, fontSize: 12)),
           const SizedBox(height: 16),
-          Card(
-            child: Table(
-              columnWidths: const {
-                0: FlexColumnWidth(2.5),
-                1: FixedColumnWidth(70),
-                2: FixedColumnWidth(70),
-                3: FixedColumnWidth(70),
-                4: FixedColumnWidth(70),
-              },
+          LayoutBuilder(builder: (_, box) {
+            const double kMin = 470;
+            final w = box.maxWidth < kMin ? kMin : box.maxWidth;
+            final colRole = box.maxWidth < kMin ? const FixedColumnWidth(76) : const FixedColumnWidth(70);
+            Widget tableCard = Card(
+              child: Table(
+                columnWidths: {
+                  0: const FlexColumnWidth(2.5),
+                  1: colRole,
+                  2: colRole,
+                  3: colRole,
+                  4: colRole,
+                },
               children: [
                 // Cabecera
                 TableRow(
@@ -228,7 +232,13 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
                 )),
               ],
             ),
-          ),
+          );
+            if (box.maxWidth >= kMin) return tableCard;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(width: w, child: tableCard),
+            );
+          }),
         ],
       ),
     );

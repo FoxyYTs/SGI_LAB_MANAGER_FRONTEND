@@ -1336,14 +1336,14 @@ class _LabSection extends StatelessWidget {
                 child: Icon(icon, color: kPrimary, size: 16),
               ),
               const SizedBox(width: 10),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(titulo,
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 14, color: kPrimary)),
                 if (subtitulo != null)
                   Text(subtitulo!,
                       style: const TextStyle(fontSize: 11, color: kTextMuted)),
-              ]),
+              ])),
             ]),
             const SizedBox(height: 16),
             const Divider(height: 1),
