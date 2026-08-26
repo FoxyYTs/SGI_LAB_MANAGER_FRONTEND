@@ -1860,7 +1860,7 @@ class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
               ),
               items: horasFin.map((h) => DropdownMenuItem(
                 value: h,
-                child: Text(_horaAmPm(h)),
+                child: Text(_horaAmPm(h + 1)),
               )).toList(),
               onChanged: (v) => setState(() => _horaFin = v),
             ),
@@ -2065,7 +2065,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
                 ),
                 items: [
                   for (int h = widget.horaInicio!; h <= 21; h++)
-                    DropdownMenuItem(value: h, child: Text(_horaAmPm(h)))
+                    DropdownMenuItem(value: h, child: Text(_horaAmPm(h + 1)))
                 ],
                 onChanged: (v) => setState(() => _horaFin = v),
               ),
