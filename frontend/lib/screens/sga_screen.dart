@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/download_helper.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -40,6 +41,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   Map<String, dynamic>? _colmena;
   bool _cargando = true;
   bool _extrayendo = false;
+  bool _descargandoPdf = false;
   String? _error;
 
   @override
@@ -161,12 +163,11 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _abrirEtiquetaUrl() async {
-    // Diálogo para elegir el tamaño de etiqueta
     final formatos = [
-      {'value': 'pequena', 'label': 'Pequeña',    'sub': '52 × 74 mm'},
-      {'value': '50l',     'label': 'Máx. 50 L',  'sub': '74 × 105 mm'},
-      {'value': '500l',    'label': 'Máx. 500 L', 'sub': '105 × 148 mm'},
-      {'value': 'grande',  'label': 'Más de 500 L','sub': '148 × 210 mm'},
+      {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 74 mm'},
+      {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 105 mm'},
+      {'value': '500l',    'label': 'Máx. 500 L',  'sub': '105 × 148 mm'},
+      {'value': 'grande',  'label': 'Más de 500 L', 'sub': '148 × 210 mm'},
     ];
 
     final elegido = await showDialog<String>(
@@ -186,24 +187,27 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
           )).toList(),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
         ],
       ),
     );
 
     if (elegido == null || !mounted) return;
 
-    final url = Uri.parse(
-      '${ApiClient.instance.baseUrl}inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/'
-      '?token=$_token&formato=$elegido',
-    );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      _snack('No se pudo abrir el visor de PDF.', kDanger);
+    setState(() => _descargandoPdf = true);
+    try {
+      final resp = await _dio.get(
+        'inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/',
+        queryParameters: {'formato': elegido},
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final nombre = 'etiqueta_${elegido}_${widget.insumoId}.pdf';
+      final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
+      if (msg != null && mounted) _snack(msg, kTextMuted);
+    } on DioException {
+      if (mounted) _snack('Error al descargar la etiqueta.', kDanger);
+    } finally {
+      if (mounted) setState(() => _descargandoPdf = false);
     }
   }
 
@@ -247,11 +251,20 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
               icon: const Icon(Icons.upload_file, color: kPrimary),
               onPressed: _extraerFDS,
             ),
-          IconButton(
-            tooltip: 'Generar etiqueta GHS',
-            icon: const Icon(Icons.label_outline, color: kSuccess),
-            onPressed: _datos == null || _datos!.isEmpty ? null : _abrirEtiquetaUrl,
-          ),
+          if (_descargandoPdf)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: kSuccess),
+              ),
+            )
+          else
+            IconButton(
+              tooltip: 'Generar etiqueta GHS',
+              icon: const Icon(Icons.label_outline, color: kSuccess),
+              onPressed: _datos == null || _datos!.isEmpty ? null : _abrirEtiquetaUrl,
+            ),
           const SizedBox(width: 4),
         ],
         bottom: TabBar(
