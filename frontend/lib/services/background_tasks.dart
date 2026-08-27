@@ -272,15 +272,15 @@ Future<void> _show({
 }) async {
   final plugin = FlutterLocalNotificationsPlugin();
   await plugin.initialize(
-    const InitializationSettings(
+    settings: const InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     ),
   );
   await plugin.show(
-    id,
-    title,
-    body,
-    NotificationDetails(
+    id: id,
+    title: title,
+    body: body,
+    notificationDetails: NotificationDetails(
       android: AndroidNotificationDetails(
         channelId,
         channelName,

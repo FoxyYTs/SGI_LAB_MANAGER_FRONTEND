@@ -1,7 +1,5 @@
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -88,14 +86,13 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _extraerFDS() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final bytes = file.bytes ?? Uint8List(0);
+    if (result.isEmpty) return;
+    final file = result.first;
+    final bytes = await file.readAsBytes();
     if (bytes.isEmpty) {
       _snack('No se pudo leer el archivo.', kDanger);
       return;

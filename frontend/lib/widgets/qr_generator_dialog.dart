@@ -20,12 +20,13 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
 
   static const _forms = [
     _QrForm(
-      title:    'Solicitud de Préstamo',
-      route:    '/solicitud',
-      icon:     Icons.handshake_outlined,
-      color:    kPrimary,
-      desc:     'Formulario para que estudiantes soliciten materiales.',
-      fileName: 'qr_prestamo_sgi.svg',
+      title:       'Solicitud de Préstamo',
+      route:       '/solicitud',
+      externalUrl: 'https://forms.gle/7JhvsLDqiVuabEoW8',
+      icon:        Icons.handshake_outlined,
+      color:       kPrimary,
+      desc:        'Formulario para que estudiantes soliciten materiales.',
+      fileName:    'qr_prestamo_sgi.svg',
     ),
     _QrForm(
       title:    'Registro de Horas',
@@ -45,12 +46,13 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
       fileName:    'qr_practica_sgi.svg',
     ),
     _QrForm(
-      title:    'Reporte de Rotura',
-      route:    '/reporte-rotura',
-      icon:     Icons.report_outlined,
-      color:    kDanger,
-      desc:     'Estudiantes reportan implementos rotos o perdidos.',
-      fileName: 'qr_rotura_sgi.svg',
+      title:       'Reporte de Rotura',
+      route:       '/reporte-rotura',
+      externalUrl: 'https://forms.gle/itsi4YQDJMAEKBFG6',
+      icon:        Icons.report_outlined,
+      color:       kDanger,
+      desc:        'Estudiantes reportan implementos rotos o perdidos.',
+      fileName:    'qr_rotura_sgi.svg',
     ),
   ];
 

@@ -11,20 +11,24 @@ import '../repositories/insumo_repository.dart';
 class InventarioProvider with ChangeNotifier {
   final _repo = InsumoRepository();
 
-  List<Insumo> _insumos   = [];
-  bool         _cargando  = false;
-  bool         _desdeCache = false;
+  List<Insumo> _insumos       = [];
+  bool         _cargando      = false;
+  bool         _desdeCache    = false;
+  bool         _errorConexion = false;
   DateTime?    _lastSync;
 
-  List<Insumo> get insumos    => _insumos;
-  bool         get cargando   => _cargando;
-  bool         get desdeCache => _desdeCache;
-  DateTime?    get lastSync   => _lastSync;
+  List<Insumo> get insumos       => _insumos;
+  bool         get cargando      => _cargando;
+  bool         get desdeCache    => _desdeCache;
+  bool         get errorConexion => _errorConexion;
+  DateTime?    get lastSync      => _lastSync;
 
   /// Carga el inventario desde el servidor (o caché si no hay red).
   /// Actualiza [desdeCache] según si el timestamp de sync cambió.
+  /// Activa [errorConexion] cuando el servidor falló y no hay caché disponible.
   Future<void> fetchInsumos(String? token) async {
-    _cargando = true;
+    _cargando      = true;
+    _errorConexion = false;
     notifyListeners();
 
     final antes = await _repo.lastSync();
@@ -33,6 +37,8 @@ class InventarioProvider with ChangeNotifier {
 
     // Si last_sync no cambió es porque falló el server y se usó caché
     _desdeCache = (antes != null) && (_lastSync == antes);
+    // Sin datos y sin cambio en sync → server falló y no había caché
+    _errorConexion = _insumos.isEmpty && (_lastSync == null || _lastSync == antes);
 
     _cargando = false;
     notifyListeners();

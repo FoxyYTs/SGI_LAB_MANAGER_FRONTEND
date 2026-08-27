@@ -1852,7 +1852,7 @@ class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
           children: [
             // Hora de fin
             DropdownButtonFormField<int>(
-              value: _horaFin ?? widget.horaInicio,
+              initialValue: _horaFin ?? widget.horaInicio,
               decoration: const InputDecoration(
                 labelText: 'Hora de fin',
                 prefixIcon: Icon(Icons.schedule_outlined, color: kPrimary),
@@ -2003,7 +2003,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
           children: [
             // Asignatura
             DropdownButtonFormField<String>(
-              value: _asignaturaId,
+              initialValue: _asignaturaId,
               decoration: const InputDecoration(
                 labelText: 'Asignatura *',
                 prefixIcon: Icon(Icons.school_outlined, color: kPrimary),
@@ -2018,7 +2018,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
             const SizedBox(height: 12),
             // Docente — lista + Otros
             DropdownButtonFormField<String>(
-              value: _docenteDropdown,
+              initialValue: _docenteDropdown,
               decoration: const InputDecoration(
                 labelText: 'Docente',
                 prefixIcon: Icon(Icons.person_outline, color: kPrimary),
@@ -2057,7 +2057,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
             // Hora de fin (solo al crear, no al editar)
             if (widget.horaInicio != null) ...[
               DropdownButtonFormField<int>(
-                value: _horaFin ?? widget.horaInicio,
+                initialValue: _horaFin ?? widget.horaInicio,
                 decoration: const InputDecoration(
                   labelText: 'Hora de fin',
                   prefixIcon: Icon(Icons.schedule_outlined, color: kPrimary),

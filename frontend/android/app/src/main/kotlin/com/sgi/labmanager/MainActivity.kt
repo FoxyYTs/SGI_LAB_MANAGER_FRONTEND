@@ -1,4 +1,4 @@
-package com.poli.sgi.labmanager
+package com.sgi.labmanager
 
 import io.flutter.embedding.android.FlutterActivity
 
