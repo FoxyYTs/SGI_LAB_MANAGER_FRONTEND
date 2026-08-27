@@ -133,8 +133,7 @@ class SyncService extends ChangeNotifier {
       case 'PRESTAMO':
         await dio.post('operaciones/prestamos/', data: p);
       case 'DEVOLUCION':
-        final id = p['prestamo_id'];
-        await dio.post('operaciones/prestamos/$id/devolver/', data: p);
+        await dio.post('operaciones/devoluciones/', data: p);
       case 'AJUSTE_STOCK':
         final id = p.remove('insumo_id');
         await dio.patch('inventario/lista/$id/', data: p);

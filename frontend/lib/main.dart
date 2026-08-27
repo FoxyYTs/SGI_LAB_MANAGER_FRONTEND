@@ -56,7 +56,7 @@ void main() async {
 
     // Workmanager solo disponible en Android
     if (Platform.isAndroid) {
-      await Workmanager().initialize(backgroundDispatcher, isInDebugMode: false);
+      await Workmanager().initialize(backgroundDispatcher);
       LogService.log('Workmanager inicializado');
     }
   }

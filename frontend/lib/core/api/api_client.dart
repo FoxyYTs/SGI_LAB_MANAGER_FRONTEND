@@ -33,7 +33,6 @@ class ApiClient {
 
   // Estado del refresco de token
   String?            _refreshTokenStr;
-  String?            _currentToken;
   Future<String?>?   _refreshFuture;        // evita múltiples refreshes simultáneos
   void Function(String newToken)? _onTokenRefreshed;
   void Function()?                _onLogout;
@@ -91,7 +90,6 @@ class ApiClient {
     required void Function(String newToken) onRefreshed,
     required void Function() onLogout,
   }) {
-    _currentToken      = accessToken;
     _refreshTokenStr   = refreshToken;
     _onTokenRefreshed  = onRefreshed;
     _onLogout          = onLogout;
@@ -99,7 +97,6 @@ class ApiClient {
 
   /// Limpia el estado de tokens (al hacer logout).
   void clearTokens() {
-    _currentToken     = null;
     _refreshTokenStr  = null;
     _onTokenRefreshed = null;
     _onLogout         = null;
@@ -121,7 +118,6 @@ class ApiClient {
         data: {'refresh': _refreshTokenStr},
       );
       final newToken = resp.data['access'] as String;
-      _currentToken = newToken;
       _onTokenRefreshed?.call(newToken);
       debugPrint('[ApiClient] Token refrescado correctamente.');
       return newToken;

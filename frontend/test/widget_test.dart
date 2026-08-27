@@ -53,8 +53,8 @@ void main() {
 
     testWidgets('el botón de atrás en la AppBar está presente', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(body: Text('inicio')),
+        MaterialApp(
+          home: const Scaffold(body: Text('inicio')),
           routes: {'/politica': (ctx) => const PoliticaPrivacidadScreen()},
         ),
       );

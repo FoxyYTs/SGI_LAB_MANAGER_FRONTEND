@@ -13,7 +13,7 @@ if (keyPropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.poli.sgi.labmanager"
+    namespace = "com.sgi.labmanager"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -35,7 +35,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.poli.sgi.labmanager"
+        applicationId = "com.sgi.labmanager"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

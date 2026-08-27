@@ -85,7 +85,7 @@ class _AboutDialog extends StatelessWidget {
                 icon: Icons.shop_outlined,
                 label: 'Google Play',
                 sublabel: 'Descargar desde Play Store',
-                url: 'https://play.google.com/store/apps/details?id=com.poli.sgi.labmanager',
+                url: 'https://play.google.com/store/apps/details?id=com.sgi.labmanager',
                 filled: true,
               ),
               const SizedBox(height: 20),

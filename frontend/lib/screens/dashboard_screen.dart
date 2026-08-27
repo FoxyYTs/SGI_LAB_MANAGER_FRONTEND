@@ -657,7 +657,7 @@ class _DashboardContentState extends State<DashboardContent> {
                     horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
                 children: [
                   _headerRow(['Insumo', 'Stock actual', 'Mínimo', 'Estado']),
-                  ...lista!.asMap().entries.map((e) {
+                  ...lista.asMap().entries.map((e) {
                     final idx = e.key;
                     final ins = e.value as Map<String, dynamic>;
                     final stock    = double.tryParse(ins['stock_actual'].toString()) ?? 0;

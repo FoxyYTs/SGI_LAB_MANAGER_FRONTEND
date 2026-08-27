@@ -153,15 +153,14 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   Future<void> _seleccionarFoto() async {
     final auth = context.read<AuthProvider>();
 
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.image,
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
+    if (result.isEmpty) return;
 
-    final file = result.files.first;
-    final bytes = file.bytes;
-    if (bytes == null) return;
+    final file = result.first;
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) return;
 
     setState(() => _subiendoFoto = true);
 
@@ -682,19 +681,6 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     ]),
   );
 
-  Widget _seccionLabel(String texto) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          texto,
-          style: const TextStyle(
-              color: kPrimary, fontWeight: FontWeight.bold, fontSize: 13),
-        ),
-        const Divider(height: 8),
-      ],
-    );
-  }
 
   InputDecoration _inputDec(String label, IconData icon) {
     return InputDecoration(
