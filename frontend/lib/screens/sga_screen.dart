@@ -161,10 +161,10 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
 
   Future<void> _abrirEtiquetaUrl() async {
     final formatos = [
-      {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 74 mm'},
-      {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 105 mm'},
-      {'value': '500l',    'label': 'Máx. 500 L',  'sub': '105 × 148 mm'},
-      {'value': 'grande',  'label': 'Más de 500 L', 'sub': '148 × 210 mm'},
+      {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 56 mm'},
+      {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 80 mm'},
+      {'value': '500l',    'label': 'Máx. 500 L',  'sub': '105 × 113 mm'},
+      {'value': 'grande',  'label': 'Más de 500 L', 'sub': '148 × 160 mm'},
     ];
 
     final elegido = await showDialog<String>(
