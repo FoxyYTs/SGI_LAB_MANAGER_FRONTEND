@@ -635,7 +635,8 @@ class _GuiasTabState extends State<_GuiasTab> {
   List<Map<String, dynamic>> _guias       = [];
   bool    _loadingGuias = true;
   String? _areaFiltro;
-  String? _asigFiltro;  // ID (UUID string) de la asignatura seleccionada
+  String? _asigFiltro;       // ID (UUID string) de la asignatura seleccionada
+  String? _insumoFiltro;     // null=todas | 'con'=con insumos | 'sin'=sin insumos
 
   List<String> get _areas => _asignaturas
       .map((a) => a['nombre_area'].toString())
@@ -648,17 +649,22 @@ class _GuiasTabState extends State<_GuiasTab> {
       : _asignaturas.where((a) => a['nombre_area'] == _areaFiltro).toList();
 
   List<Map<String, dynamic>> get _guiasFiltradas {
+    var lista = _guias;
     if (_asigFiltro != null) {
-      return _guias.where((g) => g['asignatura'].toString() == _asigFiltro).toList();
-    }
-    if (_areaFiltro != null) {
+      lista = lista.where((g) => g['asignatura'].toString() == _asigFiltro).toList();
+    } else if (_areaFiltro != null) {
       final ids = _asignaturas
           .where((a) => a['nombre_area'] == _areaFiltro)
           .map((a) => a['id'].toString())
           .toSet();
-      return _guias.where((g) => ids.contains(g['asignatura'].toString())).toList();
+      lista = lista.where((g) => ids.contains(g['asignatura'].toString())).toList();
     }
-    return _guias;
+    if (_insumoFiltro == 'con') {
+      lista = lista.where((g) => (g['total_insumos'] as int? ?? 0) > 0).toList();
+    } else if (_insumoFiltro == 'sin') {
+      lista = lista.where((g) => (g['total_insumos'] as int? ?? 0) == 0).toList();
+    }
+    return lista;
   }
 
   @override
@@ -1045,6 +1051,16 @@ class _GuiasTabState extends State<_GuiasTab> {
               }),
             ),
           ],
+          const SizedBox(height: 4),
+          _buildChips(
+            label: 'Insumos',
+            opciones: const ['Con insumos', 'Sin insumos'],
+            seleccion: _insumoFiltro == null ? null
+                : _insumoFiltro == 'con' ? 'Con insumos' : 'Sin insumos',
+            onSelect: (v) => setState(() {
+              _insumoFiltro = v == null ? null : (v == 'Con insumos' ? 'con' : 'sin');
+            }),
+          ),
           const SizedBox(height: 12),
 
           // ── Lista ───────────────────────────────────────────────────────
@@ -1070,20 +1086,25 @@ class _GuiasTabState extends State<_GuiasTab> {
                   ),
                   itemCount: filtradas.length,
                   itemBuilder: (ctx, i) {
-                    final item   = filtradas[i];
-                    final guiaId = item['id'].toString();
-                    final nombre = item['nombre_guia'] ?? '';
-                    final asig   = item['nombre_asignatura'] ?? '';
-                    final url    = (item['url_guia'] ?? '').toString();
-                    final asigD  = _asignaturas.firstWhere(
+                    final item          = filtradas[i];
+                    final guiaId        = item['id'].toString();
+                    final nombre        = item['nombre_guia'] ?? '';
+                    final asig          = item['nombre_asignatura'] ?? '';
+                    final url           = (item['url_guia'] ?? '').toString();
+                    final nInsumos      = item['total_insumos'] as int? ?? 0;
+                    final asigD         = _asignaturas.firstWhere(
                       (a) => a['id'].toString() == item['asignatura'].toString(),
                       orElse: () => <String, dynamic>{},
                     );
-                    final areaNombre = asigD['nombre_area']?.toString() ?? '';
+                    final areaNombre    = asigD['nombre_area']?.toString() ?? '';
+                    final insumoLabel   = nInsumos == 0
+                        ? 'Sin insumos'
+                        : '$nInsumos insumo${nInsumos != 1 ? "s" : ""}';
+                    final subtitleBase  = _areaFiltro == null ? '$areaNombre · $asig' : asig;
                     return _ItemCard(
                       icon: Icons.menu_book_outlined,
                       title: nombre,
-                      subtitle: _areaFiltro == null ? '$areaNombre · $asig' : asig,
+                      subtitle: '$subtitleBase · $insumoLabel',
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
