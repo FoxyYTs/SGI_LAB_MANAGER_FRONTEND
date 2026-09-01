@@ -609,8 +609,8 @@ class _TabEncargadosState extends State<_TabEncargados>
             if (puedeEditar)
               TextButton.icon(
                 onPressed: _agregarHoraExtra,
-                icon: const Icon(Icons.add, size: 14),
-                label: const Text('Hora extra', style: TextStyle(fontSize: 12)),
+                icon: const Icon(Icons.home_work_outlined, size: 14),
+                label: const Text('En casa', style: TextStyle(fontSize: 12)),
                 style: TextButton.styleFrom(foregroundColor: kPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0)),
               ),
@@ -684,7 +684,7 @@ class _TabEncargadosState extends State<_TabEncargados>
                           if (tieneExtra) ...[
                             const SizedBox(width: 4),
                             Tooltip(
-                              message: '+${_fmt(_horasExtra[uid]!)} en casa',
+                              message: 'Incluye ${_fmt(_horasExtra[uid]!)} desde casa',
                               child: const Icon(Icons.home_outlined, size: 13, color: kTextMuted),
                             ),
                           ],
@@ -714,7 +714,7 @@ class _TabEncargadosState extends State<_TabEncargados>
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Agregar hora extra', style: TextStyle(fontSize: 16)),
+        title: const Text('Registrar horas en casa', style: TextStyle(fontSize: 16)),
         content: StatefulBuilder(
           builder: (ctx2, setSt) => Column(
             mainAxisSize: MainAxisSize.min,
