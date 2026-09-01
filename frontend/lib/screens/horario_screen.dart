@@ -370,8 +370,8 @@ class _TabEncargadosState extends State<_TabEncargados>
   // [dia][hora] → List<{id, username, nombre_completo, rol}>
   Map<int, Map<int, List<Map<String, dynamic>>>> _grid = {};
   List<Map<String, dynamic>> _disponibles = [];
-  // uid → horas extra de la semana actual
-  Map<int, double> _horasExtra = {};
+  // Lista completa de registros HoraExtra (con id, usuario, nombre_completo, descripcion, duracion_horas)
+  List<Map<String, dynamic>> _horasExtraList = [];
   bool _cargando = true;
 
   @override
@@ -411,14 +411,8 @@ class _TabEncargadosState extends State<_TabEncargados>
       final resp = await dio.get('academico/horas-extra/');
       final lista = List<Map<String, dynamic>>.from(
           resp.data is List ? resp.data : (resp.data['results'] ?? []));
-      final Map<int, double> extras = {};
-      for (final r in lista) {
-        final uid   = r['usuario'] as int;
-        final horas = double.tryParse(r['duracion_horas'].toString()) ?? 0;
-        extras[uid] = (extras[uid] ?? 0) + horas;
-      }
       if (!mounted) return;
-      setState(() => _horasExtra = extras);
+      setState(() => _horasExtraList = lista);
     } catch (_) {}
 
     if (!mounted) return;
@@ -555,6 +549,14 @@ class _TabEncargadosState extends State<_TabEncargados>
     final auth = context.read<AuthProvider>();
     final puedeEditar = auth.can(Perm.academicoGestionar);
 
+    // Agregar horas extra desde la lista completa
+    final horasExtraMap = <int, double>{};
+    for (final r in _horasExtraList) {
+      final uid = r['usuario'] as int;
+      horasExtraMap[uid] = (horasExtraMap[uid] ?? 0) +
+          (double.tryParse(r['duracion_horas'].toString()) ?? 0);
+    }
+
     // Contar cuántas celdas aparece cada usuario en el grid (horas recurrentes)
     final conteo = <int, double>{};
     final nombres = <int, String>{};
@@ -570,7 +572,7 @@ class _TabEncargadosState extends State<_TabEncargados>
       }
     }
     // Agregar horas extra (pueden incluir usuarios sin bloques en el grid)
-    for (final entry in _horasExtra.entries) {
+    for (final entry in horasExtraMap.entries) {
       conteo[entry.key] = (conteo[entry.key] ?? 0) + entry.value;
       if (!nombres.containsKey(entry.key)) {
         final u = _disponibles.firstWhere(
@@ -647,7 +649,8 @@ class _TabEncargadosState extends State<_TabEncargados>
                   final nombre = nombres[uid] ?? '?';
                   final rol    = roles[uid]   ?? '';
                   final color  = rol == 'LAB' ? kSuccess : (rol == 'ADMIN' ? kWarning : kPrimary);
-                  final tieneExtra = (_horasExtra[uid] ?? 0) > 0;
+                  final extraH = horasExtraMap[uid] ?? 0;
+                  final tieneExtra = extraH > 0;
                   return TableRow(
                     decoration: const BoxDecoration(
                       border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
@@ -677,7 +680,7 @@ class _TabEncargadosState extends State<_TabEncargados>
                           if (tieneExtra) ...[
                             const SizedBox(width: 4),
                             Tooltip(
-                              message: 'Incluye ${_fmt(_horasExtra[uid]!)} desde casa',
+                              message: 'Incluye ${_fmt(extraH)} desde casa',
                               child: const Icon(Icons.home_outlined, size: 13, color: kTextMuted),
                             ),
                           ],
@@ -745,8 +748,21 @@ class _TabEncargadosState extends State<_TabEncargados>
     );
 
     if (ok != true || usuarioSel == null) return;
-    final horas = double.tryParse(horasCtrl.text.trim());
-    if (horas == null || horas <= 0 || descCtrl.text.trim().isEmpty) return;
+    // Aceptar coma como separador decimal (teclados en español)
+    final horasStr = horasCtrl.text.trim().replaceAll(',', '.');
+    final horas = double.tryParse(horasStr);
+    if (horas == null || horas <= 0) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un número válido de horas (ej: 2 o 1.5)'),
+            backgroundColor: kDanger));
+      return;
+    }
+    if (descCtrl.text.trim().isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La descripción no puede estar vacía'),
+            backgroundColor: kDanger));
+      return;
+    }
 
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
@@ -757,9 +773,23 @@ class _TabEncargadosState extends State<_TabEncargados>
         'duracion_horas': horas,
       });
       await _cargar();
-    } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al guardar hora extra'), backgroundColor: kDanger));
+        const SnackBar(content: Text('Horas en casa registradas'), backgroundColor: kSuccess));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _eliminarHoraExtra(int id) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.delete('academico/horas-extra/$id/');
+      setState(() => _horasExtraList.removeWhere((r) => r['id'] == id));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: kDanger));
     }
   }
 
@@ -808,11 +838,97 @@ class _TabEncargadosState extends State<_TabEncargados>
                   child: _buildGrid(puedeEditar),
                 ),
                 _buildTablaHoras(),
+                _buildHorasEnCasaPanel(puedeEditar),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildHorasEnCasaPanel(bool puedeEditar) {
+    if (_horasExtraList.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(height: 24),
+          const Text('DELEGACIONES EN CASA',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold,
+                  color: kTextMuted, letterSpacing: 1.1)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFDEE2E6)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: _horasExtraList.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final r   = entry.value;
+                final nombre = r['nombre_completo']?.toString() ?? '?';
+                final desc   = r['descripcion']?.toString()    ?? '';
+                final horas  = double.tryParse(r['duracion_horas'].toString()) ?? 0;
+                final isLast = idx == _horasExtraList.length - 1;
+                return Container(
+                  decoration: BoxDecoration(
+                    border: idx == 0 ? null : const Border(
+                      top: BorderSide(color: Color(0xFFDEE2E6)),
+                    ),
+                    borderRadius: idx == 0
+                        ? const BorderRadius.vertical(top: Radius.circular(8))
+                        : isLast
+                            ? const BorderRadius.vertical(bottom: Radius.circular(8))
+                            : null,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(children: [
+                      const Icon(Icons.home_work_outlined, size: 14, color: kTextMuted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(nombre,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text(desc,
+                                style: const TextStyle(fontSize: 11, color: kTextMuted)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: kPrimary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${horas == horas.truncateToDouble() ? horas.toInt() : horas.toStringAsFixed(1)} h/sem',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kPrimary),
+                        ),
+                      ),
+                      if (puedeEditar) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 16, color: kDanger),
+                          tooltip: 'Eliminar delegación',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          onPressed: () => _eliminarHoraExtra(r['id'] as int),
+                        ),
+                      ],
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
