@@ -840,25 +840,43 @@ class _GuiasTabState extends State<_GuiasTab> {
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
 
+    // Carga inicial de insumos asignados
     List<Map<String, dynamic>> items = [];
+    String? loadError;
     try {
-      final resp = await dio.get('academico/insumos-guia/',
-          queryParameters: {'guia': guiaId});
+      final resp = await dio.get('academico/insumos-guia/', queryParameters: {'guia': guiaId});
       final d = resp.data;
       items = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-    } catch (_) {}
+    } catch (_) {
+      loadError = 'No se pudieron cargar los insumos requeridos';
+    }
 
     if (!mounted || !ctx.mounted) return;
 
-    String? selInsumo;
-    final   cantCtrl = TextEditingController();
+    // Estado del formulario de agregar
+    String                  busqueda     = '';
+    Map<String, dynamic>?   seleccionado;
+    bool                    agregando    = false;
+    final cantCtrl  = TextEditingController();
+    final busqCtrl  = TextEditingController();
 
     await showDialog(
       context: ctx,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (sCtx, setSt) => AlertDialog(
-          title: Row(
-            children: [
+        builder: (sCtx, setSt) {
+          // Insumos ya asignados → excluirlos del buscador
+          final yaAsignados = items.map((ig) => ig['insumo'].toString()).toSet();
+          final filtrados   = busqueda.isEmpty
+              ? <Map<String, dynamic>>[]
+              : _insumos
+                  .where((ins) => !yaAsignados.contains(ins['id'].toString()))
+                  .where((ins) => (ins['nombre_insumo'] ?? '')
+                      .toLowerCase()
+                      .contains(busqueda.toLowerCase()))
+                  .toList();
+
+          return AlertDialog(
+            title: Row(children: [
               const Icon(Icons.science_outlined, color: kPrimary, size: 20),
               const SizedBox(width: 8),
               Expanded(
@@ -866,131 +884,227 @@ class _GuiasTabState extends State<_GuiasTab> {
                     style: const TextStyle(color: kPrimary, fontSize: 15),
                     overflow: TextOverflow.ellipsis),
               ),
-            ],
-          ),
-          content: SizedBox(
-            width: 500,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Lista de insumos requeridos ──────────────────────────
-                const Text('Insumos requeridos',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kPrimary)),
-                const SizedBox(height: 6),
-                if (items.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('Sin insumos requeridos',
-                        style: TextStyle(color: kTextMuted, fontSize: 13)),
-                  )
-                else
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 200),
-                    child: ListView.separated(
-                      shrinkWrap: true,
-                      itemCount: items.length,
-                      separatorBuilder: (context, i) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final ig = items[i];
-                        return ListTile(
-                          dense: true,
-                          title: Text(ig['nombre_insumo'] ?? '',
-                              style: const TextStyle(fontSize: 13)),
-                          subtitle: Text(
-                            '${ig['cantidad_necesaria']} ${ig['unidad'] ?? ''}  '
-                            '(stock: ${ig['stock_disponible']})',
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: kDanger, size: 18),
-                            tooltip: 'Quitar',
-                            onPressed: () async {
-                              try {
-                                await dio.delete('academico/insumos-guia/${ig['id']}/');
-                                setSt(() => items.removeWhere((e) => e['id'] == ig['id']));
-                              } catch (_) {}
-                            },
-                          ),
-                        );
-                      },
+            ]),
+            content: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  // ── Insumos asignados ─────────────────────────────────
+                  Row(children: [
+                    const Text('Insumos requeridos',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kPrimary)),
+                    if (items.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(color: kPrimary, borderRadius: BorderRadius.circular(10)),
+                        child: Text('${items.length}',
+                            style: const TextStyle(color: Colors.white, fontSize: 11)),
+                      ),
+                    ],
+                  ]),
+                  const SizedBox(height: 6),
+
+                  if (loadError != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(loadError, style: const TextStyle(color: kDanger, fontSize: 12)),
+                    )
+                  else if (items.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text('Sin insumos requeridos',
+                          style: TextStyle(color: kTextMuted, fontSize: 13)),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: items.length,
+                        separatorBuilder: (_, i) => const Divider(height: 1),
+                        itemBuilder: (_, i) {
+                          final ig = items[i];
+                          return ListTile(
+                            dense: true,
+                            title: Text(ig['nombre_insumo'] ?? '',
+                                style: const TextStyle(fontSize: 13)),
+                            subtitle: Text(
+                              '${ig['cantidad_necesaria']} ${ig['unidad'] ?? ''}  '
+                              '(stock: ${ig['stock_disponible']})',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, color: kDanger, size: 18),
+                              tooltip: 'Quitar',
+                              onPressed: () async {
+                                try {
+                                  await dio.delete('academico/insumos-guia/${ig['id']}/');
+                                  setSt(() => items.removeWhere((e) => e['id'] == ig['id']));
+                                } catch (_) {
+                                  if (ctx.mounted) {
+                                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                      content: Text('Error al eliminar el insumo'),
+                                      backgroundColor: kDanger,
+                                    ));
+                                  }
+                                }
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+                  const Divider(height: 24),
+
+                  // ── Agregar insumo ────────────────────────────────────
+                  const Text('Agregar insumo',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kPrimary)),
+                  const SizedBox(height: 8),
+
+                  // Chip de selección o buscador
+                  if (seleccionado != null)
+                    InputChip(
+                      avatar: const Icon(Icons.inventory_2_outlined, size: 15, color: kPrimary),
+                      label: Text(seleccionado!['nombre_insumo'] ?? '',
+                          style: const TextStyle(fontSize: 13)),
+                      backgroundColor: kPrimary.withValues(alpha: 0.08),
+                      side: const BorderSide(color: kPrimary, width: 0.5),
+                      onDeleted: () => setSt(() {
+                        seleccionado = null;
+                        busqueda     = '';
+                        busqCtrl.clear();
+                      }),
+                    )
+                  else ...[
+                    TextField(
+                      controller: busqCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar insumo...',
+                        prefixIcon: Icon(Icons.search, size: 18),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      onChanged: (v) => setSt(() => busqueda = v),
+                    ),
+                    if (busqueda.isNotEmpty)
+                      filtrados.isEmpty
+                          ? const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Text('Sin resultados',
+                                  style: TextStyle(color: kTextMuted, fontSize: 12)),
+                            )
+                          : ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 130),
+                              child: Card(
+                                margin: const EdgeInsets.only(top: 2),
+                                elevation: 2,
+                                clipBehavior: Clip.antiAlias,
+                                child: ListView.separated(
+                                  shrinkWrap: true,
+                                  padding: EdgeInsets.zero,
+                                  itemCount: filtrados.length,
+                                  separatorBuilder: (_, i) => const Divider(height: 1),
+                                  itemBuilder: (_, i) {
+                                    final ins = filtrados[i];
+                                    return ListTile(
+                                      dense: true,
+                                      title: Text(ins['nombre_insumo'] ?? '',
+                                          style: const TextStyle(fontSize: 13)),
+                                      onTap: () => setSt(() {
+                                        seleccionado = ins;
+                                        busqueda     = '';
+                                        busqCtrl.clear();
+                                      }),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                  ],
+
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: cantCtrl,
+                    enabled: seleccionado != null,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Cantidad necesaria',
+                      border: OutlineInputBorder(),
+                      isDense: true,
                     ),
                   ),
-
-                const Divider(height: 24),
-
-                // ── Agregar insumo ──────────────────────────────────────
-                const Text('Agregar insumo',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: kPrimary)),
-                const SizedBox(height: 8),
-                InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Insumo',
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimary, foregroundColor: Colors.white),
+                      icon: agregando
+                          ? const SizedBox(
+                              width: 16, height: 16,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.add, size: 18),
+                      label: const Text('Agregar'),
+                      onPressed: (seleccionado == null || agregando)
+                          ? null
+                          : () async {
+                              final cant = double.tryParse(cantCtrl.text.trim());
+                              if (cant == null || cant <= 0) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                  content: Text('Ingresa una cantidad válida'),
+                                  backgroundColor: kDanger,
+                                ));
+                                return;
+                              }
+                              setSt(() => agregando = true);
+                              try {
+                                final resp = await dio.post('academico/insumos-guia/', data: {
+                                  'guia':               guiaId,
+                                  'insumo':             seleccionado!['id'],
+                                  'cantidad_necesaria': cant,
+                                });
+                                setSt(() {
+                                  items.add(Map<String, dynamic>.from(resp.data));
+                                  seleccionado = null;
+                                  busqueda     = '';
+                                  busqCtrl.clear();
+                                  cantCtrl.clear();
+                                  agregando    = false;
+                                });
+                              } catch (_) {
+                                setSt(() => agregando = false);
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                                    content: Text('No se pudo agregar. ¿Ya está asignado?'),
+                                    backgroundColor: kDanger,
+                                  ));
+                                }
+                              }
+                            },
+                    ),
                   ),
-                  child: DropdownButton<String>(
-                    value: selInsumo,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    isDense: true,
-                    items: _insumos.map((ins) => DropdownMenuItem(
-                      value: ins['id'].toString(),
-                      child: Text(ins['nombre_insumo'] ?? '',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13)),
-                    )).toList(),
-                    onChanged: (v) => setSt(() => selInsumo = v),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: cantCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Cantidad necesaria',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimary, foregroundColor: Colors.white),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Agregar'),
-                    onPressed: selInsumo == null
-                        ? null
-                        : () async {
-                            try {
-                              final resp = await dio.post('academico/insumos-guia/', data: {
-                                'guia':               guiaId,
-                                'insumo':             selInsumo,
-                                'cantidad_necesaria': double.tryParse(cantCtrl.text.trim()) ?? 0,
-                              });
-                              setSt(() {
-                                items.add(Map<String, dynamic>.from(resp.data));
-                                selInsumo = null;
-                                cantCtrl.clear();
-                              });
-                            } catch (_) {}
-                          },
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogCtx),
-                child: const Text('Cerrar')),
-          ],
-        ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text('Cerrar')),
+            ],
+          );
+        },
       ),
     );
+
     cantCtrl.dispose();
+    busqCtrl.dispose();
+    // Recargar guías para actualizar el contador total_insumos en las cards
+    _fetchGuias();
   }
 
   @override
