@@ -632,6 +632,34 @@ class _GuiasTab extends StatefulWidget {
 class _GuiasTabState extends State<_GuiasTab> {
   List<Map<String, dynamic>> _asignaturas = [];
   List<Map<String, dynamic>> _insumos     = [];
+  List<Map<String, dynamic>> _guias       = [];
+  bool    _loadingGuias = true;
+  String? _areaFiltro;
+  String? _asigFiltro;  // ID (UUID string) de la asignatura seleccionada
+
+  List<String> get _areas => _asignaturas
+      .map((a) => a['nombre_area'].toString())
+      .toSet()
+      .toList()
+    ..sort();
+
+  List<Map<String, dynamic>> get _asigsFiltroArea => _areaFiltro == null
+      ? _asignaturas
+      : _asignaturas.where((a) => a['nombre_area'] == _areaFiltro).toList();
+
+  List<Map<String, dynamic>> get _guiasFiltradas {
+    if (_asigFiltro != null) {
+      return _guias.where((g) => g['asignatura'].toString() == _asigFiltro).toList();
+    }
+    if (_areaFiltro != null) {
+      final ids = _asignaturas
+          .where((a) => a['nombre_area'] == _areaFiltro)
+          .map((a) => a['id'].toString())
+          .toSet();
+      return _guias.where((g) => ids.contains(g['asignatura'].toString())).toList();
+    }
+    return _guias;
+  }
 
   @override
   void initState() {
@@ -656,6 +684,58 @@ class _GuiasTabState extends State<_GuiasTab> {
         });
       }
     } catch (_) {}
+    await _fetchGuias();
+  }
+
+  Future<void> _fetchGuias() async {
+    if (!mounted) return;
+    setState(() => _loadingGuias = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final resp = await dio.get('academico/guias/');
+      if (!mounted) return;
+      final d = resp.data;
+      setState(() {
+        _guias = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _loadingGuias = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingGuias = false);
+    }
+  }
+
+  Future<void> _saveGuia(Map<String, dynamic> data, {String? id}) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    if (id != null) {
+      await dio.patch('academico/guias/$id/', data: data);
+    } else {
+      await dio.post('academico/guias/', data: data);
+    }
+    await _fetchGuias();
+  }
+
+  Future<void> _deleteGuia(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Confirmar eliminación'),
+        content: const Text('¿Estás seguro de que quieres eliminar esta guía?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, true),
+              child: const Text('Eliminar', style: TextStyle(color: kDanger))),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    await dio.delete('academico/guias/$id/');
+    await _fetchGuias();
   }
 
   Future<void> _dialog(Map? item, BuildContext ctx,
@@ -909,52 +989,175 @@ class _GuiasTabState extends State<_GuiasTab> {
 
   @override
   Widget build(BuildContext context) {
-    return _CrudList(
-      endpoint: 'academico/guias/',
-      titulo: 'Guías',
-      formDialog: _dialog,
-      cardHeight: 76,
-      itemBuilder: (item, onEdit, onDelete) {
-        final guiaId = item['id'].toString();
-        final nombre = item['nombre_guia'] ?? '';
-        final asig   = item['nombre_asignatura'] ?? '';
-        final url    = (item['url_guia'] ?? '').toString();
-        return _ItemCard(
-          icon: Icons.menu_book_outlined,
-          title: nombre,
-          subtitle: asig,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (url.isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.open_in_new, size: 18, color: kTextMuted),
-                  tooltip: 'Abrir guía',
-                  onPressed: () async {
-                    final uri = Uri.tryParse(url);
-                    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (_loadingGuias) return const Center(child: CircularProgressIndicator(color: kPrimary));
+
+    final filtradas = _guiasFiltradas;
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ─────────────────────────────────────────────────────
+          Row(children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Guías',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                filtradas.length == _guias.length
+                    ? '${_guias.length} guía${_guias.length != 1 ? "s" : ""}'
+                    : '${filtradas.length} de ${_guias.length} guías',
+                style: const TextStyle(fontSize: 12, color: kTextMuted),
+              ),
+            ]),
+            const Spacer(),
+            ElevatedButton.icon(
+              onPressed: () => _dialog(null, context, (data) => _saveGuia(data)),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Nueva'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
+
+          // ── Filtros ─────────────────────────────────────────────────────
+          _buildChips(
+            label: 'Área',
+            opciones: _areas,
+            seleccion: _areaFiltro,
+            onSelect: (v) => setState(() { _areaFiltro = v; _asigFiltro = null; }),
+          ),
+          if (_areaFiltro != null && _asigsFiltroArea.length > 1) ...[
+            const SizedBox(height: 4),
+            _buildChips(
+              label: 'Asignatura',
+              opciones: _asigsFiltroArea.map((a) => a['nombre_asignatura'].toString()).toList(),
+              seleccion: _asigFiltro == null ? null : _asignaturas
+                  .firstWhere((a) => a['id'].toString() == _asigFiltro,
+                      orElse: () => <String, dynamic>{})['nombre_asignatura']?.toString(),
+              onSelect: (v) => setState(() {
+                _asigFiltro = v == null ? null : _asignaturas
+                    .firstWhere((a) => a['nombre_asignatura'] == v)['id'].toString();
+              }),
+            ),
+          ],
+          const SizedBox(height: 12),
+
+          // ── Lista ───────────────────────────────────────────────────────
+          if (filtradas.isEmpty)
+            Expanded(child: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.inbox_outlined, size: 56, color: kTextMuted),
+                const SizedBox(height: 8),
+                const Text('Sin guías para este filtro',
+                    style: TextStyle(color: kTextMuted)),
+              ]),
+            ))
+          else
+            Expanded(
+              child: LayoutBuilder(builder: (ctx, constraints) {
+                final cols = constraints.maxWidth > 600 ? 2 : 1;
+                return GridView.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: 76,
+                  ),
+                  itemCount: filtradas.length,
+                  itemBuilder: (ctx, i) {
+                    final item   = filtradas[i];
+                    final guiaId = item['id'].toString();
+                    final nombre = item['nombre_guia'] ?? '';
+                    final asig   = item['nombre_asignatura'] ?? '';
+                    final url    = (item['url_guia'] ?? '').toString();
+                    final asigD  = _asignaturas.firstWhere(
+                      (a) => a['id'].toString() == item['asignatura'].toString(),
+                      orElse: () => <String, dynamic>{},
+                    );
+                    final areaNombre = asigD['nombre_area']?.toString() ?? '';
+                    return _ItemCard(
+                      icon: Icons.menu_book_outlined,
+                      title: nombre,
+                      subtitle: _areaFiltro == null ? '$areaNombre · $asig' : asig,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (url.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.open_in_new, size: 18, color: kTextMuted),
+                              tooltip: 'Abrir guía',
+                              onPressed: () async {
+                                final uri = Uri.tryParse(url);
+                                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              },
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.science_outlined, size: 20, color: kPrimary),
+                            tooltip: 'Insumos requeridos',
+                            onPressed: () => _showInsumoGuiaDialog(context, guiaId, nombre),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 20, color: kPrimary),
+                            tooltip: 'Editar',
+                            onPressed: () => _dialog(item, context, (data) => _saveGuia(data, id: guiaId)),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 20, color: kDanger),
+                            tooltip: 'Eliminar',
+                            onPressed: () => _deleteGuia(guiaId),
+                          ),
+                        ],
+                      ),
+                    );
                   },
-                ),
-              IconButton(
-                icon: const Icon(Icons.science_outlined, size: 20, color: kPrimary),
-                tooltip: 'Insumos requeridos',
-                onPressed: () => _showInsumoGuiaDialog(context, guiaId, nombre),
+                );
+              }),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChips({
+    required String label,
+    required List<String> opciones,
+    required String? seleccion,
+    required void Function(String?) onSelect,
+  }) {
+    return Row(children: [
+      Text('$label:',
+          style: const TextStyle(fontSize: 12, color: kTextMuted, fontWeight: FontWeight.w500)),
+      const SizedBox(width: 8),
+      Expanded(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            spacing: 6,
+            children: [
+              ChoiceChip(
+                label: const Text('Todas', style: TextStyle(fontSize: 12)),
+                selected: seleccion == null,
+                onSelected: (_) => onSelect(null),
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
               ),
-              IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20, color: kPrimary),
-                tooltip: 'Editar',
-                onPressed: onEdit,
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20, color: kDanger),
-                tooltip: 'Eliminar',
-                onPressed: onDelete,
-              ),
+              ...opciones.map((op) => ChoiceChip(
+                label: Text(op, style: const TextStyle(fontSize: 12)),
+                selected: seleccion == op,
+                onSelected: (_) => onSelect(op),
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+              )),
             ],
           ),
-        );
-      },
-    );
+        ),
+      ),
+    ]);
   }
 }
 
