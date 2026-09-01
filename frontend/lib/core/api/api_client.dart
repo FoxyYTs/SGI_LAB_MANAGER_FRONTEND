@@ -34,8 +34,9 @@ class ApiClient {
   // Estado del refresco de token
   String?            _refreshTokenStr;
   Future<String?>?   _refreshFuture;        // evita múltiples refreshes simultáneos
-  void Function(String newToken)? _onTokenRefreshed;
-  void Function()?                _onLogout;
+  void Function(String newToken)?   _onTokenRefreshed;
+  void Function(String newRefresh)? _onRefreshRotated;
+  void Function()?                  _onLogout;
 
   ApiClient._() {
     if (_kServerUrl.isNotEmpty) {
@@ -87,11 +88,13 @@ class ApiClient {
   void setTokens(
     String accessToken,
     String refreshToken, {
-    required void Function(String newToken) onRefreshed,
-    required void Function() onLogout,
+    required void Function(String newToken)   onRefreshed,
+    required void Function()                  onLogout,
+    void Function(String newRefresh)?         onRefreshRotated,
   }) {
     _refreshTokenStr   = refreshToken;
     _onTokenRefreshed  = onRefreshed;
+    _onRefreshRotated  = onRefreshRotated;
     _onLogout          = onLogout;
   }
 
@@ -99,6 +102,7 @@ class ApiClient {
   void clearTokens() {
     _refreshTokenStr  = null;
     _onTokenRefreshed = null;
+    _onRefreshRotated = null;
     _onLogout         = null;
     _refreshFuture    = null;
   }
@@ -113,11 +117,15 @@ class ApiClient {
   Future<String?> _doRefresh() async {
     if (_refreshTokenStr == null) return null;
     try {
-      final resp = await _dio.post(
-        'token/refresh/',
-        data: {'refresh': _refreshTokenStr},
-      );
-      final newToken = resp.data['access'] as String;
+      final resp       = await _dio.post('token/refresh/', data: {'refresh': _refreshTokenStr});
+      final newToken   = resp.data['access']  as String;
+      // ROTATE_REFRESH_TOKENS=True: el endpoint devuelve también un nuevo refresh token
+      // y blacklistea el anterior. Hay que actualizarlo o el siguiente refresh fallará.
+      final newRefresh = resp.data['refresh'] as String?;
+      if (newRefresh != null) {
+        _refreshTokenStr = newRefresh;
+        _onRefreshRotated?.call(newRefresh);
+      }
       _onTokenRefreshed?.call(newToken);
       debugPrint('[ApiClient] Token refrescado correctamente.');
       return newToken;
