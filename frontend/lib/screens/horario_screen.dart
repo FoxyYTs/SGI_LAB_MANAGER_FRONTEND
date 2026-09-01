@@ -730,10 +730,10 @@ class _TabEncargadosState extends State<_TabEncargados>
               const SizedBox(height: 12),
               TextField(
                 controller: horasCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
                   labelText: 'Horas por semana',
-                  hintText: 'Ej: 2 o 1.5',
+                  hintText: 'Ej: 2',
                   isDense: true,
                 ),
               ),
@@ -748,12 +748,10 @@ class _TabEncargadosState extends State<_TabEncargados>
     );
 
     if (ok != true || usuarioSel == null) return;
-    // Aceptar coma como separador decimal (teclados en español)
-    final horasStr = horasCtrl.text.trim().replaceAll(',', '.');
-    final horas = double.tryParse(horasStr);
+    final horas = int.tryParse(horasCtrl.text.trim());
     if (horas == null || horas <= 0) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa un número válido de horas (ej: 2 o 1.5)'),
+        const SnackBar(content: Text('Ingresa un número entero de horas (ej: 2)'),
             backgroundColor: kDanger));
       return;
     }
@@ -907,7 +905,7 @@ class _TabEncargadosState extends State<_TabEncargados>
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          '${horas == horas.truncateToDouble() ? horas.toInt() : horas.toStringAsFixed(1)} h/sem',
+                          '${horas.toInt()} h/sem',
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kPrimary),
                         ),
                       ),
