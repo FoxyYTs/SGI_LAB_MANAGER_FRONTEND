@@ -791,7 +791,7 @@ class _PrestamoCard extends StatelessWidget {
             Row(children: [
               Flexible(
                 child: Text(
-                  'Préstamo #${id.length > 8 ? id.substring(0, 8) : id}',
+                  'Préstamo',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
