@@ -791,9 +791,7 @@ class _PrestamoCard extends StatelessWidget {
             Row(children: [
               Flexible(
                 child: Text(
-                  MediaQuery.of(context).size.width >= 600
-                      ? 'Préstamo #$id'
-                      : 'Préstamo #${id.length > 8 ? id.substring(0, 8) : id}',
+                  'Préstamo #${id.length > 8 ? id.substring(0, 8) : id}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
