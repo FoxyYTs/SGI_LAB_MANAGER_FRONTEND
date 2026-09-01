@@ -377,13 +377,6 @@ class _TabEncargadosState extends State<_TabEncargados>
   @override
   void initState() { super.initState(); Future.microtask(_cargar); }
 
-  String _semanaISO() {
-    final now  = DateTime.now();
-    final lunes = now.subtract(Duration(days: now.weekday - 1));
-    final inicio = DateTime(lunes.year, 1, 1);
-    final semana = ((lunes.difference(inicio).inDays + inicio.weekday - 1) / 7).ceil();
-    return '${lunes.year}-W${semana.toString().padLeft(2, '0')}';
-  }
 
   Future<void> _cargar() async {
     if (!mounted) return;
@@ -415,7 +408,7 @@ class _TabEncargadosState extends State<_TabEncargados>
     } catch (_) {}
 
     try {
-      final resp = await dio.get('academico/horas-extra/?semana=${_semanaISO()}');
+      final resp = await dio.get('academico/horas-extra/');
       final lista = List<Map<String, dynamic>>.from(
           resp.data is List ? resp.data : (resp.data['results'] ?? []));
       final Map<int, double> extras = {};
@@ -707,9 +700,6 @@ class _TabEncargadosState extends State<_TabEncargados>
     int? usuarioSel;
     final descCtrl  = TextEditingController();
     final horasCtrl = TextEditingController();
-    final fechaCtrl = TextEditingController(
-      text: DateTime.now().toIso8601String().substring(0, 10),
-    );
 
     final ok = await showDialog<bool>(
       context: context,
@@ -735,22 +725,15 @@ class _TabEncargadosState extends State<_TabEncargados>
                 decoration: const InputDecoration(labelText: 'Descripción', isDense: true),
               ),
               const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: horasCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Horas', isDense: true),
-                  ),
+              TextField(
+                controller: horasCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Horas por semana',
+                  hintText: 'Ej: 2 o 1.5',
+                  isDense: true,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: fechaCtrl,
-                    decoration: const InputDecoration(labelText: 'Fecha (YYYY-MM-DD)', isDense: true),
-                  ),
-                ),
-              ]),
+              ),
             ],
           ),
         ),
@@ -772,7 +755,6 @@ class _TabEncargadosState extends State<_TabEncargados>
         'usuario':        usuarioSel,
         'descripcion':    descCtrl.text.trim(),
         'duracion_horas': horas,
-        'fecha':          fechaCtrl.text.trim(),
       });
       await _cargar();
     } catch (_) {
