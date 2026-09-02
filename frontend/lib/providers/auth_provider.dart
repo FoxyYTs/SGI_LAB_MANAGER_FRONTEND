@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../core/api/api_client.dart';
 import '../core/sync/sync_service.dart';
 import '../core/log_service.dart';
@@ -83,12 +84,40 @@ class AuthProvider with ChangeNotifier {
       if (_token != null) {
         await SyncService.instance.init(_token);
         if (_refreshToken != null) {
+          // Android: refrescar proactivamente al arrancar para obtener tokens frescos.
+          // Si falla por red (offline) se ignora; si falla por token expirado, logout.
+          if (!kIsWeb) {
+            try {
+              final resp = await ApiClient.instance.dio.post(
+                'token/refresh/',
+                data: {'refresh': _refreshToken},
+              );
+              _token = resp.data['access'] as String;
+              await _storage.write(key: 'token', value: _token);
+              final newRefresh = resp.data['refresh'] as String?;
+              if (newRefresh != null) {
+                _refreshToken = newRefresh;
+                await _storage.write(key: 'refresh_token', value: _refreshToken);
+              }
+            } on DioException catch (e) {
+              if (e.response?.statusCode != null) {
+                // Token expirado o blacklisteado: forzar logout
+                await _storage.deleteAll();
+                _token = _refreshToken = _rol = _username = null;
+                _permisos = {};
+                notifyListeners();
+                return;
+              }
+              // Error de red (sin conexión): continuar con token cacheado
+            }
+          }
+
           ApiClient.instance.setTokens(
             _token!,
             _refreshToken!,
-            onRefreshed:       _actualizarToken,
-            onRefreshRotated:  _actualizarRefreshToken,
-            onLogout:          () => logout(),
+            onRefreshed:      _actualizarToken,
+            onLogout:         () => logout(),
+            onRefreshRotated: _actualizarRefreshToken,
           );
         }
       }
@@ -129,9 +158,9 @@ class AuthProvider with ChangeNotifier {
       ApiClient.instance.setTokens(
         _token!,
         _refreshToken!,
-        onRefreshed:       _actualizarToken,
-        onRefreshRotated:  _actualizarRefreshToken,
-        onLogout:          () => logout(),
+        onRefreshed:      _actualizarToken,
+        onLogout:         () => logout(),
+        onRefreshRotated: _actualizarRefreshToken,
       );
       if (kIsWeb) _programarCierreMedianoche();
 
@@ -140,6 +169,7 @@ class AuthProvider with ChangeNotifier {
         await NotificationService.init();
         await NotificationService.requestPermission();
         await registerBackgroundTasks();
+        await _registrarFcmToken();
       }
 
       notifyListeners();
@@ -189,19 +219,49 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Registra el token FCM del dispositivo en el backend y escucha rotaciones.
+  Future<void> _registrarFcmToken() async {
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null) await _enviarFcmToken(fcmToken);
+      FirebaseMessaging.instance.onTokenRefresh.listen(_enviarFcmToken);
+    } catch (e) {
+      debugPrint('[AuthProvider] Error registrando FCM token: $e');
+    }
+  }
+
+  Future<void> _enviarFcmToken(String fcmToken) async {
+    if (_token == null) return;
+    try {
+      final dio = ApiClient.instance.authenticatedDio(_token);
+      await dio.post('usuarios/fcm-token/', data: {'token': fcmToken});
+      debugPrint('[AuthProvider] FCM token registrado.');
+    } catch (_) {}
+  }
+
+  Future<void> _eliminarFcmToken() async {
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null && _token != null) {
+        final dio = ApiClient.instance.authenticatedDio(_token);
+        await dio.delete('usuarios/fcm-token/', data: {'token': fcmToken});
+      }
+    } catch (_) {}
+  }
+
   /// Callback invocado por ApiClient cuando obtiene un nuevo access token.
-  /// Actualiza el token en memoria y en el almacenamiento seguro.
   Future<void> _actualizarToken(String newToken) async {
     _token = newToken;
     await _storage.write(key: 'token', value: newToken);
     debugPrint('[AuthProvider] Access token actualizado por refresco automático.');
   }
 
-  /// Callback invocado cuando el backend rota el refresh token (ROTATE_REFRESH_TOKENS).
-  /// Persiste el nuevo refresh token para que la próxima rotación funcione.
+  /// Callback invocado cuando ROTATE_REFRESH_TOKENS rota el refresh token.
+  /// Persiste el nuevo refresh token para que el siguiente arranque lo use.
   Future<void> _actualizarRefreshToken(String newRefresh) async {
     _refreshToken = newRefresh;
     await _storage.write(key: 'refresh_token', value: newRefresh);
+    debugPrint('[AuthProvider] Refresh token actualizado por rotación.');
   }
 
   /// Recarga solo la foto de perfil (llamar desde MiPerfilScreen tras subir foto).
@@ -232,7 +292,10 @@ class AuthProvider with ChangeNotifier {
     _medianochTimer = null;
 
     // Cancelar tareas de fondo al cerrar sesión (solo Android)
-    if (!kIsWeb && Platform.isAndroid) await cancelBackgroundTasks();
+    if (!kIsWeb && Platform.isAndroid) {
+      await cancelBackgroundTasks();
+      await _eliminarFcmToken();
+    }
 
     // Invalidar el refresh token en el servidor para que no pueda generar nuevos access tokens.
     // Fallo silencioso: si no hay red o el token ya expiró, la sesión local se limpia igual.

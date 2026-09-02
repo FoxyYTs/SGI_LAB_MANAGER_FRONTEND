@@ -5,6 +5,7 @@ import '../core/theme/colors.dart';
 import '../core/cache/cache_service.dart';
 import '../providers/auth_provider.dart';
 import '../core/sync/sync_service.dart';
+import '../core/horario_utils.dart';
 import '../widgets/qr_generator_dialog.dart';
 
 String _horaAmPm(int hora) {
@@ -284,32 +285,8 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  // Fusiona horas consecutivas con el mismo contenido para ASG
-  List<({int idx, int dur, List<Map<String, dynamic>> items})> _bloquesAsg(
-      Map<int, List<Map<String, dynamic>>>? porHora) {
-    final result = <({int idx, int dur, List<Map<String, dynamic>> items})>[];
-    int i = 0;
-    while (i < _horas.length) {
-      final hora  = _horas[i];
-      final items = porHora?[hora] ?? [];
-      if (items.isEmpty) { i++; continue; }
-      String key(Map<String, dynamic> item) =>
-          '${item['asignatura']}|${item['docente']}|${item['grupo']}';
-      final keys = items.map(key).toSet();
-      int dur = 1;
-      while (i + dur < _horas.length) {
-        final next = porHora?[_horas[i + dur]] ?? [];
-        if (next.isNotEmpty &&
-            next.map(key).toSet().containsAll(keys) &&
-            keys.containsAll(next.map(key).toSet())) {
-          dur++;
-        } else break;
-      }
-      result.add((idx: i, dur: dur, items: items));
-      i += dur;
-    }
-    return result;
-  }
+  List<BloqueAsg> _bloquesAsg(Map<int, List<Map<String, dynamic>>>? porHora) =>
+      HorarioUtils.bloquesAsg(porHora, _horas);
 
   // Color único por encargado basado en su username
   static Color _colorEncargado(String username) {
@@ -392,57 +369,12 @@ class _DashboardContentState extends State<DashboardContent> {
                 // Bloques fusionados de asignatura
                 final bloquesAsg = _bloquesAsg(_asgByDia[dia]);
 
-                // Bloques consecutivos por usuario de encargado
-                List<({int idx, int dur, Map<String, dynamic> enc})> _bloquesEnc() {
-                  final result = <({int idx, int dur, Map<String, dynamic> enc})>[];
-                  final porHora = _encByDia[dia] ?? {};
-                  // Recoger usuarios únicos
-                  final encMap = <int, Map<String, dynamic>>{};
-                  for (final items in porHora.values) {
-                    for (final item in items) {
-                      encMap[item['usuario'] as int? ?? 0] ??= item;
-                    }
-                  }
-                  for (final uid in encMap.keys) {
-                    int i = 0;
-                    while (i < _horas.length) {
-                      final tiene = (porHora[_horas[i]] ?? []).any((e) => e['usuario'] == uid);
-                      if (!tiene) { i++; continue; }
-                      int dur = 1;
-                      while (i + dur < _horas.length &&
-                          (porHora[_horas[i + dur]] ?? []).any((e) => e['usuario'] == uid)) {
-                        dur++;
-                      }
-                      result.add((idx: i, dur: dur, enc: encMap[uid]!));
-                      i += dur;
-                    }
-                  }
-                  return result;
-                }
-
-                final todosBloquesEnc = _bloquesEnc();
+                final todosBloquesEnc =
+                    HorarioUtils.bloquesEnc(_encByDia[dia] ?? {}, _horas);
                 final ocupados = {
                   for (final b in bloquesAsg) for (int k = 0; k < b.dur; k++) b.idx + k,
                   for (final b in todosBloquesEnc) for (int k = 0; k < b.dur; k++) b.idx + k,
                 };
-
-                // Para cada bloque de enc, calcular cuántos otros enc se solapan
-                // y cuál es su posición (rank) entre ellos → determina el right offset
-                int _rankEnBloque(({int idx, int dur, Map<String, dynamic> enc}) target) {
-                  final uid = target.enc['usuario'] as int? ?? 0;
-                  final solapantes = todosBloquesEnc
-                      .where((b) {
-                        final bUid = b.enc['usuario'] as int? ?? 0;
-                        if (bUid == uid) return false;
-                        return b.idx < target.idx + target.dur && b.idx + b.dur > target.idx;
-                      })
-                      .map((b) => b.enc['usuario'] as int? ?? 0)
-                      .toSet()
-                      .toList()..sort();
-                  // rank = posición de este uid entre los solapantes + él mismo
-                  final todos = ([uid, ...solapantes])..sort();
-                  return todos.indexOf(uid);
-                }
 
                 return SizedBox(
                   width: colWidth,
@@ -517,7 +449,7 @@ class _DashboardContentState extends State<DashboardContent> {
                         final username = b.enc['username']?.toString() ?? '?';
                         final nombre   = b.enc['nombre_completo']?.toString() ?? username;
                         final color    = _colorEncargado(username);
-                        final rank     = _rankEnBloque(b);
+                        final rank     = HorarioUtils.rankEnBloque(b, todosBloquesEnc);
                         final rightOff = 2.0 + rank * (stripW + stripGap);
                         return Positioned(
                           top:    b.idx * rowHeight + 2,
@@ -724,7 +656,7 @@ class _DashboardContentState extends State<DashboardContent> {
                     horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
                 children: [
                   _headerRow(['Insumo', 'Stock actual', 'Mínimo', 'Estado']),
-                  ...lista!.asMap().entries.map((e) {
+                  ...lista.asMap().entries.map((e) {
                     final idx = e.key;
                     final ins = e.value as Map<String, dynamic>;
                     final stock    = double.tryParse(ins['stock_actual'].toString()) ?? 0;

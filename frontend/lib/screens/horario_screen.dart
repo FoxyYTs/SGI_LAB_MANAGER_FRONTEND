@@ -370,10 +370,13 @@ class _TabEncargadosState extends State<_TabEncargados>
   // [dia][hora] → List<{id, username, nombre_completo, rol}>
   Map<int, Map<int, List<Map<String, dynamic>>>> _grid = {};
   List<Map<String, dynamic>> _disponibles = [];
+  // Lista completa de registros HoraExtra (con id, usuario, nombre_completo, descripcion, duracion_horas)
+  List<Map<String, dynamic>> _horasExtraList = [];
   bool _cargando = true;
 
   @override
   void initState() { super.initState(); Future.microtask(_cargar); }
+
 
   Future<void> _cargar() async {
     if (!mounted) return;
@@ -402,6 +405,14 @@ class _TabEncargadosState extends State<_TabEncargados>
           resp.data is List ? resp.data : (resp.data['results'] ?? []));
       if (!mounted) return;
       setState(() => _disponibles = disponibles);
+    } catch (_) {}
+
+    try {
+      final resp = await dio.get('academico/horas-extra/');
+      final lista = List<Map<String, dynamic>>.from(
+          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      if (!mounted) return;
+      setState(() => _horasExtraList = lista);
     } catch (_) {}
 
     if (!mounted) return;
@@ -535,8 +546,19 @@ class _TabEncargadosState extends State<_TabEncargados>
 
   // Tabla de conteo de horas por encargado
   Widget _buildTablaHoras() {
-    // Contar cuántas celdas aparece cada usuario en el grid
-    final conteo = <int, int>{};
+    final auth = context.read<AuthProvider>();
+    final puedeEditar = auth.can(Perm.academicoGestionar);
+
+    // Agregar horas extra desde la lista completa
+    final horasExtraMap = <int, double>{};
+    for (final r in _horasExtraList) {
+      final uid = r['usuario'] as int;
+      horasExtraMap[uid] = (horasExtraMap[uid] ?? 0) +
+          (double.tryParse(r['duracion_horas'].toString()) ?? 0);
+    }
+
+    // Contar cuántas celdas aparece cada usuario en el grid (horas recurrentes)
+    final conteo = <int, double>{};
     final nombres = <int, String>{};
     final roles   = <int, String>{};
     for (final diaMap in _grid.values) {
@@ -549,9 +571,24 @@ class _TabEncargadosState extends State<_TabEncargados>
         }
       }
     }
+    // Agregar horas extra (pueden incluir usuarios sin bloques en el grid)
+    for (final entry in horasExtraMap.entries) {
+      conteo[entry.key] = (conteo[entry.key] ?? 0) + entry.value;
+      if (!nombres.containsKey(entry.key)) {
+        final u = _disponibles.firstWhere(
+          (d) => d['id'] == entry.key,
+          orElse: () => {'nombre_completo': '?', 'rol': ''},
+        );
+        nombres[entry.key] = u['nombre_completo']?.toString() ?? '?';
+        roles[entry.key]   = u['rol']?.toString() ?? '';
+      }
+    }
+
     if (conteo.isEmpty) return const SizedBox.shrink();
 
     final sorted = conteo.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    String _fmt(double h) => h == h.truncateToDouble() ? '${h.toInt()} h' : '${h.toStringAsFixed(1)} h';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -559,9 +596,20 @@ class _TabEncargadosState extends State<_TabEncargados>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Divider(height: 24),
-          const Text('HORAS SEMANALES POR ENCARGADO',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold,
-                  color: kTextMuted, letterSpacing: 1.1)),
+          Row(children: [
+            const Text('HORAS SEMANALES POR ENCARGADO',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold,
+                    color: kTextMuted, letterSpacing: 1.1)),
+            const Spacer(),
+            if (puedeEditar)
+              TextButton.icon(
+                onPressed: _agregarHoraExtra,
+                icon: const Icon(Icons.home_work_outlined, size: 14),
+                label: const Text('En casa', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(foregroundColor: kPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0)),
+              ),
+          ]),
           const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(
@@ -596,11 +644,13 @@ class _TabEncargadosState extends State<_TabEncargados>
                   ],
                 ),
                 ...sorted.map((e) {
-                  final uid   = e.key;
-                  final horas = e.value;
+                  final uid    = e.key;
+                  final horas  = e.value;
                   final nombre = nombres[uid] ?? '?';
                   final rol    = roles[uid]   ?? '';
                   final color  = rol == 'LAB' ? kSuccess : (rol == 'ADMIN' ? kWarning : kPrimary);
+                  final extraH = horasExtraMap[uid] ?? 0;
+                  final tieneExtra = extraH > 0;
                   return TableRow(
                     decoration: const BoxDecoration(
                       border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
@@ -624,8 +674,17 @@ class _TabEncargadosState extends State<_TabEncargados>
                       ),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: Text('$horas h',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimary)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Text(_fmt(horas),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimary)),
+                          if (tieneExtra) ...[
+                            const SizedBox(width: 4),
+                            Tooltip(
+                              message: 'Incluye ${_fmt(extraH)} desde casa',
+                              child: const Icon(Icons.home_outlined, size: 13, color: kTextMuted),
+                            ),
+                          ],
+                        ]),
                       ),
                     ],
                   );
@@ -636,6 +695,100 @@ class _TabEncargadosState extends State<_TabEncargados>
         ],
       ),
     );
+  }
+
+  Future<void> _agregarHoraExtra() async {
+    if (_disponibles.isEmpty) return;
+
+    int? usuarioSel;
+    final descCtrl  = TextEditingController();
+    final horasCtrl = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Registrar horas en casa', style: TextStyle(fontSize: 16)),
+        content: StatefulBuilder(
+          builder: (ctx2, setSt) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<int>(
+                decoration: const InputDecoration(labelText: 'Encargado', isDense: true),
+                value: usuarioSel,
+                items: _disponibles.map((u) => DropdownMenuItem<int>(
+                  value: u['id'] as int,
+                  child: Text(u['nombre_completo']?.toString() ?? u['username'].toString(),
+                      style: const TextStyle(fontSize: 13)),
+                )).toList(),
+                onChanged: (v) => setSt(() => usuarioSel = v),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descCtrl,
+                decoration: const InputDecoration(labelText: 'Descripción', isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: horasCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Horas por semana',
+                  hintText: 'Ej: 2',
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Guardar')),
+        ],
+      ),
+    );
+
+    if (ok != true || usuarioSel == null) return;
+    final horas = int.tryParse(horasCtrl.text.trim());
+    if (horas == null || horas <= 0) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa un número entero de horas (ej: 2)'),
+            backgroundColor: kDanger));
+      return;
+    }
+    if (descCtrl.text.trim().isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La descripción no puede estar vacía'),
+            backgroundColor: kDanger));
+      return;
+    }
+
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.post('academico/horas-extra/', data: {
+        'usuario':        usuarioSel,
+        'descripcion':    descCtrl.text.trim(),
+        'duracion_horas': horas,
+      });
+      await _cargar();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Horas en casa registradas'), backgroundColor: kSuccess));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al guardar: $e'), backgroundColor: kDanger));
+    }
+  }
+
+  Future<void> _eliminarHoraExtra(int id) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.delete('academico/horas-extra/$id/');
+      setState(() => _horasExtraList.removeWhere((r) => r['id'] == id));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: kDanger));
+    }
   }
 
   @override
@@ -683,11 +836,97 @@ class _TabEncargadosState extends State<_TabEncargados>
                   child: _buildGrid(puedeEditar),
                 ),
                 _buildTablaHoras(),
+                _buildHorasEnCasaPanel(puedeEditar),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildHorasEnCasaPanel(bool puedeEditar) {
+    if (_horasExtraList.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Divider(height: 24),
+          const Text('DELEGACIONES EN CASA',
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold,
+                  color: kTextMuted, letterSpacing: 1.1)),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFFDEE2E6)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: _horasExtraList.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final r   = entry.value;
+                final nombre = r['nombre_completo']?.toString() ?? '?';
+                final desc   = r['descripcion']?.toString()    ?? '';
+                final horas  = double.tryParse(r['duracion_horas'].toString()) ?? 0;
+                final isLast = idx == _horasExtraList.length - 1;
+                return Container(
+                  decoration: BoxDecoration(
+                    border: idx == 0 ? null : const Border(
+                      top: BorderSide(color: Color(0xFFDEE2E6)),
+                    ),
+                    borderRadius: idx == 0
+                        ? const BorderRadius.vertical(top: Radius.circular(8))
+                        : isLast
+                            ? const BorderRadius.vertical(bottom: Radius.circular(8))
+                            : null,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(children: [
+                      const Icon(Icons.home_work_outlined, size: 14, color: kTextMuted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(nombre,
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text(desc,
+                                style: const TextStyle(fontSize: 11, color: kTextMuted)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: kPrimary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${horas.toInt()} h/sem',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kPrimary),
+                        ),
+                      ),
+                      if (puedeEditar) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 16, color: kDanger),
+                          tooltip: 'Eliminar delegación',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          onPressed: () => _eliminarHoraExtra(r['id'] as int),
+                        ),
+                      ],
+                    ]),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1627,14 +1866,11 @@ class _TabGestionState extends State<_TabGestion>
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Columna Áreas ────────────────────────────────────────────
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+            child: LayoutBuilder(builder: (_, box) {
+              final isWide = box.maxWidth >= 600;
+              final Widget areasCol = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       Row(children: [
                         const Text('ÁREAS',
                             style: TextStyle(
@@ -1673,6 +1909,8 @@ class _TabGestionState extends State<_TabGestion>
                                     color: kPrimary, size: 13),
                               ),
                               title: Text(a['nombre_area']?.toString() ?? '',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                       fontSize: 13, fontWeight: FontWeight.w600)),
                               subtitle: Text('$countAsig asignatura${countAsig != 1 ? 's' : ''}',
@@ -1703,16 +1941,11 @@ class _TabGestionState extends State<_TabGestion>
                             ),
                           );
                         }),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 24),
-                // ── Columna Asignaturas ──────────────────────────────────────
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  ]);
+              // ── Columna Asignaturas ──────────────────────────────────────
+              final Widget asigCol = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                       Row(children: [
                         const Text('ASIGNATURAS',
                             style: TextStyle(
@@ -1747,6 +1980,8 @@ class _TabGestionState extends State<_TabGestion>
                                       color: kPrimary, size: 13),
                                 ),
                                 title: Text(s['nombre_asignatura']?.toString() ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                         fontSize: 13, fontWeight: FontWeight.w600)),
                                 subtitle: Text(
@@ -1801,11 +2036,25 @@ class _TabGestionState extends State<_TabGestion>
                                   ),
                               ),
                             )),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                  ]);
+              return isWide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: areasCol),
+                        const SizedBox(width: 24),
+                        Expanded(flex: 2, child: asigCol),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        areasCol,
+                        const SizedBox(height: 20),
+                        asigCol,
+                      ],
+                    );
+            }),
           ),
         ),
       ],
@@ -1842,7 +2091,7 @@ class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
           children: [
             // Hora de fin
             DropdownButtonFormField<int>(
-              value: _horaFin ?? widget.horaInicio,
+              initialValue: _horaFin ?? widget.horaInicio,
               decoration: const InputDecoration(
                 labelText: 'Hora de fin',
                 prefixIcon: Icon(Icons.schedule_outlined, color: kPrimary),
@@ -1850,7 +2099,7 @@ class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
               ),
               items: horasFin.map((h) => DropdownMenuItem(
                 value: h,
-                child: Text(_horaAmPm(h)),
+                child: Text(_horaAmPm(h + 1)),
               )).toList(),
               onChanged: (v) => setState(() => _horaFin = v),
             ),
@@ -1993,7 +2242,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
           children: [
             // Asignatura
             DropdownButtonFormField<String>(
-              value: _asignaturaId,
+              initialValue: _asignaturaId,
               decoration: const InputDecoration(
                 labelText: 'Asignatura *',
                 prefixIcon: Icon(Icons.school_outlined, color: kPrimary),
@@ -2008,7 +2257,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
             const SizedBox(height: 12),
             // Docente — lista + Otros
             DropdownButtonFormField<String>(
-              value: _docenteDropdown,
+              initialValue: _docenteDropdown,
               decoration: const InputDecoration(
                 labelText: 'Docente',
                 prefixIcon: Icon(Icons.person_outline, color: kPrimary),
@@ -2047,7 +2296,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
             // Hora de fin (solo al crear, no al editar)
             if (widget.horaInicio != null) ...[
               DropdownButtonFormField<int>(
-                value: _horaFin ?? widget.horaInicio,
+                initialValue: _horaFin ?? widget.horaInicio,
                 decoration: const InputDecoration(
                   labelText: 'Hora de fin',
                   prefixIcon: Icon(Icons.schedule_outlined, color: kPrimary),
@@ -2055,7 +2304,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
                 ),
                 items: [
                   for (int h = widget.horaInicio!; h <= 21; h++)
-                    DropdownMenuItem(value: h, child: Text(_horaAmPm(h)))
+                    DropdownMenuItem(value: h, child: Text(_horaAmPm(h + 1)))
                 ],
                 onChanged: (v) => setState(() => _horaFin = v),
               ),

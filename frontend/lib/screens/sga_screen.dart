@@ -1,11 +1,10 @@
-import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/download_helper.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -40,6 +39,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   Map<String, dynamic>? _colmena;
   bool _cargando = true;
   bool _extrayendo = false;
+  bool _descargandoPdf = false;
   String? _error;
 
   @override
@@ -63,17 +63,15 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     setState(() { _cargando = true; _error = null; });
     try {
       final r = await _dio.get('inventario/lista/${widget.insumoId}/quimico/');
-      if (!mounted) return;
       setState(() { _datos = Map<String, dynamic>.from(r.data); });
     } catch (e) {
-      if (!mounted) return;
       if (e is DioException && e.response?.statusCode == 404) {
         setState(() { _datos = {}; });
       } else {
         setState(() { _error = 'Error cargando datos SGA'; });
       }
     } finally {
-      if (mounted) setState(() { _cargando = false; });
+      setState(() { _cargando = false; });
     }
   }
 
@@ -81,21 +79,20 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     if (_colmena != null) return;
     try {
       final r = await _dio.get('inventario/lista/${widget.insumoId}/sga/colmena/');
-      if (mounted) setState(() { _colmena = Map<String, dynamic>.from(r.data); });
+      setState(() { _colmena = Map<String, dynamic>.from(r.data); });
     } catch (_) {
-      if (mounted) setState(() { _colmena = {}; });
+      setState(() { _colmena = {}; });
     }
   }
 
   Future<void> _extraerFDS() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
-    final file = result.files.first;
-    final bytes = file.bytes ?? Uint8List(0);
+    if (result.isEmpty) return;
+    final file = result.first;
+    final bytes = await file.readAsBytes();
     if (bytes.isEmpty) {
       _snack('No se pudo leer el archivo.', kDanger);
       return;
@@ -103,13 +100,12 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
 
     // ── Paso 1: extraer sin guardar ──────────────────────────────────────────
     setState(() { _extrayendo = true; });
-    final dio = _dio;
     Map<String, dynamic> preview;
     try {
       final formData = FormData.fromMap({
         'fds': MultipartFile.fromBytes(bytes, filename: file.name),
       });
-      final r = await dio.post(
+      final r = await _dio.post(
         'inventario/lista/${widget.insumoId}/sga/extraer-fds/',
         data: formData,
         options: Options(receiveTimeout: const Duration(seconds: 60)),
@@ -117,6 +113,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
       preview = Map<String, dynamic>.from(r.data);
     } on DioException catch (e) {
       _snack(e.response?.data?['detail'] ?? 'Error al procesar el PDF.', kDanger);
+      setState(() { _extrayendo = false; });
       return;
     } finally {
       if (mounted) setState(() { _extrayendo = false; });
@@ -139,7 +136,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     // ── Paso 3: confirmar y guardar ──────────────────────────────────────────
     setState(() { _extrayendo = true; });
     try {
-      final r2 = await dio.post(
+      final r2 = await _dio.post(
         'inventario/lista/${widget.insumoId}/sga/extraer-fds/?confirmar=1',
         data: {'datos_extraidos': preview['datos_extraidos']},
         options: Options(
@@ -163,12 +160,11 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _abrirEtiquetaUrl() async {
-    // Diálogo para elegir el tamaño de etiqueta
     final formatos = [
-      {'value': 'pequena', 'label': 'Pequeña',    'sub': '52 × 74 mm'},
-      {'value': '50l',     'label': 'Máx. 50 L',  'sub': '74 × 105 mm'},
-      {'value': '500l',    'label': 'Máx. 500 L', 'sub': '105 × 148 mm'},
-      {'value': 'grande',  'label': 'Más de 500 L','sub': '148 × 210 mm'},
+      {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 56 mm'},
+      {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 80 mm'},
+      {'value': '500l',    'label': 'Máx. 500 L',  'sub': '105 × 113 mm'},
+      {'value': 'grande',  'label': 'Más de 500 L', 'sub': '148 × 160 mm'},
     ];
 
     final elegido = await showDialog<String>(
@@ -188,31 +184,27 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
           )).toList(),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
         ],
       ),
     );
 
     if (elegido == null || !mounted) return;
 
-    final dlToken = await ApiClient.instance.obtenerTokenDescarga(_token);
-    if (!mounted) return;
-    if (dlToken == null) {
-      _snack('No se pudo generar el token de descarga.', kDanger);
-      return;
-    }
-
-    final url = Uri.parse(
-      '${ApiClient.instance.baseUrl}inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/'
-      '?download_token=$dlToken&formato=$elegido',
-    );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    } else {
-      _snack('No se pudo abrir el visor de PDF.', kDanger);
+    setState(() => _descargandoPdf = true);
+    try {
+      final resp = await _dio.get(
+        'inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/',
+        queryParameters: {'formato': elegido},
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final nombre = 'etiqueta_${elegido}_${widget.insumoId}.pdf';
+      final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
+      if (msg != null && mounted) _snack(msg, kTextMuted);
+    } on DioException {
+      if (mounted) _snack('Error al descargar la etiqueta.', kDanger);
+    } finally {
+      if (mounted) setState(() => _descargandoPdf = false);
     }
   }
 
@@ -256,11 +248,20 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
               icon: const Icon(Icons.upload_file, color: kPrimary),
               onPressed: _extraerFDS,
             ),
-          IconButton(
-            tooltip: 'Generar etiqueta GHS',
-            icon: const Icon(Icons.label_outline, color: kSuccess),
-            onPressed: _datos == null || _datos!.isEmpty ? null : _abrirEtiquetaUrl,
-          ),
+          if (_descargandoPdf)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: kSuccess),
+              ),
+            )
+          else
+            IconButton(
+              tooltip: 'Generar etiqueta GHS',
+              icon: const Icon(Icons.label_outline, color: kSuccess),
+              onPressed: _datos == null || _datos!.isEmpty ? null : _abrirEtiquetaUrl,
+            ),
           const SizedBox(width: 4),
         ],
         bottom: TabBar(

@@ -199,7 +199,17 @@ class _BitacoraContentState extends State<BitacoraContent> {
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: SingleChildScrollView(child: _buildTabla()),
+                              child: LayoutBuilder(builder: (_, box) {
+                                const double kMin = 520;
+                                final w = box.maxWidth < kMin ? kMin : box.maxWidth;
+                                return SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: SizedBox(
+                                    width: w,
+                                    child: SingleChildScrollView(child: _buildTabla()),
+                                  ),
+                                );
+                              }),
                             ),
                           ),
                         ),
@@ -249,6 +259,8 @@ class _BitacoraContentState extends State<BitacoraContent> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Text(m['nombre_insumo']?.toString() ?? '—',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w500)),
               ),
               Padding(
@@ -258,18 +270,24 @@ class _BitacoraContentState extends State<BitacoraContent> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                 child: Text(fecha,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, color: kTextMuted)),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                 child: Text(
                   '${tipo == 'ENTRADA' ? '+' : tipo == 'SALIDA' || tipo == 'ROTURA' || tipo == 'CONSUMO_PRACTICA' ? '-' : '±'}${m['cantidad']}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontWeight: FontWeight.bold, color: color),
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                 child: Text(m['username']?.toString() ?? '—',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12)),
               ),
             ],

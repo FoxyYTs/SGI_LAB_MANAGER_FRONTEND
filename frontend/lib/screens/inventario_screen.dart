@@ -108,6 +108,29 @@ class _InventarioContentState extends State<InventarioContent> {
           return const Center(child: CircularProgressIndicator(color: kPrimary));
         }
 
+        if (provider.errorConexion) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off, size: 48, color: kTextMuted),
+                const SizedBox(height: 12),
+                const Text('No se pudo cargar el inventario',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                const Text('Verifica tu conexión e intenta de nuevo.',
+                    style: TextStyle(color: kTextMuted)),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () => provider.fetchInsumos(auth.token),
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
+          );
+        }
+
         final filtrados = _applySort(provider.insumos.where((i) {
           final matchTipo   = _filtroTipo == 'Todos' || i.tipo == _filtroTipo;
           final matchSearch = i.nombre.toLowerCase().contains(_searchQuery.toLowerCase()) ||

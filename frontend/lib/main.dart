@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'providers/auth_provider.dart';
 import 'providers/inventario_provider.dart';
 import 'screens/login_screen.dart';
@@ -26,6 +28,19 @@ import 'core/navigation_service.dart';
 import 'core/log_service.dart';
 import 'services/notification_service.dart';
 import 'services/background_tasks.dart';
+
+/// Handler de FCM cuando la app está cerrada (terminated).
+/// Debe ser top-level y decorado con @pragma — requisito de Flutter/Dart.
+@pragma('vm:entry-point')
+Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  await NotificationService.init();
+  await NotificationService.show(
+    id: message.hashCode,
+    title: message.notification?.title ?? 'SGI LAB MANAGER',
+    body:  message.notification?.body  ?? '',
+  );
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,9 +69,12 @@ void main() async {
       LogService.logError('LocalDb.instance', e, s);
     }
 
-    // Workmanager solo disponible en Android
+    // Workmanager y Firebase solo disponibles en Android
     if (Platform.isAndroid) {
-      await Workmanager().initialize(backgroundDispatcher, isInDebugMode: false);
+      await Firebase.initializeApp();
+      FirebaseMessaging.onBackgroundMessage(_fcmBackgroundHandler);
+      LogService.log('Firebase inicializado');
+      await Workmanager().initialize(backgroundDispatcher);
       LogService.log('Workmanager inicializado');
     }
   }
