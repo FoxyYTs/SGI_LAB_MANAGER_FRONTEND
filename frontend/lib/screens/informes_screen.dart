@@ -51,8 +51,9 @@ class _InformesContentState extends State<InformesContent> {
       final dio = ApiClient.instance.authenticatedDio(auth.token!);
       final r = await dio.get('academico/informes-subidos/');
       if (!mounted) return;
+      final d = r.data;
       setState(() {
-        _informesSubidos = List<dynamic>.from(r.data);
+        _informesSubidos = List<dynamic>.from(d is List ? d : (d['results'] ?? []));
         _cargandoSubidos = false;
       });
     } catch (_) {
