@@ -752,7 +752,7 @@ class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.open_in_new_outlined, color: kPrimary, size: 20),
+                        icon: const Icon(Icons.launch, color: kPrimary, size: 20),
                         tooltip: 'Ver / Descargar PDF',
                         onPressed: () => _abrirPdf(item),
                       ),
