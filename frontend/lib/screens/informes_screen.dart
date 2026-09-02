@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
 import '../core/download_helper.dart';
 import '../core/permissions.dart';
@@ -592,27 +593,18 @@ class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
     }
   }
 
-  Future<void> _descargar(Map<String, dynamic> informe) async {
-    final url = informe['url_archivo'] as String?;
-    if (url == null) return;
-    final auth = context.read<AuthProvider>();
-    try {
-      final dio = ApiClient.instance.authenticatedDio(auth.token!);
-      final response = await dio.get<List<int>>(
-        url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      final titulo = (informe['titulo'] as String? ?? 'informe')
-          .replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
-      final msg = await saveAndOpenFile(response.data!, '$titulo.pdf');
-      if (msg != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      }
-    } catch (_) {
+  Future<void> _abrirPdf(Map<String, dynamic> informe) async {
+    final urlStr = informe['url_archivo'] as String?;
+    if (urlStr == null) return;
+    final uri = Uri.tryParse(urlStr);
+    if (uri == null) return;
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: const Text('Error al descargar el informe.'),
-              backgroundColor: Colors.red[700]),
+          SnackBar(
+            content: const Text('No se pudo abrir el PDF.'),
+            backgroundColor: Colors.red[700],
+          ),
         );
       }
     }
@@ -760,9 +752,9 @@ class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.download_outlined, color: kPrimary, size: 20),
-                        tooltip: 'Descargar',
-                        onPressed: () => _descargar(item),
+                        icon: const Icon(Icons.open_in_new_outlined, color: kPrimary, size: 20),
+                        tooltip: 'Ver / Descargar PDF',
+                        onPressed: () => _abrirPdf(item),
                       ),
                       if (puedeGestionar)
                         IconButton(
