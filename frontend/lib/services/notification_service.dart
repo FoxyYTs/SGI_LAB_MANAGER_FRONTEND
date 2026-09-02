@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 /// Gestiona la inicialización y disparo de notificaciones locales.
 /// Funciona tanto en el hilo principal como en tareas de fondo (Workmanager).
@@ -20,6 +22,18 @@ class NotificationService {
 
     await _plugin.initialize(settings: settings);
     _initialized = true;
+
+    // Notificaciones FCM con app en primer plano
+    if (!kIsWeb && Platform.isAndroid) {
+      await FirebaseMessaging.instance
+          .setForegroundNotificationPresentationOptions(alert: true, badge: true, sound: true);
+      FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
+        final n = msg.notification;
+        if (n != null) {
+          show(id: msg.hashCode, title: n.title ?? 'SGI LAB MANAGER', body: n.body ?? '');
+        }
+      });
+    }
   }
 
   /// Muestra una notificación. Inicializa el plugin si todavía no se hizo.

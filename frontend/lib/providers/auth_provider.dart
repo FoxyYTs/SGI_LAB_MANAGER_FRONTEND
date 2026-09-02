@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../core/api/api_client.dart';
 import '../core/sync/sync_service.dart';
 import '../core/log_service.dart';
@@ -168,6 +169,7 @@ class AuthProvider with ChangeNotifier {
         await NotificationService.init();
         await NotificationService.requestPermission();
         await registerBackgroundTasks();
+        await _registrarFcmToken();
       }
 
       notifyListeners();
@@ -217,6 +219,36 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Registra el token FCM del dispositivo en el backend y escucha rotaciones.
+  Future<void> _registrarFcmToken() async {
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null) await _enviarFcmToken(fcmToken);
+      FirebaseMessaging.instance.onTokenRefresh.listen(_enviarFcmToken);
+    } catch (e) {
+      debugPrint('[AuthProvider] Error registrando FCM token: $e');
+    }
+  }
+
+  Future<void> _enviarFcmToken(String fcmToken) async {
+    if (_token == null) return;
+    try {
+      final dio = ApiClient.instance.authenticatedDio(_token);
+      await dio.post('usuarios/fcm-token/', data: {'token': fcmToken});
+      debugPrint('[AuthProvider] FCM token registrado.');
+    } catch (_) {}
+  }
+
+  Future<void> _eliminarFcmToken() async {
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null && _token != null) {
+        final dio = ApiClient.instance.authenticatedDio(_token);
+        await dio.delete('usuarios/fcm-token/', data: {'token': fcmToken});
+      }
+    } catch (_) {}
+  }
+
   /// Callback invocado por ApiClient cuando obtiene un nuevo access token.
   Future<void> _actualizarToken(String newToken) async {
     _token = newToken;
@@ -260,7 +292,10 @@ class AuthProvider with ChangeNotifier {
     _medianochTimer = null;
 
     // Cancelar tareas de fondo al cerrar sesión (solo Android)
-    if (!kIsWeb && Platform.isAndroid) await cancelBackgroundTasks();
+    if (!kIsWeb && Platform.isAndroid) {
+      await cancelBackgroundTasks();
+      await _eliminarFcmToken();
+    }
 
     // Invalidar el refresh token en el servidor para que no pueda generar nuevos access tokens.
     // Fallo silencioso: si no hay red o el token ya expiró, la sesión local se limpia igual.
