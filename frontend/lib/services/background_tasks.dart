@@ -13,12 +13,8 @@ const _kServerUrl = String.fromEnvironment(
 );
 
 // Nombres de tarea
-const kTaskStock         = 'sgi_stock_check';
-const kTaskSchedule      = 'sgi_schedule_check';
-const kTaskServerMonitor = 'sgi_server_monitor';
-
-// Clave SharedPreferences para el estado del servidor
-const _kServerStatusKey = 'server_monitor_status'; // 'online' | 'offline'
+const kTaskStock    = 'sgi_stock_check';
+const kTaskSchedule = 'sgi_schedule_check';
 
 // ── Punto de entrada del hilo de fondo ────────────────────────────────────────
 // @pragma necesario para que el compilador no elimine esta función.
@@ -41,8 +37,6 @@ void backgroundDispatcher() {
           await _checkStock(token);
         case kTaskSchedule:
           await _checkSchedule(token, rol, username);
-        case kTaskServerMonitor:
-          await _checkServer();
       }
     } catch (_) {
       // Las notificaciones son no-críticas; ignoramos cualquier error
@@ -75,22 +69,12 @@ Future<void> registerBackgroundTasks() async {
     existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
   );
 
-  // Monitor de disponibilidad del servidor: cada 15 minutos.
-  // Sin restricción de red — necesita correr incluso sin conexión para
-  // detectar cuando el servidor está caído.
-  await Workmanager().registerPeriodicTask(
-    kTaskServerMonitor,
-    kTaskServerMonitor,
-    frequency: const Duration(minutes: 15),
-    existingWorkPolicy: ExistingPeriodicWorkPolicy.keep,
-  );
 }
 
 /// Cancela todas las tareas periódicas. Llamar al cerrar sesión.
 Future<void> cancelBackgroundTasks() async {
   await Workmanager().cancelByUniqueName(kTaskStock);
   await Workmanager().cancelByUniqueName(kTaskSchedule);
-  await Workmanager().cancelByUniqueName(kTaskServerMonitor);
 }
 
 // ── Lógica de Stock Crítico ───────────────────────────────────────────────────
@@ -184,58 +168,6 @@ Future<void> _checkSchedule(String token, String rol, String username) async {
   }
 }
 
-// ── Monitor de disponibilidad del servidor ────────────────────────────────────
-
-Future<void> _checkServer() async {
-  final prefs = await SharedPreferences.getInstance();
-  final estadoAnterior = prefs.getString(_kServerStatusKey); // 'online' | 'offline' | null
-
-  bool ahoraOnline;
-  try {
-    final dio = Dio(BaseOptions(
-      baseUrl: '${_kServerUrl.endsWith('/') ? _kServerUrl.substring(0, _kServerUrl.length - 1) : _kServerUrl}/api/',
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-    ));
-    final resp = await dio.get('academico/dashboard/');
-    ahoraOnline = resp.statusCode != null && resp.statusCode! < 500;
-  } catch (_) {
-    ahoraOnline = false;
-  }
-
-  final estadoActual = ahoraOnline ? 'online' : 'offline';
-
-  // Solo notificar cuando el estado cambia
-  if (estadoAnterior == estadoActual) return;
-
-  await prefs.setString(_kServerStatusKey, estadoActual);
-
-  final ahora = DateTime.now();
-  final horaStr =
-      '${ahora.day.toString().padLeft(2, '0')}/${ahora.month.toString().padLeft(2, '0')}/${ahora.year} '
-      '${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}';
-
-  if (ahoraOnline) {
-    // Servidor recuperado
-    await _show(
-      id: 1005,
-      title: '✅ Servidor en línea',
-      body: 'El servidor volvió a estar disponible — $horaStr',
-      channelId: 'sgi_server_channel',
-      channelName: 'Estado del servidor',
-    );
-  } else {
-    // Servidor caído
-    await _show(
-      id: 1004,
-      title: '🔴 Servidor sin conexión',
-      body: 'No se pudo contactar al servidor desde las $horaStr',
-      channelId: 'sgi_server_channel',
-      channelName: 'Estado del servidor',
-    );
-  }
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 Future<List> _getHorarioEncargado(String token) async {
@@ -272,15 +204,15 @@ Future<void> _show({
 }) async {
   final plugin = FlutterLocalNotificationsPlugin();
   await plugin.initialize(
-    const InitializationSettings(
+    settings: const InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     ),
   );
   await plugin.show(
-    id,
-    title,
-    body,
-    NotificationDetails(
+    id: id,
+    title: title,
+    body: body,
+    notificationDetails: NotificationDetails(
       android: AndroidNotificationDetails(
         channelId,
         channelName,

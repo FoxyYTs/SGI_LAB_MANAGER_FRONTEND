@@ -7,14 +7,12 @@
     <!-- Workmanager: reiniciar tareas tras reboot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <!-- file_picker: lectura de archivos (FDS en PDF) -->
+    <!-- file_picker: selección de foto de perfil (Android 13+) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
 
     <application
-        android:label="LAB Manager"
+        android:label="SGI Lab Manager"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -169,13 +169,19 @@ class _MovimientosContentState extends State<MovimientosContent> {
           ],
           // ── Encabezado ───────────────────────────────────────────────────
           Row(children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Movimientos y Préstamos',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              const Text('Gestión de solicitudes de préstamo',
-                  style: TextStyle(fontSize: 12, color: kTextMuted)),
-            ]),
-            const Spacer(),
+            Flexible(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Movimientos y Préstamos',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                const Text('Gestión de solicitudes de préstamo',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: kTextMuted)),
+              ]),
+            ),
+            const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.refresh, color: kPrimary, size: 20),
               tooltip: 'Actualizar',
@@ -784,9 +790,15 @@ class _PrestamoCard extends StatelessWidget {
           children: [
             // ── Encabezado: ID + chip estado ──
             Row(children: [
-              Text('Préstamo #$id',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              const Spacer(),
+              Flexible(
+                child: Text(
+                  'Préstamo',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                 decoration: BoxDecoration(

@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/download_helper.dart';
+import '../core/permissions.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -15,6 +17,8 @@ class InformesContent extends StatefulWidget {
 class _InformesContentState extends State<InformesContent> {
   Map<String, dynamic> _ultimosInformes = {};
   bool _cargando = true;
+  List<dynamic> _informesSubidos = [];
+  bool _cargandoSubidos = true;
 
   @override
   void initState() {
@@ -36,6 +40,24 @@ class _InformesContentState extends State<InformesContent> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _cargando = false);
+    }
+    _cargarSubidos();
+  }
+
+  Future<void> _cargarSubidos() async {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    try {
+      final dio = ApiClient.instance.authenticatedDio(auth.token!);
+      final r = await dio.get('academico/informes-subidos/');
+      if (!mounted) return;
+      setState(() {
+        _informesSubidos = List<dynamic>.from(r.data);
+        _cargandoSubidos = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _cargandoSubidos = false);
     }
   }
 
@@ -100,6 +122,13 @@ class _InformesContentState extends State<InformesContent> {
                                 mainAxisSpacing: 12,
                                 childAspectRatio: crossCount == 1 ? 1.9 : 1.45,
                               ),
+                            ),
+                          ),
+                          SliverToBoxAdapter(
+                            child: _InformesSubidosSection(
+                              informes:     _informesSubidos,
+                              cargando:     _cargandoSubidos,
+                              onActualizar: _cargarSubidos,
                             ),
                           ),
                         ],
@@ -434,4 +463,319 @@ class _InformeTileState extends State<_InformeTile> {
         ),
       );
 
+}
+
+// ── Informes subidos manualmente ────────────────────────────────────────────
+
+class _InformesSubidosSection extends StatefulWidget {
+  final List<dynamic> informes;
+  final bool cargando;
+  final VoidCallback onActualizar;
+
+  const _InformesSubidosSection({
+    required this.informes,
+    required this.cargando,
+    required this.onActualizar,
+  });
+
+  @override
+  State<_InformesSubidosSection> createState() => _InformesSubidosSectionState();
+}
+
+class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
+  bool _subiendo = false;
+
+  String _formatFecha(String? iso) {
+    if (iso == null) return '';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} '
+          '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  String _formatTamano(dynamic bytes) {
+    if (bytes == null) return '';
+    final b = bytes as int;
+    if (b < 1024) return '$b B';
+    if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(1)} KB';
+    return '${(b / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Future<void> _subir() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (result.isEmpty) return;
+    final file = result.first;
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) return;
+
+    if (!mounted) return;
+    final tituloController = TextEditingController(
+      text: file.name.replaceAll('.pdf', '').replaceAll('_', ' '),
+    );
+    final descripcionController = TextEditingController();
+
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Subir informe'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: tituloController,
+              decoration: const InputDecoration(labelText: 'Título *'),
+              textCapitalization: TextCapitalization.sentences,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descripcionController,
+              decoration: const InputDecoration(labelText: 'Descripción (opcional)'),
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () {
+              if (tituloController.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: kPrimary),
+            child: const Text('Subir', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmado != true || !mounted) return;
+
+    setState(() => _subiendo = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token!);
+      final formData = FormData.fromMap({
+        'titulo':      tituloController.text.trim(),
+        'descripcion': descripcionController.text.trim(),
+        'archivo': MultipartFile.fromBytes(
+          bytes,
+          filename: file.name,
+        ),
+      });
+      await dio.post('academico/informes-subidos/', data: formData);
+      widget.onActualizar();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Informe subido correctamente.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        String msg = 'Error al subir el informe.';
+        try {
+          final data = (e as dynamic).response?.data;
+          if (data is Map) msg = data.values.first.toString();
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.red[700]),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _subiendo = false);
+    }
+  }
+
+  Future<void> _descargar(Map<String, dynamic> informe) async {
+    final url = informe['url_archivo'] as String?;
+    if (url == null) return;
+    final auth = context.read<AuthProvider>();
+    try {
+      final dio = ApiClient.instance.authenticatedDio(auth.token!);
+      final response = await dio.get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final titulo = (informe['titulo'] as String? ?? 'informe')
+          .replaceAll(RegExp(r'[^a-zA-Z0-9_\-]'), '_');
+      final msg = await saveAndOpenFile(response.data!, '$titulo.pdf');
+      if (msg != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: const Text('Error al descargar el informe.'),
+              backgroundColor: Colors.red[700]),
+        );
+      }
+    }
+  }
+
+  Future<void> _eliminar(Map<String, dynamic> informe) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar informe'),
+        content: Text('¿Eliminar "${informe['titulo']}"? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: kDanger),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token!);
+      await dio.delete('academico/informes-subidos/${informe['id']}/');
+      widget.onActualizar();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Informe eliminado.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: const Text('Error al eliminar el informe.'),
+              backgroundColor: Colors.red[700]),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth     = context.watch<AuthProvider>();
+    final puedeGestionar = auth.can(Perm.informesGestionar);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header de sección ──────────────────────────────────────────
+          Row(children: [
+            const Icon(Icons.upload_file_outlined, size: 18, color: kPrimary),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text('Informes subidos manualmente',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kPrimary)),
+            ),
+            if (puedeGestionar)
+              _subiendo
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
+                  : TextButton.icon(
+                      onPressed: _subir,
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Subir PDF'),
+                      style: TextButton.styleFrom(foregroundColor: kPrimary),
+                    ),
+          ]),
+          const SizedBox(height: 4),
+          const Text('Documentos elaborados manualmente y almacenados en la plataforma.',
+              style: TextStyle(fontSize: 12, color: Colors.black54)),
+          const SizedBox(height: 12),
+
+          // ── Lista ──────────────────────────────────────────────────────
+          if (widget.cargando)
+            const Center(child: Padding(
+              padding: EdgeInsets.all(24),
+              child: CircularProgressIndicator(color: kPrimary),
+            ))
+          else if (widget.informes.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE0E0E0)),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 36, color: Colors.black26),
+                    SizedBox(height: 8),
+                    Text('No hay informes subidos aún.',
+                        style: TextStyle(color: Colors.black45, fontSize: 13)),
+                  ],
+                ),
+              ),
+            )
+          else
+            ...widget.informes.map((inf) {
+              final item = inf as Map<String, dynamic>;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 1,
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  leading: const Icon(Icons.picture_as_pdf_outlined, color: kDanger, size: 28),
+                  title: Text(
+                    item['titulo'] as String? ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if ((item['descripcion'] as String? ?? '').isNotEmpty)
+                        Text(item['descripcion'] as String,
+                            style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Row(children: [
+                        Icon(Icons.person_outline, size: 12, color: kTextMuted),
+                        const SizedBox(width: 3),
+                        Text(item['subido_por_nombre'] as String? ?? 'Desconocido',
+                            style: TextStyle(fontSize: 11, color: kTextMuted)),
+                        const SizedBox(width: 10),
+                        Icon(Icons.schedule_outlined, size: 12, color: kTextMuted),
+                        const SizedBox(width: 3),
+                        Text(_formatFecha(item['subido_en'] as String?),
+                            style: TextStyle(fontSize: 11, color: kTextMuted)),
+                        if (item['tamano_bytes'] != null) ...[
+                          const SizedBox(width: 10),
+                          Text(_formatTamano(item['tamano_bytes']),
+                              style: TextStyle(fontSize: 11, color: kTextMuted)),
+                        ],
+                      ]),
+                    ],
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.download_outlined, color: kPrimary, size: 20),
+                        tooltip: 'Descargar',
+                        onPressed: () => _descargar(item),
+                      ),
+                      if (puedeGestionar)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: kDanger, size: 20),
+                          tooltip: 'Eliminar',
+                          onPressed: () => _eliminar(item),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
 }

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Eliminar cuenta — SGI Lab Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8f9fa;
+      color: #212529;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 2rem;
+    }
+
+    header img { width: 48px; height: 48px; }
+
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #007BFF;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 2rem;
+      max-width: 640px;
+      width: 100%;
+    }
+
+    .card h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .card > p {
+      color: #6c757d;
+      margin-bottom: 1.75rem;
+      line-height: 1.6;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: #343a40;
+    }
+
+    ol {
+      padding-left: 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    ol li {
+      line-height: 1.7;
+      margin-bottom: 0.25rem;
+    }
+
+    .info-box {
+      background: #e8f4ff;
+      border-left: 4px solid #007BFF;
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .info-box p { line-height: 1.6; font-size: 0.95rem; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.75rem;
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: #007BFF;
+      color: #fff;
+      padding: 0.6rem 0.75rem;
+      text-align: left;
+      font-weight: 600;
+    }
+
+    th:first-child { border-radius: 8px 0 0 0; }
+    th:last-child  { border-radius: 0 8px 0 0; }
+
+    td {
+      padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid #dee2e6;
+      vertical-align: top;
+      line-height: 1.5;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #f8f9fa; }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2em 0.6em;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .badge-delete { background: #fdecea; color: #dc3545; }
+    .badge-keep   { background: #e8f4ff; color: #0056b3; }
+
+    .cta {
+      background: #007BFF;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.85rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.2s;
+    }
+
+    .cta:hover { background: #0056B3; }
+
+    footer {
+      margin-top: 2rem;
+      color: #6c757d;
+      font-size: 0.85rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <img src="/icons/Icon-192.png" alt="SGI Lab Manager" />
+    <h1>SGI Lab Manager</h1>
+  </header>
+
+  <div class="card">
+    <h2>Solicitud de eliminación de cuenta</h2>
+    <p>
+      Esta página describe cómo puedes solicitar la eliminación de tu cuenta y los
+      datos asociados en <strong>SGI Lab Manager</strong>, el sistema de gestión del
+      Laboratorio Integrado del Politécnico Colombiano Jaime Isaza Cadavid.
+    </p>
+
+    <h3>Pasos para solicitar la eliminación</h3>
+    <ol>
+      <li>Envía un correo a <strong>foxy200442@gmail.com</strong> con el asunto:<br/>
+          <em>"Eliminación de cuenta SGI Lab Manager — [tu nombre de usuario]"</em></li>
+      <li>Indica el nombre de usuario o correo electrónico asociado a tu cuenta.</li>
+      <li>Recibirás confirmación en un plazo máximo de <strong>5 días hábiles</strong>.</li>
+    </ol>
+
+    <div class="info-box">
+      <p>
+        SGI Lab Manager es una aplicación de uso <strong>interno institucional</strong>.
+        Las cuentas son creadas por administradores del laboratorio; si ya no perteneces
+        a la institución, tu cuenta puede ser desactivada directamente por el administrador.
+      </p>
+    </div>
+
+    <h3>Datos que se eliminan y datos que se conservan</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Dato</th>
+          <th>Acción</th>
+          <th>Retención adicional</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Nombre de usuario y contraseña</td>
+          <td><span class="badge badge-delete">Eliminado</span></td>
+          <td>Inmediato</td>
+        </tr>
+        <tr>
+          <td>Correo electrónico</td>
+          <td><span class="badge badge-delete">Eliminado</span></td>
+          <td>Inmediato</td>
+        </tr>
+        <tr>
+          <td>Foto de perfil</td>
+          <td><span class="badge badge-delete">Eliminado</span></td>
+          <td>Inmediato</td>
+        </tr>
+        <tr>
+          <td>Registros de horario (como encargado)</td>
+          <td><span class="badge badge-keep">Anonimizado</span></td>
+          <td>Se conserva para auditoría institucional</td>
+        </tr>
+        <tr>
+          <td>Préstamos aprobados o rechazados</td>
+          <td><span class="badge badge-keep">Anonimizado</span></td>
+          <td>Se conserva por requerimiento normativo del laboratorio</td>
+        </tr>
+        <tr>
+          <td>Registros de bitácora</td>
+          <td><span class="badge badge-keep">Anonimizado</span></td>
+          <td>Se conserva para trazabilidad de inventario</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <a class="cta" href="mailto:foxy200442@gmail.com?subject=Eliminación%20de%20cuenta%20SGI%20Lab%20Manager">
+      Enviar solicitud por correo
+    </a>
+  </div>
+
+  <footer>
+    SGI Lab Manager · Politécnico Colombiano Jaime Isaza Cadavid<br/>
+    Desarrollado por José Andrés Daza Gallego
+  </footer>
+
+</body>
+</html>

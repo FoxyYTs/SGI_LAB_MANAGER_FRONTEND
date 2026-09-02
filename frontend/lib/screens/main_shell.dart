@@ -333,9 +333,10 @@ class _MainShellState extends State<MainShell> {
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () async {
+          final nav = Navigator.of(context);
           await auth.logout();
           if (!mounted) return;
-          Navigator.pushReplacementNamed(context, '/');
+          nav.pushReplacementNamed('/');
         },
         child: const Padding(
           padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -578,10 +579,11 @@ class _MainShellState extends State<MainShell> {
                   title: const Text('Cerrar sesión',
                       style: TextStyle(fontSize: 14, color: Colors.black54)),
                   onTap: () async {
+                    final nav = Navigator.of(context);
                     Navigator.pop(context);
                     await auth.logout();
                     if (!mounted) return;
-                    Navigator.pushReplacementNamed(context, '/');
+                    nav.pushReplacementNamed('/');
                   },
                 ),
               ],

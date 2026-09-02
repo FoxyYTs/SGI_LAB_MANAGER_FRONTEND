@@ -33,10 +33,10 @@ class ApiClient {
 
   // Estado del refresco de token
   String?            _refreshTokenStr;
-  String?            _currentToken;
   Future<String?>?   _refreshFuture;        // evita múltiples refreshes simultáneos
-  void Function(String newToken)? _onTokenRefreshed;
-  void Function()?                _onLogout;
+  void Function(String newToken)?   _onTokenRefreshed;
+  void Function(String newRefresh)? _onRefreshRotated;
+  void Function()?                  _onLogout;
 
   ApiClient._() {
     if (_kServerUrl.isNotEmpty) {
@@ -85,29 +85,25 @@ class ApiClient {
 
   /// Registra los tokens y los callbacks necesarios para el refresco automático.
   /// Llamar desde AuthProvider tras login y tras restaurar sesión.
-  void Function(String newRefresh)? _onRefreshRotated;
-
   void setTokens(
     String accessToken,
     String refreshToken, {
-    required void Function(String newToken) onRefreshed,
-    required void Function(String newRefresh) onRefreshRotated,
-    required void Function() onLogout,
+    required void Function(String newToken)   onRefreshed,
+    required void Function()                  onLogout,
+    void Function(String newRefresh)?         onRefreshRotated,
   }) {
-    _currentToken       = accessToken;
-    _refreshTokenStr    = refreshToken;
-    _onTokenRefreshed   = onRefreshed;
-    _onRefreshRotated   = onRefreshRotated;
-    _onLogout           = onLogout;
+    _refreshTokenStr   = refreshToken;
+    _onTokenRefreshed  = onRefreshed;
+    _onRefreshRotated  = onRefreshRotated;
+    _onLogout          = onLogout;
   }
 
   /// Limpia el estado de tokens (al hacer logout).
   void clearTokens() {
-    _currentToken     = null;
-    _refreshTokenStr    = null;
-    _onTokenRefreshed   = null;
-    _onRefreshRotated   = null;
-    _onLogout           = null;
+    _refreshTokenStr  = null;
+    _onTokenRefreshed = null;
+    _onRefreshRotated = null;
+    _onLogout         = null;
     _refreshFuture    = null;
   }
 
@@ -121,19 +117,16 @@ class ApiClient {
   Future<String?> _doRefresh() async {
     if (_refreshTokenStr == null) return null;
     try {
-      final resp = await _dio.post(
-        'token/refresh/',
-        data: {'refresh': _refreshTokenStr},
-      );
-      final newToken = resp.data['access'] as String;
-      _currentToken = newToken;
-      _onTokenRefreshed?.call(newToken);
-      // Con ROTATE_REFRESH_TOKENS el backend devuelve un nuevo refresh token
+      final resp       = await _dio.post('token/refresh/', data: {'refresh': _refreshTokenStr});
+      final newToken   = resp.data['access']  as String;
+      // ROTATE_REFRESH_TOKENS=True: el endpoint devuelve también un nuevo refresh token
+      // y blacklistea el anterior. Hay que actualizarlo o el siguiente refresh fallará.
       final newRefresh = resp.data['refresh'] as String?;
       if (newRefresh != null) {
         _refreshTokenStr = newRefresh;
         _onRefreshRotated?.call(newRefresh);
       }
+      _onTokenRefreshed?.call(newToken);
       debugPrint('[ApiClient] Token refrescado correctamente.');
       return newToken;
     } catch (e) {
@@ -164,15 +157,13 @@ class ApiClient {
         }
 
         // Refresco automático de token en 401
-        // extra['_retried'] evita que el reintento entre de nuevo al interceptor
-        final yaReintentado = e.requestOptions.extra['_retried'] == true;
-        if (e.response?.statusCode == 401 && _refreshTokenStr != null && !yaReintentado) {
+        if (e.response?.statusCode == 401 && _refreshTokenStr != null) {
           final newToken = await _tryRefresh();
           if (newToken != null) {
+            // Reintentar la petición original con el nuevo token
             try {
               final opts = e.requestOptions;
               opts.headers['Authorization'] = 'Bearer $newToken';
-              opts.extra['_retried'] = true;
               final retryResp = await d.fetch(opts);
               return handler.resolve(retryResp);
             } catch (retryErr) {
@@ -187,17 +178,6 @@ class ApiClient {
       },
     ));
     return d;
-  }
-
-  /// Genera un token de descarga de un solo uso (TTL 60 s) para abrir PDFs en el navegador.
-  /// Usar en lugar de pasar el access JWT en la URL.
-  Future<String?> obtenerTokenDescarga(String token) async {
-    try {
-      final r = await authenticatedDio(token).post('usuarios/token-descarga/');
-      return r.data['download_token'] as String?;
-    } catch (_) {
-      return null;
-    }
   }
 
   static Map<String, String> _baseHeaders() {
