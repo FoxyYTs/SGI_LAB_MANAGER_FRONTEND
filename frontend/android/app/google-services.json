@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "919354061593",
+    "project_id": "sgi-lab-manager",
+    "storage_bucket": "sgi-lab-manager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:919354061593:android:cc4f8e9dd903d30bce8b88",
+        "android_client_info": {
+          "package_name": "com.sgi.labmanager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCULa8pohHExaVohqR5aCS9m4boDgGtYiQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
