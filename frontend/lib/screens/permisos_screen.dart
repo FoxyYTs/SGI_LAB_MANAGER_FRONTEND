@@ -716,6 +716,11 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
     final esMiUsuario = auth.username == username;
     final isActivo    = _seleccionado!['is_active'] as bool? ?? true;
     final esAdmin     = rol == 'ADMIN';
+    // Cambiar el rol de un usuario es más sensible que gestionar permisos (puede
+    // otorgar ADMIN) — el backend lo restringe solo a ADMIN aunque el usuario
+    // actual tenga el permiso 'configuracion.roles'. El dropdown debe reflejar
+    // esa misma restricción o el LAB vería un control que siempre falla.
+    final puedeCambiarRol = auth.rol == 'ADMIN';
     final iniciales   = (nombre.isEmpty ? username : nombre)
         .split(' ').take(2).map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
 
@@ -753,7 +758,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
               if (_cambiandoRol)
                 const SizedBox(width: 18, height: 18,
                     child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
-              else if (esMiUsuario)
+              else if (esMiUsuario || !puedeCambiarRol)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
