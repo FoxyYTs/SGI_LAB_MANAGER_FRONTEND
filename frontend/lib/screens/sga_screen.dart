@@ -206,7 +206,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
       final resp = await _dio.get(
         'inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/',
         queryParameters: {
-          'tipo': tipo,
+          'tipo_etiqueta': tipo,
           if (formato != null) 'formato': formato,
         },
         options: Options(responseType: ResponseType.bytes),
