@@ -160,6 +160,69 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _abrirEtiquetaUrl() async {
+    final tipo = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tipo de etiqueta',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.label_outline, color: Color(0xFF1E73BE)),
+              title: const Text('Etiqueta FDS (Colmena Seguros)',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Ficha completa S1-S14 · 4 tamaños'),
+              onTap: () => Navigator.pop(ctx, 'fds'),
+            ),
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.delete_outline, color: Color(0xFF1E73BE)),
+              title: const Text('Etiqueta de residuo',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('CÓDIGO/VERSIÓN/RESPONSABLE · tamaño único'),
+              onTap: () => Navigator.pop(ctx, 'residuo'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+        ],
+      ),
+    );
+
+    if (tipo == null || !mounted) return;
+
+    String? formato;
+    if (tipo == 'fds') {
+      formato = await _elegirFormatoFds();
+      if (formato == null || !mounted) return;
+    }
+
+    setState(() => _descargandoPdf = true);
+    try {
+      final resp = await _dio.get(
+        'inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/',
+        queryParameters: {
+          'tipo': tipo,
+          if (formato != null) 'formato': formato,
+        },
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final sufijo = tipo == 'residuo' ? 'residuo' : formato;
+      final nombre = 'etiqueta_${sufijo}_${widget.insumoId}.pdf';
+      final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
+      if (msg != null && mounted) _snack(msg, kTextMuted);
+    } on DioException {
+      if (mounted) _snack('Error al descargar la etiqueta.', kDanger);
+    } finally {
+      if (mounted) setState(() => _descargandoPdf = false);
+    }
+  }
+
+  Future<String?> _elegirFormatoFds() {
     final formatos = [
       {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 56 mm'},
       {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 80 mm'},
@@ -167,7 +230,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
       {'value': 'grande',  'label': 'Más de 500 L', 'sub': '148 × 160 mm'},
     ];
 
-    final elegido = await showDialog<String>(
+    return showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Seleccionar tamaño de etiqueta',
@@ -188,24 +251,6 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
         ],
       ),
     );
-
-    if (elegido == null || !mounted) return;
-
-    setState(() => _descargandoPdf = true);
-    try {
-      final resp = await _dio.get(
-        'inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/',
-        queryParameters: {'formato': elegido},
-        options: Options(responseType: ResponseType.bytes),
-      );
-      final nombre = 'etiqueta_${elegido}_${widget.insumoId}.pdf';
-      final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
-      if (msg != null && mounted) _snack(msg, kTextMuted);
-    } on DioException {
-      if (mounted) _snack('Error al descargar la etiqueta.', kDanger);
-    } finally {
-      if (mounted) setState(() => _descargandoPdf = false);
-    }
   }
 
   void _snack(String msg, Color color) {
