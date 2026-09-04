@@ -203,13 +203,21 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      child: Column(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(Perm.nombre(codigo),
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                          Text(codigo,
-                              style: const TextStyle(fontSize: 10, color: kTextMuted)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(Perm.nombre(codigo),
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                Text(codigo,
+                                    style: const TextStyle(fontSize: 10, color: kTextMuted)),
+                              ],
+                            ),
+                          ),
+                          _InfoPermiso(codigo: codigo),
                         ],
                       ),
                     ),
@@ -893,11 +901,16 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(Perm.nombre(codigo),
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                          Text(codigo,
-                              style: const TextStyle(fontSize: 10, color: kTextMuted)),
+                        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(Perm.nombre(codigo),
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                              Text(codigo,
+                                  style: const TextStyle(fontSize: 10, color: kTextMuted)),
+                            ]),
+                          ),
+                          _InfoPermiso(codigo: codigo),
                         ]),
                       ),
                     ),
@@ -924,6 +937,35 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
           ),
         ),
         const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────
+// Menú desplegable con la descripción de un permiso
+// ─────────────────────────────────────────
+class _InfoPermiso extends StatelessWidget {
+  final String codigo;
+  const _InfoPermiso({required this.codigo});
+
+  @override
+  Widget build(BuildContext context) {
+    final descripcion = Perm.descripcion(codigo);
+    if (descripcion.isEmpty) return const SizedBox(width: 24);
+    return PopupMenuButton<void>(
+      tooltip: 'Qué hace este permiso',
+      padding: EdgeInsets.zero,
+      icon: const Icon(Icons.info_outline, size: 16, color: kTextMuted),
+      itemBuilder: (ctx) => [
+        PopupMenuItem<void>(
+          enabled: false,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: Text(descripcion,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF223542))),
+          ),
+        ),
       ],
     );
   }
