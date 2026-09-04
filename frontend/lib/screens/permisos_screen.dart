@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
+import '../core/text_utils.dart';
 import '../providers/auth_provider.dart';
 import 'mi_perfil_screen.dart';
 
@@ -275,7 +276,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   void initState() {
     super.initState();
     _cargarUsuarios();
-    _busquedaCtrl.addListener(() => setState(() => _query = _busquedaCtrl.text.toLowerCase()));
+    _busquedaCtrl.addListener(() => setState(() => _query = normalizarBusqueda(_busquedaCtrl.text)));
   }
 
   @override
@@ -287,9 +288,9 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   List<Map<String, dynamic>> get _usuariosFiltrados {
     if (_query.isEmpty) return _usuarios;
     return _usuarios.where((u) {
-      final username = (u['username'] as String? ?? '').toLowerCase();
-      final email    = (u['email']    as String? ?? '').toLowerCase();
-      final nombre   = '${u['first_name'] ?? ''} ${u['last_name'] ?? ''}'.toLowerCase();
+      final username = normalizarBusqueda(u['username'] as String? ?? '');
+      final email    = normalizarBusqueda(u['email']    as String? ?? '');
+      final nombre   = normalizarBusqueda('${u['first_name'] ?? ''} ${u['last_name'] ?? ''}');
       return username.contains(_query) || email.contains(_query) || nombre.contains(_query);
     }).toList();
   }

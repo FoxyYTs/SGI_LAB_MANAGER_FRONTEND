@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
+import '../core/text_utils.dart';
 import '../providers/auth_provider.dart';
 
 // ─────────────────────────────────────────
@@ -870,9 +871,8 @@ class _GuiasTabState extends State<_GuiasTab> {
               ? <Map<String, dynamic>>[]
               : _insumos
                   .where((ins) => !yaAsignados.contains(ins['id'].toString()))
-                  .where((ins) => (ins['nombre_insumo'] ?? '')
-                      .toLowerCase()
-                      .contains(busqueda.toLowerCase()))
+                  .where((ins) => normalizarBusqueda(ins['nombre_insumo'] ?? '')
+                      .contains(normalizarBusqueda(busqueda)))
                   .toList();
 
           return AlertDialog(
