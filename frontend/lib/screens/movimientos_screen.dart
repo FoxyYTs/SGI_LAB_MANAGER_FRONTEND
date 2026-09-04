@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
+import '../core/text_utils.dart';
 import '../core/cache/cache_service.dart';
 import '../core/sync/sync_service.dart';
 import '../providers/auth_provider.dart';
@@ -642,10 +643,11 @@ class _SelectorInsumoDialogState extends State<_SelectorInsumoDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final query = normalizarBusqueda(_query);
     final filtrados = widget.insumos
         .where((i) =>
-            i.nombre.toLowerCase().contains(_query.toLowerCase()) ||
-            i.tipo.toLowerCase().contains(_query.toLowerCase()))
+            normalizarBusqueda(i.nombre).contains(query) ||
+            normalizarBusqueda(i.tipo).contains(query))
         .toList();
 
     return AlertDialog(
