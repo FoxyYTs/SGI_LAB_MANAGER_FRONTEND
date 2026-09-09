@@ -26,9 +26,12 @@ void backgroundDispatcher() {
       DartPluginRegistrant.ensureInitialized();
 
       const storage = FlutterSecureStorage();
-      final token    = await storage.read(key: 'token');
-      final rol      = await storage.read(key: 'rol') ?? '';
+      final token = await storage.read(key: 'token');
       final username = await storage.read(key: 'username') ?? '';
+      // hace_turnos_monitor (no rol=='MONITOR'/'LAB'): un ADMIN/LAB que
+      // también cubre turnos debe recibir el mismo recordatorio.
+      final haceTurnosMonitor =
+          (await storage.read(key: 'hace_turnos_monitor')) == 'true';
 
       if (token == null) return true; // Sin sesión → no hacer nada
 
@@ -36,7 +39,7 @@ void backgroundDispatcher() {
         case kTaskStock:
           await _checkStock(token);
         case kTaskSchedule:
-          await _checkSchedule(token, rol, username);
+          await _checkSchedule(token, haceTurnosMonitor, username);
       }
     } catch (_) {
       // Las notificaciones son no-críticas; ignoramos cualquier error
@@ -104,7 +107,7 @@ Future<void> _checkStock(String token) async {
 
 // ── Lógica de Horario ─────────────────────────────────────────────────────────
 
-Future<void> _checkSchedule(String token, String rol, String username) async {
+Future<void> _checkSchedule(String token, bool haceTurnosMonitor, String username) async {
   final now = DateTime.now();
   // Solo actuar en ventana de 40–54 min (15 min antes del próximo bloque)
   if (now.minute < 40 || now.minute > 54) return;
@@ -114,8 +117,8 @@ Future<void> _checkSchedule(String token, String rol, String username) async {
   final dayWeek = now.weekday - 1; // 0=Lun, 5=Sáb
   final hora    = now.hour;        // bloque actual
 
-  // 1. Monitor / LAB: 15 min antes de que TERMINE su bloque
-  if (rol == 'MONITOR' || rol == 'LAB') {
+  // 1. Quien cumple turnos: 15 min antes de que TERMINE su bloque
+  if (haceTurnosMonitor) {
     final prefKey = 'notif_monitor_${dateKey}_$hora';
     if (prefs.getBool(prefKey) != true) {
       final bloques = await _getHorarioEncargado(token);
