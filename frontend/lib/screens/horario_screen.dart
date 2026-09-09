@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -46,7 +47,7 @@ class _HorarioScreenState extends State<HorarioScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 3, vsync: this);
+    _tab = TabController(length: 5, vsync: this);
   }
 
   @override
@@ -86,6 +87,18 @@ class _HorarioScreenState extends State<HorarioScreen>
                   Text('Gestión',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 ])),
+                Tab(height: 36, child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.fact_check_outlined, size: 15),
+                  SizedBox(width: 5),
+                  Text('Seguimiento',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
+                Tab(height: 36, child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.list_alt_outlined, size: 15),
+                  SizedBox(width: 5),
+                  Text('Registros',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ])),
               ],
             ),
           ),
@@ -97,6 +110,8 @@ class _HorarioScreenState extends State<HorarioScreen>
                 _TabEncargados(),
                 _TabAsignaturas(),
                 _TabGestion(),
+                _TabSeguimientoMonitores(),
+                _TabRegistrosMonitores(),
               ],
             ),
           ),
@@ -2060,6 +2075,465 @@ class _TabGestionState extends State<_TabGestion>
       ],
     );
   }
+}
+
+// ── Tab Seguimiento Monitores ─────────────────────────────────────────────────
+
+class _CeldaHeader extends StatelessWidget {
+  final String texto;
+  const _CeldaHeader(this.texto);
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+    child: Text(texto,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)),
+  );
+}
+
+class _Badge extends StatelessWidget {
+  final String texto;
+  final Color color;
+  const _Badge(this.texto, this.color);
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(texto, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
+  );
+}
+
+class _TabSeguimientoMonitores extends StatefulWidget {
+  const _TabSeguimientoMonitores();
+  @override State<_TabSeguimientoMonitores> createState() => _TabSeguimientoMonitoresState();
+}
+
+class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
+    with AutomaticKeepAliveClientMixin {
+  @override bool get wantKeepAlive => true;
+
+  static DateTime _lunesDe(DateTime d) =>
+      DateTime(d.year, d.month, d.day).subtract(Duration(days: d.weekday - 1));
+
+  DateTime _lunes = _lunesDe(DateTime.now());
+  List<Map<String, dynamic>> _monitores = [];
+  bool _cargando = true;
+  final Set<int> _marcando = {};
+
+  String _semanaStr(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  String _fmt(double h) =>
+      h == h.truncateToDouble() ? '${h.toInt()} h' : '${h.toStringAsFixed(1)} h';
+
+  @override
+  void initState() { super.initState(); Future.microtask(_cargar); }
+
+  Future<void> _cargar() async {
+    if (!mounted) return;
+    setState(() => _cargando = true);
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      final resp = await dio.get('academico/seguimiento-monitores/',
+          queryParameters: {'semana': _semanaStr(_lunes)});
+      final monitores = List<Map<String, dynamic>>.from(resp.data['monitores'] ?? []);
+      if (!mounted) return;
+      setState(() => _monitores = monitores);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _monitores = []);
+    }
+    if (!mounted) return;
+    setState(() => _cargando = false);
+  }
+
+  void _cambiarSemana(int dias) {
+    setState(() => _lunes = _lunes.add(Duration(days: dias)));
+    _cargar();
+  }
+
+  Future<void> _marcar(int usuarioId, bool completada) async {
+    setState(() => _marcando.add(usuarioId));
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    try {
+      await dio.post('academico/seguimiento-monitores/', data: {
+        'usuario':       usuarioId,
+        'semana_inicio': _semanaStr(_lunes),
+        'completada':    completada,
+      });
+      await _cargar();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al actualizar: $e'), backgroundColor: kDanger));
+    } finally {
+      if (mounted) setState(() => _marcando.remove(usuarioId));
+    }
+  }
+
+  String _rangoSemana() {
+    final fin = _lunes.add(const Duration(days: 5));
+    String f(DateTime d) => '${d.day}/${d.month}';
+    return 'Semana del ${f(_lunes)} al ${f(fin)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    if (_cargando) return const Center(child: CircularProgressIndicator(color: kPrimary));
+
+    return RefreshIndicator(
+      onRefresh: _cargar,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Row(children: [
+            IconButton(
+              icon: const Icon(Icons.chevron_left, color: kPrimary),
+              onPressed: () => _cambiarSemana(-7),
+            ),
+            Expanded(
+              child: Text(_rangoSemana(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right, color: kPrimary),
+              onPressed: () => _cambiarSemana(7),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          if (_monitores.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(child: Text('No hay monitores activos registrados.',
+                  style: TextStyle(color: kTextMuted))),
+            )
+          else
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFDEE2E6)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Table(
+                columnWidths: const {
+                  0: FlexColumnWidth(3),
+                  1: FlexColumnWidth(2),
+                  2: FlexColumnWidth(2),
+                  3: FlexColumnWidth(2),
+                  4: IntrinsicColumnWidth(),
+                },
+                children: [
+                  TableRow(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF8F9FA),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                    ),
+                    children: const [
+                      _CeldaHeader('Monitor'),
+                      _CeldaHeader('Esperadas'),
+                      _CeldaHeader('Registradas'),
+                      _CeldaHeader('Estado'),
+                      _CeldaHeader(''),
+                    ],
+                  ),
+                  ..._monitores.map((m) {
+                    final esperadas   = (m['horas_esperadas'] as num).toDouble();
+                    final registradas = (m['horas_registradas'] as num).toDouble();
+                    final completada  = m['completada'] == true;
+                    final puedeMarcar = m['puede_marcar'] == true;
+                    final uid         = m['usuario'] as int;
+                    final marcando    = _marcando.contains(uid);
+                    final colorHoras  = registradas >= esperadas ? kSuccess : kWarning;
+
+                    return TableRow(
+                      decoration: const BoxDecoration(
+                        border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Text(m['nombre_completo']?.toString() ?? '',
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                          child: Text(_fmt(esperadas), style: const TextStyle(fontSize: 12)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                          child: Text(_fmt(registradas),
+                              style: TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.bold, color: colorHoras)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                          child: Tooltip(
+                            message: completada && m['marcado_por'] != null
+                                ? 'Marcada por ${m['marcado_por']}' : '',
+                            child: _Badge(
+                              completada ? 'Completada' : 'Pendiente',
+                              completada ? kSuccess : kTextMuted,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: !puedeMarcar
+                              ? const SizedBox.shrink()
+                              : marcando
+                                  ? const SizedBox(width: 18, height: 18,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary))
+                                  : IconButton(
+                                      tooltip: completada ? 'Desmarcar' : 'Marcar como completada',
+                                      icon: Icon(
+                                        completada ? Icons.check_box : Icons.check_box_outline_blank,
+                                        color: completada ? kSuccess : kTextMuted,
+                                        size: 20,
+                                      ),
+                                      onPressed: () => _marcar(uid, !completada),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                        ),
+                      ],
+                    );
+                  }),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Tab Registros Monitores ───────────────────────────────────────────────────
+
+class _TabRegistrosMonitores extends StatefulWidget {
+  const _TabRegistrosMonitores();
+  @override State<_TabRegistrosMonitores> createState() => _TabRegistrosMonitoresState();
+}
+
+class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
+    with AutomaticKeepAliveClientMixin {
+  @override bool get wantKeepAlive => true;
+
+  final _busquedaCtrl = TextEditingController();
+  Timer? _debounce;
+
+  DateTime? _fechaDesde;
+  DateTime? _fechaHasta;
+  List<Map<String, dynamic>> _registros = [];
+  bool _cargando = true;
+
+  @override
+  void initState() { super.initState(); Future.microtask(_cargar); }
+
+  @override
+  void dispose() { _busquedaCtrl.dispose(); _debounce?.cancel(); super.dispose(); }
+
+  String _fechaIso(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _cargar() async {
+    if (!mounted) return;
+    setState(() => _cargando = true);
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    final params = <String, dynamic>{};
+    if (_fechaDesde != null) params['fecha_desde'] = _fechaIso(_fechaDesde!);
+    if (_fechaHasta != null) params['fecha_hasta'] = _fechaIso(_fechaHasta!);
+    if (_busquedaCtrl.text.trim().isNotEmpty) params['nombre'] = _busquedaCtrl.text.trim();
+    try {
+      final resp = await dio.get('academico/registro-horas/', queryParameters: params);
+      final registros = List<Map<String, dynamic>>.from(
+          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      if (!mounted) return;
+      setState(() => _registros = registros);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _registros = []);
+    }
+    if (!mounted) return;
+    setState(() => _cargando = false);
+  }
+
+  void _onBusquedaChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), _cargar);
+  }
+
+  Future<void> _seleccionarFecha({required bool desde}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (desde ? _fechaDesde : _fechaHasta) ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null) return;
+    setState(() => desde ? _fechaDesde = picked : _fechaHasta = picked);
+    _cargar();
+  }
+
+  Widget _chipFecha({required bool desde}) {
+    final valor = desde ? _fechaDesde : _fechaHasta;
+    final label = valor == null
+        ? (desde ? 'Desde' : 'Hasta')
+        : '${valor.day.toString().padLeft(2, '0')}/${valor.month.toString().padLeft(2, '0')}/${valor.year}';
+    return InputChip(
+      avatar: const Icon(Icons.calendar_today_outlined, size: 14, color: kPrimary),
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      onPressed: () => _seleccionarFecha(desde: desde),
+      onDeleted: valor == null ? null : () {
+        setState(() => desde ? _fechaDesde = null : _fechaHasta = null);
+        _cargar();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          TextField(
+            controller: _busquedaCtrl,
+            onChanged: _onBusquedaChanged,
+            decoration: InputDecoration(
+              hintText: 'Buscar por nombre de monitor…',
+              prefixIcon: const Icon(Icons.search, size: 18),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            _chipFecha(desde: true),
+            _chipFecha(desde: false),
+          ]),
+        ]),
+      ),
+      const Divider(height: 1),
+      Expanded(
+        child: _cargando
+            ? const Center(child: CircularProgressIndicator(color: kPrimary))
+            : _registros.isEmpty
+                ? const Center(child: Text('No hay registros para los filtros seleccionados.',
+                    style: TextStyle(color: kTextMuted)))
+                : RefreshIndicator(
+                    onRefresh: _cargar,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LayoutBuilder(builder: (_, box) {
+                            const double kMin = 720;
+                            final w = box.maxWidth < kMin ? kMin : box.maxWidth;
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: SizedBox(width: w, child: SingleChildScrollView(child: _buildTabla())),
+                            );
+                          }),
+                        ),
+                      ),
+                    ),
+                  ),
+      ),
+      if (!_cargando && _registros.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'Mostrando ${_registros.length} registro${_registros.length != 1 ? "s" : ""}',
+              style: const TextStyle(fontSize: 12, color: kTextMuted),
+            ),
+          ),
+        ),
+    ]);
+  }
+
+  Widget _buildTabla() {
+    return Table(
+      columnWidths: const {
+        0: FlexColumnWidth(2),
+        1: FlexColumnWidth(1.6),
+        2: FixedColumnWidth(90),
+        3: FixedColumnWidth(70),
+        4: FlexColumnWidth(3),
+        5: FixedColumnWidth(100),
+      },
+      border: const TableBorder(horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
+      children: [
+        _headerRow(['Monitor', 'Programa', 'Fecha', 'Duración', 'Descripción', 'Fuente']),
+        ..._registros.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final r   = entry.value;
+          final duracion = double.tryParse(r['duracion_horas'].toString()) ?? 0;
+          final fuente   = r['fuente']?.toString() ?? 'APP';
+          return TableRow(
+            decoration: BoxDecoration(color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white),
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Text(r['nombre_monitor']?.toString() ?? '',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: Text(r['nombre_programa']?.toString() ?? '—',
+                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: Text(r['fecha_actividad']?.toString() ?? '—', style: const TextStyle(fontSize: 12)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: Text('${duracion == duracion.truncateToDouble() ? duracion.toInt() : duracion} h',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: Text(r['descripcion']?.toString() ?? '',
+                    maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                child: _Badge(fuente == 'FORM' ? 'Google Form' : 'App', fuente == 'FORM' ? kWarning : kPrimary),
+              ),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  TableRow _headerRow(List<String> cols) => TableRow(
+    decoration: const BoxDecoration(color: kPrimary),
+    children: cols.map((h) => Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      child: Text(h,
+          softWrap: false,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+    )).toList(),
+  );
 }
 
 // ── Diálogo: seleccionar encargado ────────────────────────────────────────────

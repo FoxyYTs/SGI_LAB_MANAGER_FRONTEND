@@ -39,4 +39,21 @@ class Perm {
     'informes.ver':          'Ver informes',
     'informes.gestionar':    'Gestionar informes',
   }[codigo] ?? codigo;
+
+  /// Descripción de qué habilita cada permiso — debe coincidir con
+  /// PERMISOS en backend/usuarios/management/commands/seed_permisos.py
+  static String descripcion(String codigo) => const {
+    'inventario.ver':        'Acceder al listado de insumos y su stock',
+    'inventario.gestionar':  'Crear, editar y eliminar insumos, tipos, ubicaciones y unidades',
+    'prestamos.ver':         'Consultar el listado de préstamos y devoluciones',
+    'prestamos.gestionar':   'Aprobar, rechazar y registrar devoluciones',
+    'bitacora.ver':          'Consultar el historial de movimientos de inventario',
+    'bitacora.gestionar':    'Registrar movimientos manuales (entrada, ajuste, rotura)',
+    'academico.ver':         'Consultar áreas, asignaturas y guías de práctica',
+    'academico.gestionar':   'Crear y editar áreas, asignaturas y guías',
+    'configuracion.gestion': 'Gestionar tipos de insumo, ubicaciones y unidades de medida',
+    'configuracion.roles':   'Modificar permisos por rol y por usuario',
+    'informes.ver':          'Generar y descargar informes PDF del sistema',
+    'informes.gestionar':    'Subir y eliminar informes manuales',
+  }[codigo] ?? '';
 }
