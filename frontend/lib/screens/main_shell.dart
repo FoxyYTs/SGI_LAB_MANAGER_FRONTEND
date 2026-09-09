@@ -62,10 +62,12 @@ class _MainShellState extends State<MainShell> {
   void _actualizarReminder() {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
-    if (auth.rol == 'MONITOR' && !_reminderIniciado) {
+    // hace_turnos_monitor (no rol == 'MONITOR'): un ADMIN/LAB que también
+    // cubre turnos debe recibir el mismo recordatorio de fin de turno.
+    if (auth.haceTurnosMonitor && !_reminderIniciado) {
       _reminderIniciado = true;
       MonitorReminderService.iniciar(context, auth);
-    } else if (auth.rol != 'MONITOR' && _reminderIniciado) {
+    } else if (!auth.haceTurnosMonitor && _reminderIniciado) {
       _reminderIniciado = false;
       MonitorReminderService.detener();
     }
