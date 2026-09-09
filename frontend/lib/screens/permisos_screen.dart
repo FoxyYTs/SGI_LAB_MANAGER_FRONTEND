@@ -272,9 +272,10 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   Set<String>                _extraPermisos = {};
   // codigo → id del PermisoUsuario
   Map<String, int>           _extraIds      = {};
-  bool _loadingUsuarios = true;
-  bool _loadingPermisos = false;
-  bool _cambiandoRol    = false;
+  bool _loadingUsuarios  = true;
+  bool _loadingPermisos  = false;
+  bool _cambiandoRol     = false;
+  bool _cambiandoTurnos  = false;
 
   final TextEditingController _busquedaCtrl = TextEditingController();
   String _query = '';
@@ -375,6 +376,35 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
       }
     } finally {
       if (mounted) setState(() => _cambiandoRol = false);
+    }
+  }
+
+  Future<void> _toggleHaceTurnosMonitor(bool nuevoValor) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    final uid  = _seleccionado!['id'];
+    setState(() => _cambiandoTurnos = true);
+    try {
+      await dio.patch('usuarios/hace-turnos-monitor/$uid/', data: {'valor': nuevoValor});
+      setState(() {
+        _seleccionado = {
+          ..._seleccionado!,
+          'perfil': {
+            ...(_seleccionado!['perfil'] as Map? ?? {}),
+            'hace_turnos_monitor': nuevoValor,
+          },
+        };
+        final idx = _usuarios.indexWhere((u) => u['id'] == uid);
+        if (idx != -1) _usuarios[idx] = _seleccionado!;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al actualizar'), backgroundColor: kDanger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cambiandoTurnos = false);
     }
   }
 
@@ -729,6 +759,10 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
     // actual tenga el permiso 'configuracion.roles'. El dropdown debe reflejar
     // esa misma restricción o el LAB vería un control que siempre falla.
     final puedeCambiarRol = auth.rol == 'ADMIN';
+    final haceTurnosMonitor = (_seleccionado!['perfil']?['hace_turnos_monitor'] ?? false) as bool;
+    // Mismo permiso que el backend (TieneConfiguracionRoles): no otorga
+    // autoridad nueva, así que no hace falta restringirlo a ADMIN como el rol.
+    final puedeEditarTurnos = auth.can(Perm.configuracionRoles);
     final iniciales   = (nombre.isEmpty ? username : nombre)
         .split(' ').take(2).map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
 
@@ -827,6 +861,41 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                 ),
               ),
             ],
+          ]),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Cumple turnos de monitor (independiente del rol) ────────────────
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(10),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(children: [
+            const Icon(Icons.badge_outlined, size: 18, color: kTextMuted),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Cumple turnos de monitor',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              const Text(
+                'Independiente del rol — aparece en seguimiento de horas y recibe '
+                'el recordatorio de fin de turno, aunque no tenga rol MONITOR.',
+                style: TextStyle(fontSize: 11, color: kTextMuted),
+              ),
+            ])),
+            const SizedBox(width: 8),
+            if (_cambiandoTurnos)
+              const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
+            else
+              Switch(
+                value: haceTurnosMonitor,
+                activeThumbColor: kPrimary,
+                onChanged: puedeEditarTurnos
+                    ? (v) => _toggleHaceTurnosMonitor(v)
+                    : null,
+              ),
           ]),
         ),
         const SizedBox(height: 16),
