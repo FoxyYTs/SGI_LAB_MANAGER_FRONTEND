@@ -32,17 +32,22 @@ class AuthProvider with ChangeNotifier {
   String?      _token;
   String?      _refreshToken;
   String?      _rol;
+  bool         _haceTurnosMonitor = false;
   String?      _username;
   String?      _fotoUrl;
   Set<String>  _permisos = {};
   Timer?       _medianochTimer;
 
-  bool        get isAuthenticated => _token != null;
-  String?     get rol             => _rol;
-  String?     get token           => _token;
-  String?     get username        => _username;
-  String?     get fotoUrl         => _fotoUrl;
-  Set<String> get permisos        => _permisos;
+  bool        get isAuthenticated     => _token != null;
+  String?     get rol                 => _rol;
+  /// Cumple turnos de monitor, independiente del rol — ver
+  /// Perfil.hace_turnos_monitor en el backend. Un ADMIN/LAB que también
+  /// monitorea tiene esto en `true` sin necesitar rol == 'MONITOR'.
+  bool        get haceTurnosMonitor   => _haceTurnosMonitor;
+  String?     get token               => _token;
+  String?     get username            => _username;
+  String?     get fotoUrl             => _fotoUrl;
+  Set<String> get permisos            => _permisos;
 
   /// Verifica si el usuario tiene un permiso concreto.
   bool can(String permiso) => _permisos.contains(permiso);
@@ -71,10 +76,11 @@ class AuthProvider with ChangeNotifier {
         }
       }
 
-      _refreshToken = await _storage.read(key: 'refresh_token');
-      _rol          = await _storage.read(key: 'rol');
-      _username     = await _storage.read(key: 'username');
-      _fotoUrl      = await _storage.read(key: 'foto_url');
+      _refreshToken      = await _storage.read(key: 'refresh_token');
+      _rol               = await _storage.read(key: 'rol');
+      _haceTurnosMonitor = (await _storage.read(key: 'hace_turnos_monitor')) == 'true';
+      _username          = await _storage.read(key: 'username');
+      _fotoUrl           = await _storage.read(key: 'foto_url');
 
       final permsJson = await _storage.read(key: 'permisos');
       if (permsJson != null) {
@@ -104,6 +110,7 @@ class AuthProvider with ChangeNotifier {
                 // Token expirado o blacklisteado: forzar logout
                 await _storage.deleteAll();
                 _token = _refreshToken = _rol = _username = null;
+                _haceTurnosMonitor = false;
                 _permisos = {};
                 notifyListeners();
                 return;
@@ -128,6 +135,7 @@ class AuthProvider with ChangeNotifier {
       // la sesión queda vacía y el usuario verá la pantalla de login.
       debugPrint('[AuthProvider] Error restaurando sesión: $e');
       _token = _refreshToken = _rol = _username = null;
+      _haceTurnosMonitor = false;
       _permisos = {};
     }
     notifyListeners();
@@ -194,10 +202,15 @@ class AuthProvider with ChangeNotifier {
       final dio  = ApiClient.instance.authenticatedDio(_token);
       final resp = await dio.get('usuarios/mis-permisos/');
       final list = List<String>.from(resp.data['permisos'] as List);
-      _permisos  = Set<String>.from(list);
-      _rol       = resp.data['rol'] as String?;
+      _permisos          = Set<String>.from(list);
+      _rol               = resp.data['rol'] as String?;
+      _haceTurnosMonitor = resp.data['hace_turnos_monitor'] as bool? ?? false;
       await _storage.write(key: 'permisos', value: jsonEncode(list));
       if (_rol != null) await _storage.write(key: 'rol', value: _rol);
+      await _storage.write(
+        key: 'hace_turnos_monitor',
+        value: _haceTurnosMonitor.toString(),
+      );
     } catch (e) {
       debugPrint('Error cargando permisos: $e');
       _permisos = {};
@@ -315,12 +328,13 @@ class AuthProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('[AuthProvider] Error al borrar storage en logout: $e');
     }
-    _token        = null;
-    _refreshToken = null;
-    _rol          = null;
-    _username     = null;
-    _fotoUrl      = null;
-    _permisos     = {};
+    _token             = null;
+    _refreshToken      = null;
+    _rol               = null;
+    _haceTurnosMonitor = false;
+    _username          = null;
+    _fotoUrl           = null;
+    _permisos          = {};
     notifyListeners();
   }
 
