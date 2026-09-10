@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding, WidgetsBindingObserver, AppLifecycleState;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../core/api/api_client.dart';
@@ -18,9 +19,12 @@ import '../services/background_tasks.dart';
 /// - [cargarSesion]: restaura la sesión desde `FlutterSecureStorage` al iniciar.
 /// - [logout]: borra todos los datos de la sesión del almacenamiento seguro.
 ///
-/// Los permisos se almacenan localmente (cache) y se recargan en cada login.
+/// Los permisos se almacenan localmente (cache) y se recargan en cada login,
+/// y también cada vez que la app vuelve a primer plano (ver
+/// [didChangeAppLifecycleState]) — así un cambio de permisos hecho por un
+/// ADMIN desde otra sesión se refleja sin necesitar cerrar sesión.
 /// El acceso a funciones de la UI usa [can] con las constantes de [Perm].
-class AuthProvider with ChangeNotifier {
+class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(),
     webOptions: WebOptions(
@@ -28,6 +32,27 @@ class AuthProvider with ChangeNotifier {
       publicKey: 'sgi_lab_key',
     ),
   );
+
+  AuthProvider() {
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Al volver a primer plano, refresca permisos/rol/hace_turnos_monitor
+  /// desde el servidor — cubre el caso de que otro ADMIN haya cambiado algo
+  /// mientras la app estaba en segundo plano, sin exigir logout manual.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && isAuthenticated) {
+      recargarPermisos();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _medianochTimer?.cancel();
+    super.dispose();
+  }
 
   String?      _token;
   String?      _refreshToken;
