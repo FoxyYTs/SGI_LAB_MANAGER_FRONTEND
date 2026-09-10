@@ -160,6 +160,11 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
         children: [
           const Text('ADMIN siempre tiene todos los permisos y no puede modificarse.',
               style: TextStyle(color: kTextMuted, fontSize: 12)),
+          const Text(
+            'ESTUDIANTE nunca tiene permisos — recién registrado no debe tener '
+            'acceso a nada hasta que se le asigne otro rol.',
+            style: TextStyle(color: kTextMuted, fontSize: 12),
+          ),
           const SizedBox(height: 16),
           LayoutBuilder(builder: (_, box) {
             const double kMin = 470;
@@ -222,15 +227,19 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
                       ),
                     ),
                     ..._roles.map((rol) {
-                      final esAdmin   = rol == 'ADMIN';
-                      final tienePermiso = esAdmin || (_asignados[rol]?.contains(codigo) ?? false);
+                      final esAdmin      = rol == 'ADMIN';
+                      final esEstudiante = rol == 'ESTUDIANTE';
+                      // ESTUDIANTE nunca tiene permisos — ver nota arriba de la tabla.
+                      final tienePermiso = esAdmin ||
+                          (!esEstudiante && (_asignados[rol]?.contains(codigo) ?? false));
                       return Padding(
                         padding: const EdgeInsets.all(4),
                         child: Checkbox(
                           value: tienePermiso,
                           activeColor: kPrimary,
-                          // ADMIN siempre marcado y no editable
-                          onChanged: esAdmin
+                          // ADMIN siempre marcado y no editable; ESTUDIANTE nunca
+                          // marcado y no editable — el backend rechaza el intento igual.
+                          onChanged: (esAdmin || esEstudiante)
                               ? null
                               : (v) => _toggle(rol, codigo, v!),
                         ),
@@ -753,7 +762,8 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
     final rol         = (_seleccionado!['perfil']?['rol'] ?? '') as String;
     final esMiUsuario = auth.username == username;
     final isActivo    = _seleccionado!['is_active'] as bool? ?? true;
-    final esAdmin     = rol == 'ADMIN';
+    final esAdmin      = rol == 'ADMIN';
+    final esEstudiante = rol == 'ESTUDIANTE';
     // Cambiar el rol de un usuario es más sensible que gestionar permisos (puede
     // otorgar ADMIN) — el backend lo restringe solo a ADMIN aunque el usuario
     // actual tenga el permiso 'configuracion.roles'. El dropdown debe reflejar
@@ -941,6 +951,23 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                   ]),
                 ),
 
+              // Banner ESTUDIANTE
+              if (esEstudiante)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: kDanger.withValues(alpha: 0.08),
+                  child: const Row(children: [
+                    Icon(Icons.info_outline, color: kDanger, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(child: Text(
+                      'ESTUDIANTE nunca tiene permisos, otorgados o no — '
+                      'promuévelo a otro rol primero.',
+                      style: TextStyle(color: kDanger, fontSize: 12),
+                    )),
+                  ]),
+                ),
+
               // Cabecera tabla
               Container(
                 color: const Color(0xFFF8F9FA),
@@ -994,7 +1021,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                     )),
                     // EXTRA
                     SizedBox(width: 80, child: Center(
-                      child: esAdmin || delRol
+                      child: esAdmin || esEstudiante || delRol
                           ? const Icon(Icons.remove, size: 16, color: Color(0xFFDEE2E6))
                           : Checkbox(
                               value: extra,
