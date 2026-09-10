@@ -760,9 +760,12 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
     // esa misma restricción o el LAB vería un control que siempre falla.
     final puedeCambiarRol = auth.rol == 'ADMIN';
     final haceTurnosMonitor = (_seleccionado!['perfil']?['hace_turnos_monitor'] ?? false) as bool;
-    // Mismo permiso que el backend (TieneConfiguracionRoles): no otorga
-    // autoridad nueva, así que no hace falta restringirlo a ADMIN como el rol.
-    final puedeEditarTurnos = auth.can(Perm.configuracionRoles);
+    // Mismo permiso que el backend: 'academico.gestionar' (el mismo que ya
+    // gestiona HorarioEncargado, el horario de turnos en sí), no
+    // 'configuracion.roles' — ese es un meta-permiso deliberadamente más
+    // restrictivo (ni LAB lo tiene por defecto) porque puede otorgar
+    // permisos a otros; esto no otorga autoridad nueva.
+    final puedeEditarTurnos = auth.can(Perm.academicoGestionar);
     final iniciales   = (nombre.isEmpty ? username : nombre)
         .split(' ').take(2).map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
 
