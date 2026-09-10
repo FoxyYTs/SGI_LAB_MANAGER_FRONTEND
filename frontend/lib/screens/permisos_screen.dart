@@ -687,7 +687,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                   ),
                   subtitle: Text(rol,
                       style: const TextStyle(fontSize: 11, color: kTextMuted)),
-                  trailing: !esMiUsuario
+                  trailing: (!esMiUsuario && auth.can(Perm.usuariosGestionar))
                       ? PopupMenuButton<String>(
                           iconSize: 18,
                           padding: EdgeInsets.zero,
@@ -860,7 +860,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                         fontWeight: FontWeight.w600)),
               ]),
             ]),
-            if (!esMiUsuario) ...[
+            if (!esMiUsuario && auth.can(Perm.usuariosGestionar)) ...[
               const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: () => _abrirEditarPerfil(_seleccionado!),
