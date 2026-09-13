@@ -28,6 +28,7 @@ import 'core/navigation_service.dart';
 import 'core/log_service.dart';
 import 'services/notification_service.dart';
 import 'services/background_tasks.dart';
+import 'services/update_service.dart' show initAppVersion, kAppVersion;
 
 /// Handler de FCM cuando la app está cerrada (terminated).
 /// Debe ser top-level y decorado con @pragma — requisito de Flutter/Dart.
@@ -45,9 +46,14 @@ Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Cargar la versión real de la app ANTES que nada más — el header
+  // X-App-Version (ver ApiClient) sale en la primera petición al servidor,
+  // que puede pasar apenas unas líneas más abajo (auth.cargarSesion()).
+  await initAppVersion();
+
   // Inicializar log en archivo si FILE_LOG=true.
   await LogService.init();
-  LogService.log('main() iniciado');
+  LogService.log('main() iniciado — versión $kAppVersion');
 
   // Captura errores de widgets/frames de Flutter.
   FlutterError.onError = (details) {

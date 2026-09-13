@@ -31,9 +31,14 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   String? _programaId;
   final List<_ItemSolicitud> _items = [_ItemSolicitud()];
 
-  bool _cargando = true;
+  // true cuando el usuario completó la identificación y presionó "Continuar"
+  bool _identificado = false;
+  bool _cargando = false;
   bool _enviando = false;
   bool _enviado  = false;
+  bool _idValidado = false;   // activa los mensajes de error en la identificación
+
+  final _idFormKey = GlobalKey<FormState>();
 
   late final Dio _dio;
 
@@ -45,7 +50,15 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ));
-    _cargar();
+    _cargarProgramas();
+  }
+
+  Future<void> _cargarProgramas() async {
+    try {
+      final r = await _dio.get('academico/programas-publico/');
+      if (!mounted) return;
+      setState(() => _programas = List<Map<String, dynamic>>.from(r.data));
+    } catch (_) {}
   }
 
   @override
@@ -56,19 +69,21 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
     super.dispose();
   }
 
-  Future<void> _cargar() async {
+  Future<void> _continuar() async {
+    setState(() => _idValidado = true);
+    if (!(_idFormKey.currentState?.validate() ?? false)) return;
+    setState(() => _cargando = true);
     try {
-      final results = await Future.wait([
-        _dio.get('inventario/lista/'),
-        _dio.get('academico/programas-publico/'),
-      ]);
-      final d = results[0].data;
+      final r = await _dio.get('inventario/lista/');
+      if (!mounted) return;
+      final d = r.data;
       setState(() {
-        _insumos   = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-        _programas = List<Map<String, dynamic>>.from(results[1].data);
-        _cargando  = false;
+        _insumos      = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _identificado = true;
+        _cargando     = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _cargando = false);
     }
   }
@@ -96,12 +111,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       if (e.response?.statusCode == 429) {
         msg = 'Se excedió la cantidad de registros que puedes hacer por hora. Por favor, intenta más tarde.';
       } else {
-        final data = e.response?.data;
-        if (data is Map && data.isNotEmpty) {
-          msg = data.values.first.toString();
-        } else {
-          msg = 'Error al enviar la solicitud. Intenta de nuevo.';
-        }
+        msg = _extraerMensajeError(e.response?.data);
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -111,6 +121,36 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
+  }
+
+  // Extrae el primer texto legible de las respuestas de error de DRF,
+  // que pueden ser strings, listas o mapas anidados (ej: {detalles:[{presentacion:[...]}]}).
+  String _extraerMensajeError(dynamic data) {
+    if (data == null) return 'Error al enviar la solicitud. Intenta de nuevo.';
+    if (data is String) return data.isNotEmpty ? data : 'Error al enviar la solicitud.';
+    if (data is List) {
+      if (data.isEmpty) return 'Error al enviar la solicitud.';
+      return _extraerMensajeError(data.first);
+    }
+    if (data is Map) {
+      // Claves de error de alto nivel primero
+      for (final k in ['detail', 'error', 'non_field_errors']) {
+        if (data.containsKey(k)) return _extraerMensajeError(data[k]);
+      }
+      // Errores en los detalles del préstamo: {detalles: [{campo: ["msg"]}]}
+      if (data.containsKey('detalles')) {
+        final d = data['detalles'];
+        if (d is List && d.isNotEmpty && d.first is Map) {
+          final primerDetalle = d.first as Map;
+          if (primerDetalle.isNotEmpty) {
+            return _extraerMensajeError(primerDetalle.values.first);
+          }
+        }
+      }
+      // Cualquier otro campo de validación
+      if (data.isNotEmpty) return _extraerMensajeError(data.values.first);
+    }
+    return 'Error al enviar la solicitud. Intenta de nuevo.';
   }
 
   // ── UI helpers ──────────────────────────────────────────────────────────────
@@ -205,7 +245,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   Widget _buildScrollBody(bool wide) {
     final content = Column(children: [
       _header(),
-      _buildFormBody(wide),
+      _identificado ? _buildFormBody(wide) : _buildIdentificacion(wide),
     ]);
 
     if (!wide) {
@@ -216,7 +256,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(vertical: 32),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
+          constraints: BoxConstraints(maxWidth: _identificado ? 680 : 600),
           child: Card(
             elevation: 3,
             shadowColor: Colors.black26,
@@ -225,6 +265,109 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
             child: content,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildIdentificacion(bool wide) {
+    final padding = wide
+        ? const EdgeInsets.fromLTRB(28, 24, 28, 28)
+        : const EdgeInsets.all(16);
+
+    Widget field(TextEditingController ctrl, String label, IconData icon, {
+      TextInputType? kb,
+      String? Function(String?)? validator,
+    }) =>
+        TextFormField(
+          controller: ctrl,
+          keyboardType: kb,
+          autovalidateMode: _idValidado
+              ? AutovalidateMode.onUserInteraction
+              : AutovalidateMode.disabled,
+          decoration: _deco(label, icon),
+          validator: validator,
+        );
+
+    Widget row2(Widget a, Widget b) => Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [Expanded(child: a), const SizedBox(width: 14), Expanded(child: b)],
+    );
+
+    final fNit = field(_nitCtrl, 'Cédula / Carnet *', Icons.badge_outlined,
+        kb: TextInputType.number,
+        validator: (v) => v!.trim().isEmpty ? 'Requerido' : null);
+
+    final fNom = field(_nomCtrl, 'Nombre y apellido *', Icons.person_outline,
+        validator: (v) => v!.trim().isEmpty ? 'Requerido' : null);
+
+    final fCorr = field(_corrCtrl, 'Correo electrónico *', Icons.email_outlined,
+        kb: TextInputType.emailAddress,
+        validator: (v) {
+          if (v!.trim().isEmpty) return 'Requerido';
+          if (!v.contains('@')) return 'Correo inválido';
+          return null;
+        });
+
+    final fCel = field(_celCtrl, 'Número de celular *', Icons.phone_outlined,
+        kb: TextInputType.phone,
+        validator: (v) => v!.trim().isEmpty ? 'Requerido' : null);
+
+    final fProg = DropdownButtonFormField<String>(
+      initialValue: _programaId,
+      autovalidateMode: _idValidado
+          ? AutovalidateMode.onUserInteraction
+          : AutovalidateMode.disabled,
+      decoration: _deco('Programa académico *', Icons.school_outlined),
+      items: _programas.map((p) => DropdownMenuItem(
+        value: p['id'].toString(),
+        child: Text(p['nombre'] ?? '', style: const TextStyle(fontSize: 13)),
+      )).toList(),
+      onChanged: (v) => setState(() => _programaId = v),
+      validator: (_) => _programaId == null ? 'Selecciona tu programa' : null,
+    );
+
+    return Form(
+      key: _idFormKey,
+      child: Padding(
+        padding: padding,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text(
+            'Para solicitar material, primero completa tus datos.',
+            style: TextStyle(fontSize: 14, color: Colors.black54),
+          ),
+          const SizedBox(height: 20),
+          if (wide) ...[
+            row2(fNit, fNom),
+            const SizedBox(height: 12),
+            row2(fCorr, fCel),
+          ] else ...[
+            fNit, const SizedBox(height: 10),
+            fNom, const SizedBox(height: 10),
+            fCorr, const SizedBox(height: 10),
+            fCel,
+          ],
+          const SizedBox(height: 12),
+          _programas.isEmpty
+              ? const Center(child: SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary)))
+              : fProg,
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _cargando ? null : _continuar,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: _cargando
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ]),
       ),
     );
   }
@@ -253,14 +396,20 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            onPressed: () => setState(() {
-              _enviado = false;
-              _nitCtrl.clear(); _nomCtrl.clear(); _corrCtrl.clear();
-              _celCtrl.clear(); _asgCtrl.clear(); _obsCtrl.clear();
-              _programaId = null;
-              for (final i in _items) { i.dispose(); }
-              _items..clear()..add(_ItemSolicitud());
-            }),
+            onPressed: () {
+              setState(() {
+                _enviado      = false;
+                _identificado = false;
+                _idValidado   = false;
+                _insumos      = [];
+                _nitCtrl.clear(); _nomCtrl.clear(); _corrCtrl.clear();
+                _celCtrl.clear(); _asgCtrl.clear(); _obsCtrl.clear();
+                _programaId = null;
+                for (final i in _items) { i.dispose(); }
+                _items..clear()..add(_ItemSolicitud());
+              });
+              _cargarProgramas();
+            },
             child: const Text('Nueva solicitud'),
           ),
         ),
@@ -513,7 +662,9 @@ class _DialogMaterialState extends State<_DialogMaterial> {
   @override
   Widget build(BuildContext context) {
     final filtrados = widget.insumos
-        .where((i) => (i['nombre_insumo']?.toString() ?? '').toLowerCase().contains(_query.toLowerCase()))
+        .where((i) =>
+            ((i['presentaciones'] as List?)?.isNotEmpty ?? false) &&
+            (i['nombre_insumo']?.toString() ?? '').toLowerCase().contains(_query.toLowerCase()))
         .toList();
     return AlertDialog(
       title: const Text('Seleccionar material', style: TextStyle(color: kPrimary, fontSize: 16)),

@@ -98,6 +98,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
       ]);
       List<Map<String, dynamic>> parse(dynamic d) =>
           List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+      if (!mounted) return;
       setState(() {
         _tipos       = parse(results[0].data);
         _ubicaciones = parse(results[1].data);
@@ -106,7 +107,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
       });
       _precargarEdicion();
     } catch (_) {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
