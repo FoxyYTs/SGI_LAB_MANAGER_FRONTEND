@@ -142,6 +142,30 @@ Requiere el [backend](https://github.com/FoxyYTs/SGI_LAB_MANAGER_BACKEND) corrie
 
 ---
 
+## Tests de integración
+
+Suite de **22 tests end-to-end** que corren la app real en Linux contra el servidor de desarrollo (`dev-apisgi.foxyyts.qzz.io`). Cubren login, inventario, préstamos, bitácora y SGA.
+
+```bash
+flutter test integration_test/run_all_test.dart \
+  --dart-define=SERVER_URL=https://dev-apisgi.foxyyts.qzz.io \
+  --dart-define=TEST_USER=TuUsuario \
+  --dart-define=TEST_PASSWORD=TuClave \
+  -d linux
+```
+
+| Módulo | Tests | Qué verifica |
+| --- | --- | --- |
+| Login | 3 | Campos visibles, credenciales inválidas, login exitoso → sidebar |
+| Inventario | 4 | Carga de lista, filtro por tipo, chips críticos/bajos, apertura de detalle |
+| Préstamos | 4 | Lista carga, formulario abre, validación vacío, registro completo |
+| Bitácora | 5 | Carga, chips de filtro, filtrar Entrada, filtrar Salida, tiene movimientos |
+| SGA | 6 | Botón en tabla, 3 pestañas, Datos SGA, Editar, Colmena ARL, diálogo etiqueta GHS |
+
+Los archivos están en `frontend/integration_test/`. Las credenciales se pasan por `--dart-define` y nunca se guardan en el código.
+
+---
+
 ## Licencia
 
 GNU Affero General Public License v3.0 — ver [LICENSE](LICENSE).

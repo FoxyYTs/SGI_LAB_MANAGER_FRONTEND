@@ -160,6 +160,11 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
         children: [
           const Text('ADMIN siempre tiene todos los permisos y no puede modificarse.',
               style: TextStyle(color: kTextMuted, fontSize: 12)),
+          const Text(
+            'ESTUDIANTE nunca tiene permisos — recién registrado no debe tener '
+            'acceso a nada hasta que se le asigne otro rol.',
+            style: TextStyle(color: kTextMuted, fontSize: 12),
+          ),
           const SizedBox(height: 16),
           LayoutBuilder(builder: (_, box) {
             const double kMin = 470;
@@ -222,15 +227,19 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
                       ),
                     ),
                     ..._roles.map((rol) {
-                      final esAdmin   = rol == 'ADMIN';
-                      final tienePermiso = esAdmin || (_asignados[rol]?.contains(codigo) ?? false);
+                      final esAdmin      = rol == 'ADMIN';
+                      final esEstudiante = rol == 'ESTUDIANTE';
+                      // ESTUDIANTE nunca tiene permisos — ver nota arriba de la tabla.
+                      final tienePermiso = esAdmin ||
+                          (!esEstudiante && (_asignados[rol]?.contains(codigo) ?? false));
                       return Padding(
                         padding: const EdgeInsets.all(4),
                         child: Checkbox(
                           value: tienePermiso,
                           activeColor: kPrimary,
-                          // ADMIN siempre marcado y no editable
-                          onChanged: esAdmin
+                          // ADMIN siempre marcado y no editable; ESTUDIANTE nunca
+                          // marcado y no editable — el backend rechaza el intento igual.
+                          onChanged: (esAdmin || esEstudiante)
                               ? null
                               : (v) => _toggle(rol, codigo, v!),
                         ),
@@ -272,9 +281,10 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
   Set<String>                _extraPermisos = {};
   // codigo → id del PermisoUsuario
   Map<String, int>           _extraIds      = {};
-  bool _loadingUsuarios = true;
-  bool _loadingPermisos = false;
-  bool _cambiandoRol    = false;
+  bool _loadingUsuarios  = true;
+  bool _loadingPermisos  = false;
+  bool _cambiandoRol     = false;
+  bool _cambiandoTurnos  = false;
 
   final TextEditingController _busquedaCtrl = TextEditingController();
   String _query = '';
@@ -375,6 +385,35 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
       }
     } finally {
       if (mounted) setState(() => _cambiandoRol = false);
+    }
+  }
+
+  Future<void> _toggleHaceTurnosMonitor(bool nuevoValor) async {
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    final uid  = _seleccionado!['id'];
+    setState(() => _cambiandoTurnos = true);
+    try {
+      await dio.patch('usuarios/hace-turnos-monitor/$uid/', data: {'valor': nuevoValor});
+      setState(() {
+        _seleccionado = {
+          ..._seleccionado!,
+          'perfil': {
+            ...(_seleccionado!['perfil'] as Map? ?? {}),
+            'hace_turnos_monitor': nuevoValor,
+          },
+        };
+        final idx = _usuarios.indexWhere((u) => u['id'] == uid);
+        if (idx != -1) _usuarios[idx] = _seleccionado!;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error al actualizar'), backgroundColor: kDanger),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cambiandoTurnos = false);
     }
   }
 
@@ -648,7 +687,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                   ),
                   subtitle: Text(rol,
                       style: const TextStyle(fontSize: 11, color: kTextMuted)),
-                  trailing: !esMiUsuario
+                  trailing: (!esMiUsuario && auth.can(Perm.usuariosGestionar))
                       ? PopupMenuButton<String>(
                           iconSize: 18,
                           padding: EdgeInsets.zero,
@@ -723,12 +762,20 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
     final rol         = (_seleccionado!['perfil']?['rol'] ?? '') as String;
     final esMiUsuario = auth.username == username;
     final isActivo    = _seleccionado!['is_active'] as bool? ?? true;
-    final esAdmin     = rol == 'ADMIN';
+    final esAdmin      = rol == 'ADMIN';
+    final esEstudiante = rol == 'ESTUDIANTE';
     // Cambiar el rol de un usuario es más sensible que gestionar permisos (puede
     // otorgar ADMIN) — el backend lo restringe solo a ADMIN aunque el usuario
     // actual tenga el permiso 'configuracion.roles'. El dropdown debe reflejar
     // esa misma restricción o el LAB vería un control que siempre falla.
     final puedeCambiarRol = auth.rol == 'ADMIN';
+    final haceTurnosMonitor = (_seleccionado!['perfil']?['hace_turnos_monitor'] ?? false) as bool;
+    // Mismo permiso que el backend: 'academico.gestionar' (el mismo que ya
+    // gestiona HorarioEncargado, el horario de turnos en sí), no
+    // 'configuracion.roles' — ese es un meta-permiso deliberadamente más
+    // restrictivo (ni LAB lo tiene por defecto) porque puede otorgar
+    // permisos a otros; esto no otorga autoridad nueva.
+    final puedeEditarTurnos = auth.can(Perm.academicoGestionar);
     final iniciales   = (nombre.isEmpty ? username : nombre)
         .split(' ').take(2).map((p) => p.isNotEmpty ? p[0].toUpperCase() : '').join();
 
@@ -813,7 +860,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                         fontWeight: FontWeight.w600)),
               ]),
             ]),
-            if (!esMiUsuario) ...[
+            if (!esMiUsuario && auth.can(Perm.usuariosGestionar)) ...[
               const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: () => _abrirEditarPerfil(_seleccionado!),
@@ -827,6 +874,41 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                 ),
               ),
             ],
+          ]),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Cumple turnos de monitor (independiente del rol) ────────────────
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(10),
+            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(children: [
+            const Icon(Icons.badge_outlined, size: 18, color: kTextMuted),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Cumple turnos de monitor',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              const Text(
+                'Independiente del rol — aparece en seguimiento de horas y recibe '
+                'el recordatorio de fin de turno, aunque no tenga rol MONITOR.',
+                style: TextStyle(fontSize: 11, color: kTextMuted),
+              ),
+            ])),
+            const SizedBox(width: 8),
+            if (_cambiandoTurnos)
+              const SizedBox(width: 18, height: 18,
+                  child: CircularProgressIndicator(color: kPrimary, strokeWidth: 2))
+            else
+              Switch(
+                value: haceTurnosMonitor,
+                activeThumbColor: kPrimary,
+                onChanged: puedeEditarTurnos
+                    ? (v) => _toggleHaceTurnosMonitor(v)
+                    : null,
+              ),
           ]),
         ),
         const SizedBox(height: 16),
@@ -865,6 +947,23 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                     Expanded(child: Text(
                       'Este usuario tiene todos los permisos como ADMIN. Los permisos extra no aplican.',
                       style: TextStyle(color: kPrimary, fontSize: 12),
+                    )),
+                  ]),
+                ),
+
+              // Banner ESTUDIANTE
+              if (esEstudiante)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: kDanger.withValues(alpha: 0.08),
+                  child: const Row(children: [
+                    Icon(Icons.info_outline, color: kDanger, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(child: Text(
+                      'ESTUDIANTE nunca tiene permisos, otorgados o no — '
+                      'promuévelo a otro rol primero.',
+                      style: TextStyle(color: kDanger, fontSize: 12),
                     )),
                   ]),
                 ),
@@ -922,7 +1021,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                     )),
                     // EXTRA
                     SizedBox(width: 80, child: Center(
-                      child: esAdmin || delRol
+                      child: esAdmin || esEstudiante || delRol
                           ? const Icon(Icons.remove, size: 16, color: Color(0xFFDEE2E6))
                           : Checkbox(
                               value: extra,

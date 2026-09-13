@@ -1,11 +1,41 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 
-/// Versión actual compilada en la app. Debe coincidir con pubspec.yaml.
-/// Inyectada en build: --dart-define=APP_VERSION=1.0.0
-const kAppVersion = String.fromEnvironment('APP_VERSION', defaultValue: '1.0.0');
+/// Versión actual de la app (ej. "1.0.3"), tal como se declaró en
+/// `pubspec.yaml` (`version: 1.0.3+4` → "1.0.3").
+///
+/// Antes esto era un `const` inyectado a mano con `--dart-define=APP_VERSION=...`
+/// en cada script de build — pero ningún script lo pasaba nunca, así que
+/// SIEMPRE quedaba en su valor por defecto ("1.0.0"), sin importar la
+/// versión real compilada. Eso afectaba 3 cosas silenciosamente: el
+/// diálogo "Acerca de" mostraba una versión vieja, el header
+/// `X-App-Version` que el servidor usa para forzar actualizaciones
+/// (`AppVersionMiddleware`) nunca reflejaba la versión real, y el diálogo
+/// de actualización mostraba la versión "actual" incorrecta.
+///
+/// Ahora se lee del propio paquete instalado con `package_info_plus`
+/// (`initAppVersion()`, llamado una sola vez en `main()` antes de
+/// cualquier otra cosa) — así nunca hay que acordarse de pasar nada al
+/// compilar, la versión mostrada es siempre la real.
+String kAppVersion = '1.0.0';
+
+/// Carga la versión real del paquete instalado en [kAppVersion]. Debe
+/// llamarse una sola vez, al arrancar `main()`, ANTES de que cualquier
+/// petición al servidor use el header `X-App-Version` (ver
+/// `ApiClient._headers`). Si falla por cualquier motivo (no debería, pero
+/// nunca debe tumbar el arranque de la app), deja el valor por defecto.
+Future<void> initAppVersion() async {
+  try {
+    final info = await PackageInfo.fromPlatform();
+    if (info.version.isNotEmpty) kAppVersion = info.version;
+  } catch (_) {
+    // Se queda con el valor por defecto — un fallo acá no debe impedir
+    // que la app arranque.
+  }
+}
 
 const _kGithubRepo = 'FoxyYTs/SGI_LAB_MANAGER_FRONTEND';
 
