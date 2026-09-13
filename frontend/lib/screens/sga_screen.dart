@@ -182,7 +182,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
               leading: const Icon(Icons.delete_outline, color: Color(0xFF1E73BE)),
               title: const Text('Etiqueta de residuo',
                   style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('CÓDIGO/VERSIÓN/RESPONSABLE · tamaño único'),
+              subtitle: const Text('CÓDIGO/VERSIÓN/RESPONSABLE · 4 tamaños'),
               onTap: () => Navigator.pop(ctx, 'residuo'),
             ),
           ],
@@ -195,11 +195,11 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
 
     if (tipo == null || !mounted) return;
 
-    String? formato;
-    if (tipo == 'fds') {
-      formato = await _elegirFormatoFds();
-      if (formato == null || !mounted) return;
-    }
+    // Ambos tipos de etiqueta (FDS y residuo) usan los mismos 4 tamaños
+    // (FORMATOS_ETIQUETA en el backend) — se pregunta siempre, no solo
+    // para 'fds'; antes 'residuo' se mandaba fijo en '500l' sin preguntar.
+    final formato = await _elegirFormato();
+    if (formato == null || !mounted) return;
 
     setState(() => _descargandoPdf = true);
     try {
@@ -207,11 +207,11 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
         'inventario/lista/${widget.insumoId}/sga/etiqueta-pdf/',
         queryParameters: {
           'tipo_etiqueta': tipo,
-          if (formato != null) 'formato': formato,
+          'formato': formato,
         },
         options: Options(responseType: ResponseType.bytes),
       );
-      final sufijo = tipo == 'residuo' ? 'residuo' : formato;
+      final sufijo = tipo == 'residuo' ? 'residuo_$formato' : formato;
       final nombre = 'etiqueta_${sufijo}_${widget.insumoId}.pdf';
       final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
       if (msg != null && mounted) _snack(msg, kTextMuted);
@@ -222,7 +222,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     }
   }
 
-  Future<String?> _elegirFormatoFds() {
+  Future<String?> _elegirFormato() {
     final formatos = [
       {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 56 mm'},
       {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 80 mm'},
