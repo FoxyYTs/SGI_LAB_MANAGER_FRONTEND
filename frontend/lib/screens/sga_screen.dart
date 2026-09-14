@@ -655,7 +655,8 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
         'nombre_proveedor', 'direccion_proveedor', 'fds_drive_url',
         'palabra_advertencia', 'categoria_toxicidad', 'epp',
         'controles_tecnicos', 'primeros_auxilios', 'lucha_incendios',
-        'vertido_accidental', 'estabilidad_reactividad', 'numero_un', 'estado_fisico']) {
+        'vertido_accidental', 'estabilidad_reactividad', 'numero_un', 'estado_fisico',
+        'residuo_clase_transporte', 'residuo_contiene_descripcion']) {
       _c[k] = TextEditingController(text: _d[k]?.toString() ?? '');
     }
     // Normaliza enums a mayúsculas para que coincidan con los items del dropdown
@@ -874,6 +875,13 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
                   child: Column(children: [
                     TextFormField(controller: _c['numero_un'],
                         decoration: _deco('Número UN')),
+                    const SizedBox(height: 14),
+                    TextFormField(controller: _c['residuo_clase_transporte'],
+                        decoration: _deco('Clase de transporte (para el rombo de la etiqueta de residuo, ej: 3, 8, 2.1)')),
+                    const SizedBox(height: 14),
+                    TextFormField(controller: _c['residuo_contiene_descripcion'],
+                        decoration: _deco('Descripción de "Contiene" (etiqueta de residuo)'),
+                        maxLines: 2),
                     const SizedBox(height: 14),
                     Row(children: [
                       Expanded(child: _nfpaDropdown('Salud', _nfpaSalud,
