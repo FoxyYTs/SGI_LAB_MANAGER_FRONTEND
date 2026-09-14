@@ -1694,6 +1694,21 @@ class _LabSection extends StatelessWidget {
   }
 }
 
+// Un contacto de emergencia de la etiqueta de residuo (nombre + teléfono),
+// con sus propios controllers — la lista completa se guarda como JSON en
+// ConfiguracionGlobal.contactos_emergencia_residuo.
+class _ContactoCtrl {
+  final TextEditingController nombre;
+  final TextEditingController telefono;
+  _ContactoCtrl({String nombre = '', String telefono = ''})
+      : nombre = TextEditingController(text: nombre),
+        telefono = TextEditingController(text: telefono);
+  void dispose() {
+    nombre.dispose();
+    telefono.dispose();
+  }
+}
+
 // ─────────────────────────────────────────
 // Tab: Configuración del Laboratorio
 // ─────────────────────────────────────────
@@ -1718,6 +1733,11 @@ class _LabConfigTabState extends State<_LabConfigTab> {
     'direccion_proveedor_defecto': TextEditingController(),
   };
 
+  // Contactos de emergencia de la etiqueta de residuo (Brigada, Bomberos,
+  // ARL, etc.) — lista de largo variable, a diferencia de los campos fijos
+  // de arriba.
+  final List<_ContactoCtrl> _contactos = [];
+
   @override
   void initState() {
     super.initState();
@@ -1727,6 +1747,7 @@ class _LabConfigTabState extends State<_LabConfigTab> {
   @override
   void dispose() {
     for (final c in _c.values) { c.dispose(); }
+    for (final c in _contactos) { c.dispose(); }
     super.dispose();
   }
 
@@ -1740,6 +1761,19 @@ class _LabConfigTabState extends State<_LabConfigTab> {
       final d    = Map<String, dynamic>.from(r.data);
       for (final k in _c.keys) {
         _c[k]!.text = d[k]?.toString() ?? '';
+      }
+      for (final c in _contactos) { c.dispose(); }
+      _contactos.clear();
+      final contactosRaw = d['contactos_emergencia_residuo'];
+      if (contactosRaw is List) {
+        for (final item in contactosRaw) {
+          if (item is Map) {
+            _contactos.add(_ContactoCtrl(
+              nombre: item['nombre']?.toString() ?? '',
+              telefono: item['telefono']?.toString() ?? '',
+            ));
+          }
+        }
       }
     } catch (_) {
       if (mounted) setState(() => _error = 'Error cargando la configuración.');
@@ -1755,7 +1789,13 @@ class _LabConfigTabState extends State<_LabConfigTab> {
     setState(() => _guardando = true);
     try {
       final dio = ApiClient.instance.authenticatedDio(auth.token);
-      final payload = {for (final k in _c.keys) k: _c[k]!.text.trim()};
+      final payload = <String, dynamic>{for (final k in _c.keys) k: _c[k]!.text.trim()};
+      // Solo se guardan los contactos con al menos nombre o teléfono — filas
+      // vacías dejadas por el botón "Agregar contacto" no se envían.
+      payload['contactos_emergencia_residuo'] = _contactos
+          .map((c) => {'nombre': c.nombre.text.trim(), 'telefono': c.telefono.text.trim()})
+          .where((c) => c['nombre']!.isNotEmpty || c['telefono']!.isNotEmpty)
+          .toList();
       await dio.patch('inventario/configuracion-global/', data: payload);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1887,6 +1927,61 @@ class _LabConfigTabState extends State<_LabConfigTab> {
                     decoration: _deco('Dirección del proveedor'),
                     maxLines: 2,
                   ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // ── Sección 3: Contactos de emergencia (etiqueta de residuo) ─
+              _LabSection(
+                icon: Icons.support_agent_outlined,
+                titulo: 'Contactos de emergencia (etiqueta de residuo)',
+                subtitulo: 'Aparecen en "INFORMACIÓN DE PREVENCIÓN Y EMERGENCIA" de la '
+                    'etiqueta de residuo — Brigada del Politécnico, Bomberos Rionegro, '
+                    'ARL (Colmena), etc.',
+                children: [
+                  for (var i = 0; i < _contactos.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 10),
+                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextFormField(
+                          controller: _contactos[i].nombre,
+                          enabled: puedeEditar,
+                          decoration: _deco('Nombre',
+                              hint: 'Ej: Brigada de Emergencia Poli Rionegro'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _contactos[i].telefono,
+                          enabled: puedeEditar,
+                          decoration: _deco('Teléfono', hint: 'Ej: Ext. 4622'),
+                          keyboardType: TextInputType.phone,
+                        ),
+                      ),
+                      if (puedeEditar)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: kDanger, size: 20),
+                          tooltip: 'Quitar contacto',
+                          onPressed: () => setState(() {
+                            _contactos[i].dispose();
+                            _contactos.removeAt(i);
+                          }),
+                        ),
+                    ]),
+                  ],
+                  if (puedeEditar) ...[
+                    if (_contactos.isNotEmpty) const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _contactos.add(_ContactoCtrl())),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Agregar contacto'),
+                    ),
+                  ] else if (_contactos.isEmpty)
+                    const Text('Sin contactos configurados.',
+                        style: TextStyle(fontSize: 12, color: kTextMuted)),
                 ],
               ),
 
