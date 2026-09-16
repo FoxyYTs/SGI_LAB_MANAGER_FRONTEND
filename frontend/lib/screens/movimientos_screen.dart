@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
@@ -76,6 +77,8 @@ class _MovimientosContentState extends State<MovimientosContent> {
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       await dio.post('operaciones/prestamos/$id/aprobar/');
       _fetchPrestamos();
+    } on DioException catch (e) {
+      _showError('Error al aprobar: ${_mensajeDio(e)}');
     } catch (e) {
       _showError('Error al aprobar: $e');
     }
@@ -110,9 +113,23 @@ class _MovimientosContentState extends State<MovimientosContent> {
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       await dio.post('operaciones/prestamos/$id/rechazar/');
       _fetchPrestamos();
+    } on DioException catch (e) {
+      _showError('Error al rechazar: ${_mensajeDio(e)}');
     } catch (e) {
       _showError('Error al rechazar: $e');
     }
+  }
+
+  /// Extrae el mensaje amigable que el backend manda en `{"error": "..."}`
+  /// para respuestas 4xx (ej: "El préstamo ya está en estado ACTIVO.",
+  /// "No hay stock suficiente...") — sin esto, `SnackBar` mostraba el
+  /// `toString()` completo de `DioException` (varios párrafos técnicos
+  /// sobre status codes y RequestOptions.validateStatus), tapando el
+  /// motivo real por el que falló.
+  String _mensajeDio(DioException e) {
+    final data = e.response?.data;
+    if (data is Map && data['error'] != null) return data['error'].toString();
+    return e.message ?? e.toString();
   }
 
   void _showError(String msg) {
