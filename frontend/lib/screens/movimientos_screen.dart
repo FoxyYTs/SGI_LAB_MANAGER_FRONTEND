@@ -84,6 +84,41 @@ class _MovimientosContentState extends State<MovimientosContent> {
     }
   }
 
+  /// Abre el diálogo de selección de insumo(s) y, si el usuario confirma,
+  /// los agrega al préstamo `id` vía `POST .../agregar-item/` (uno por
+  /// ítem — el endpoint solo acepta una línea a la vez). Existe para
+  /// completar préstamos que llegaron del formulario público de Google
+  /// Form sin ítems estructurados (solo texto libre en observaciones).
+  Future<void> _agregarItem(String id) async {
+    final insumos = context.read<InventarioProvider>().insumos;
+    final items = await showDialog<List<Map<String, String?>>>(
+      context: context,
+      builder: (_) => _AgregarItemDialog(insumos: insumos),
+    );
+    if (items == null || items.isEmpty || !mounted) return;
+
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      for (final it in items) {
+        await dio.post('operaciones/prestamos/$id/agregar-item/', data: {
+          'insumo': it['insumoId'],
+          'cantidad_prestada': double.tryParse(it['cantidad'] ?? '') ?? 1,
+        });
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Ítem(s) agregado(s) al préstamo.'),
+            backgroundColor: kSuccess));
+        _fetchPrestamos();
+      }
+    } on DioException catch (e) {
+      _showError('Error al agregar ítem: ${_mensajeDio(e)}');
+    } catch (e) {
+      _showError('Error al agregar ítem: $e');
+    }
+  }
+
   Future<void> _rechazar(String id) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -259,6 +294,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
                           onAprobar: _aprobar,
                           onRechazar: _rechazar,
                           onDevuelto: _fetchPrestamos,
+                          onAgregarItem: _agregarItem,
                         ),
                       ),
           ),
@@ -738,6 +774,7 @@ class _PrestamoCard extends StatelessWidget {
   final void Function(String) onAprobar;
   final void Function(String) onRechazar;
   final VoidCallback onDevuelto;
+  final void Function(String) onAgregarItem;
 
   const _PrestamoCard({
     required this.prestamo,
@@ -745,6 +782,7 @@ class _PrestamoCard extends StatelessWidget {
     required this.onAprobar,
     required this.onRechazar,
     required this.onDevuelto,
+    required this.onAgregarItem,
   });
 
   static const _estadoColors = {
@@ -868,6 +906,18 @@ class _PrestamoCard extends StatelessWidget {
             // ── Acciones ──
             if (puedeGestionar && (estado == 'PENDIENTE' || estado == 'ACTIVO')) ...[
               const SizedBox(height: 10),
+              if (estado == 'PENDIENTE') ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.add_circle_outline, size: 16),
+                    label: const Text('Agregar ítem', style: TextStyle(fontSize: 13)),
+                    style: TextButton.styleFrom(foregroundColor: kPrimary),
+                    onPressed: () => onAgregarItem(id),
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
               Row(children: [
                 if (estado == 'PENDIENTE') ...[
                   Expanded(
@@ -1010,5 +1060,109 @@ class _PrestamoCard extends StatelessWidget {
             content: Text('Error: $e'), backgroundColor: kDanger));
       }
     }
+  }
+}
+
+// ── Diálogo: agregar ítem(s) a un préstamo PENDIENTE ──────────────────────────
+
+class _AgregarItemDialog extends StatefulWidget {
+  final List<Insumo> insumos;
+  const _AgregarItemDialog({required this.insumos});
+
+  @override
+  State<_AgregarItemDialog> createState() => _AgregarItemDialogState();
+}
+
+class _AgregarItemDialogState extends State<_AgregarItemDialog> {
+  final List<_ItemPrestamo> _items = [_ItemPrestamo()];
+
+  @override
+  void dispose() {
+    for (final it in _items) it.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Agregar ítems al préstamo',
+          style: TextStyle(color: kPrimary, fontSize: 16)),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...List.generate(_items.length, _buildRow),
+              TextButton.icon(
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Agregar otro ítem'),
+                onPressed: () => setState(() => _items.add(_ItemPrestamo())),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+              backgroundColor: kPrimary, foregroundColor: Colors.white),
+          onPressed: _items.any((i) => i.insumoId != null)
+              ? () => Navigator.pop(
+                  context,
+                  _items
+                      .where((i) => i.insumoId != null)
+                      .map((i) => {
+                            'insumoId': i.insumoId,
+                            'cantidad': i.cantCtrl.text,
+                          })
+                      .toList())
+              : null,
+          child: const Text('Agregar'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRow(int i) {
+    final item = _items[i];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: [
+        Expanded(
+          flex: 3,
+          child: _InsumoSelectorButton(
+            insumos: widget.insumos,
+            selectedId: item.insumoId,
+            onSelected: (id) => setState(() => item.insumoId = id),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: item.cantCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Cantidad',
+              border: OutlineInputBorder(),
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            ),
+          ),
+        ),
+        if (_items.length > 1)
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, color: kDanger, size: 20),
+            onPressed: () => setState(() {
+              _items[i].dispose();
+              _items.removeAt(i);
+            }),
+          ),
+      ]),
+    );
   }
 }
