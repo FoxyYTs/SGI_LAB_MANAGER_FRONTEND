@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../models/insumo_model.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
+import '../core/text_utils.dart';
 import 'insumo_form_screen.dart';
 import 'insumo_detail_screen.dart';
 import 'sga_screen.dart';
@@ -131,12 +132,12 @@ class _InventarioContentState extends State<InventarioContent> {
           );
         }
 
+        final query = normalizarBusqueda(_searchQuery);
         final filtrados = _applySort(provider.insumos.where((i) {
           final matchTipo   = _filtroTipo == 'Todos' || i.tipo == _filtroTipo;
-          final query       = _searchQuery.toLowerCase();
-          final matchSearch = i.nombre.toLowerCase().contains(query) ||
-                              i.tipo.toLowerCase().contains(query) ||
-                              i.formulaQuimica.toLowerCase().contains(query);
+          final matchSearch = normalizarBusqueda(i.nombre).contains(query) ||
+                              normalizarBusqueda(i.tipo).contains(query) ||
+                              normalizarBusqueda(i.formulaQuimica).contains(query);
           return matchTipo && matchSearch;
         }).toList());
 

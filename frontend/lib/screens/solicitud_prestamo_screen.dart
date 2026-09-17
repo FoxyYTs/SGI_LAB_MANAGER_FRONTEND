@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+import '../core/text_utils.dart';
 
 class _ItemSolicitud {
   String? insumoId;
@@ -661,10 +662,11 @@ class _DialogMaterialState extends State<_DialogMaterial> {
 
   @override
   Widget build(BuildContext context) {
+    final query = normalizarBusqueda(_query);
     final filtrados = widget.insumos
         .where((i) =>
             ((i['presentaciones'] as List?)?.isNotEmpty ?? false) &&
-            (i['nombre_insumo']?.toString() ?? '').toLowerCase().contains(_query.toLowerCase()))
+            normalizarBusqueda(i['nombre_insumo']?.toString() ?? '').contains(query))
         .toList();
     return AlertDialog(
       title: const Text('Seleccionar material', style: TextStyle(color: kPrimary, fontSize: 16)),
