@@ -16,6 +16,7 @@ class Insumo {
   final bool   tieneSga;
   final String? observaciones;
   final String? fotoUrl;
+  final String formulaQuimica;
 
   const Insumo({
     required this.id,
@@ -30,6 +31,7 @@ class Insumo {
     this.tieneSga = false,
     this.observaciones,
     this.fotoUrl,
+    this.formulaQuimica = '',
   });
 
   factory Insumo.fromJson(Map<String, dynamic> json) {
@@ -55,6 +57,7 @@ class Insumo {
       tieneSga:    json['tiene_sga'] as bool? ?? false,
       observaciones: json['observaciones'] as String?,
       fotoUrl:     json['foto'] as String?,
+      formulaQuimica: json['formula_quimica'] as String? ?? '',
     );
   }
 

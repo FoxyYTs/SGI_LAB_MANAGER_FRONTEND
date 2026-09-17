@@ -133,8 +133,10 @@ class _InventarioContentState extends State<InventarioContent> {
 
         final filtrados = _applySort(provider.insumos.where((i) {
           final matchTipo   = _filtroTipo == 'Todos' || i.tipo == _filtroTipo;
-          final matchSearch = i.nombre.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                              i.tipo.toLowerCase().contains(_searchQuery.toLowerCase());
+          final query       = _searchQuery.toLowerCase();
+          final matchSearch = i.nombre.toLowerCase().contains(query) ||
+                              i.tipo.toLowerCase().contains(query) ||
+                              i.formulaQuimica.toLowerCase().contains(query);
           return matchTipo && matchSearch;
         }).toList());
 
@@ -189,7 +191,7 @@ class _InventarioContentState extends State<InventarioContent> {
                   TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      hintText: 'Buscar...',
+                      hintText: 'Buscar por nombre o fórmula...',
                       prefixIcon: const Icon(Icons.search, color: kPrimary),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                       focusedBorder: const OutlineInputBorder(
@@ -217,7 +219,7 @@ class _InventarioContentState extends State<InventarioContent> {
                       child: TextField(
                         controller: _searchController,
                         decoration: InputDecoration(
-                          hintText: 'Buscar insumo...',
+                          hintText: 'Buscar por nombre o fórmula...',
                           prefixIcon: const Icon(Icons.search, color: kPrimary),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                           focusedBorder: OutlineInputBorder(
