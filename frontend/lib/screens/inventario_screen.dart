@@ -28,7 +28,7 @@ class _InventarioContentState extends State<InventarioContent> {
   bool   _sortAsc     = true;
   bool   _eraOnline   = true;
 
-  static const _tipos = ['Todos', 'Implemento', 'Vidriería', 'Equipo', 'Químico'];
+  static const _tipos = ['Todos', 'Implemento', 'Vidriería', 'Equipo', 'Químico', kTipoResiduo];
 
   @override
   void initState() {
@@ -69,6 +69,7 @@ class _InventarioContentState extends State<InventarioContent> {
   Color _semaforoColor(String s) => switch (s) {
     'ROJO'    => kSemaforoRojo,
     'AMARILLO' => kSemaforoAmarillo,
+    'RESIDUO'  => _kResiduo,
     _          => kSemaforoVerde,
   };
 
@@ -78,6 +79,9 @@ class _InventarioContentState extends State<InventarioContent> {
     _          => 2,
   };
 
+  /// Color neutro de los residuos (no tienen semáforo de stock).
+  static const _kResiduo = Color(0xFF6D4C41);
+
   List<Insumo> _applySort(List<Insumo> list) {
     final sorted = [...list];
     sorted.sort((a, b) {
@@ -86,7 +90,7 @@ class _InventarioContentState extends State<InventarioContent> {
         'ubicacion' => a.ubicacion.compareTo(b.ubicacion),
         'stock'     => a.stockActual.compareTo(b.stockActual),
         'stockMin'  => a.stockMinimo.compareTo(b.stockMinimo),
-        'estado'    => _semaforoOrder(a.semaforo).compareTo(_semaforoOrder(b.semaforo)),
+        'estado'    => _semaforoOrder(a.estado).compareTo(_semaforoOrder(b.estado)),
         _           => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()),
       };
       return _sortAsc ? cmp : -cmp;
@@ -134,7 +138,8 @@ class _InventarioContentState extends State<InventarioContent> {
 
         final query = normalizarBusqueda(_searchQuery);
         final filtrados = _applySort(provider.insumos.where((i) {
-          final matchTipo   = _filtroTipo == 'Todos' || i.tipo == _filtroTipo;
+          // Los residuos tienen su propia sección: no se mezclan en "Todos".
+          final matchTipo   = _filtroTipo == 'Todos' ? !i.esResiduo : i.tipo == _filtroTipo;
           final matchSearch = normalizarBusqueda(i.nombre).contains(query) ||
                               normalizarBusqueda(i.tipo).contains(query) ||
                               normalizarBusqueda(i.formulaQuimica).contains(query);
@@ -142,6 +147,11 @@ class _InventarioContentState extends State<InventarioContent> {
         }).toList());
 
         final esQuimico = _filtroTipo == 'Químico';
+        final esResiduo = _filtroTipo == kTipoResiduo;
+        final conSga    = esQuimico || esResiduo;
+        final titulo    = esQuimico
+            ? 'Inventario de Químicos'
+            : esResiduo ? 'Inventario de Residuos' : 'Inventario';
 
         return LayoutBuilder(builder: (context, constraints) {
         final isMobile = constraints.maxWidth < 650;
@@ -178,7 +188,7 @@ class _InventarioContentState extends State<InventarioContent> {
                 if (isMobile) ...[
                   Row(children: [
                     Expanded(child: Text(
-                      esQuimico ? 'Inventario de Químicos' : 'Inventario',
+                      titulo,
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       overflow: TextOverflow.ellipsis,
                     )),
@@ -207,7 +217,7 @@ class _InventarioContentState extends State<InventarioContent> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          esQuimico ? 'Inventario de Químicos' : 'Inventario',
+                          titulo,
                           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                         ),
                         const Text('Gestión de insumos del laboratorio',
@@ -279,6 +289,11 @@ class _InventarioContentState extends State<InventarioContent> {
                                 padding: EdgeInsets.only(right: 4),
                                 child: Icon(Icons.science_outlined, size: 14),
                               ),
+                            if (tipo == kTipoResiduo)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4),
+                                child: Icon(Icons.recycling, size: 14),
+                              ),
                             Text(tipo),
                           ]),
                           selected: sel,
@@ -312,8 +327,8 @@ class _InventarioContentState extends State<InventarioContent> {
                                 borderRadius: BorderRadius.circular(8),
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.vertical,
-                                  child: esQuimico
-                                      ? _buildTablaQuimicos(filtrados, context)
+                                  child: conSga
+                                      ? _buildTablaQuimicos(filtrados, context, residuos: esResiduo)
                                       : _buildTablaGeneral(filtrados, context),
                                 ),
                               ),
@@ -324,12 +339,16 @@ class _InventarioContentState extends State<InventarioContent> {
                 if (filtrados.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Row(children: [
-                    _leyenda(kSemaforoVerde,   'En stock'),
-                    const SizedBox(width: 16),
-                    _leyenda(kSemaforoAmarillo, 'Stock bajo'),
-                    const SizedBox(width: 16),
-                    _leyenda(kSemaforoRojo,    'Crítico'),
-                    if (esQuimico) ...[
+                    if (!esResiduo) ...[
+                      _leyenda(kSemaforoVerde,   'En stock'),
+                      const SizedBox(width: 16),
+                      _leyenda(kSemaforoAmarillo, 'Stock bajo'),
+                      const SizedBox(width: 16),
+                      _leyenda(kSemaforoRojo,    'Crítico'),
+                    ] else
+                      const Text('Cantidad acumulada · entra con ENTRADA, sale al entregarlo al gestor',
+                          style: TextStyle(fontSize: 12, color: kTextMuted)),
+                    if (conSga) ...[
                       const SizedBox(width: 24),
                       const Icon(Icons.check_circle, size: 12, color: kSuccess),
                       const SizedBox(width: 4),
@@ -360,8 +379,9 @@ class _InventarioContentState extends State<InventarioContent> {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (ctx, i) {
         final insumo = items[i];
-        final color  = _semaforoColor(insumo.semaforo);
-        final (chipLabel, chipColor, chipBg) = switch (insumo.semaforo) {
+        final color  = _semaforoColor(insumo.estado);
+        final (chipLabel, chipColor, chipBg) = switch (insumo.estado) {
+          'RESIDUO'  => ('RESIDUO', _kResiduo,        const Color(0xFFEFEBE9)),
           'ROJO'     => ('CRÍTICO', kSemaforoRojo,    const Color(0xFFFFEBEE)),
           'AMARILLO' => ('BAJO',    kSemaforoAmarillo, const Color(0xFFFFF8E1)),
           _          => ('OK',      kSemaforoVerde,    const Color(0xFFE8F5E9)),
@@ -415,7 +435,7 @@ class _InventarioContentState extends State<InventarioContent> {
                     ),
                   ],
                 ),
-                if (insumo.tipo == 'Químico') ...[
+                if (insumo.usaSga) ...[
                   const SizedBox(width: 4),
                   IconButton(
                     icon: Icon(Icons.science_outlined, size: 20,
@@ -477,11 +497,11 @@ class _InventarioContentState extends State<InventarioContent> {
               _cell(insumo.ubicacion),
               _cell('${insumo.stockActual.toStringAsFixed(0)} ${insumo.unidad}'),
               _cell('${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
-              _semaforo(insumo.semaforo),
+              _semaforo(insumo.estado),
               if (showSga)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  child: insumo.tipo == 'Químico'
+                  child: insumo.usaSga
                       ? _sgaBtn(context, insumo)
                       : const SizedBox.shrink(),
                 ),
@@ -494,7 +514,7 @@ class _InventarioContentState extends State<InventarioContent> {
 
   // ── Tabla especializada para Químicos ─────────────────────────────────────
 
-  Widget _buildTablaQuimicos(List<Insumo> items, BuildContext context) {
+  Widget _buildTablaQuimicos(List<Insumo> items, BuildContext context, {bool residuos = false}) {
     return Table(
       columnWidths: const {
         0: FlexColumnWidth(3),
@@ -509,7 +529,9 @@ class _InventarioContentState extends State<InventarioContent> {
           horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
       children: [
         _headerRow(
-          ['Nombre', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA', 'Ficha'],
+          residuos
+              ? ['Nombre', 'Ubicación', 'Cantidad', '—', 'Tipo', 'SGA', 'Ficha']
+              : ['Nombre', 'Ubicación', 'Stock', 'Stock Mín.', 'Estado', 'SGA', 'Ficha'],
           ['nombre', 'ubicacion', 'stock', 'stockMin', 'estado', '', ''],
         ),
         ...items.asMap().entries.map((e) {
@@ -526,8 +548,8 @@ class _InventarioContentState extends State<InventarioContent> {
                         insumoNombre: insumo.nombre)))),
               _cell(insumo.ubicacion),
               _cell('${insumo.stockActual.toStringAsFixed(0)} ${insumo.unidad}'),
-              _cell('${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
-              _semaforo(insumo.semaforo),
+              _cell(residuos ? '—' : '${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
+              _semaforo(insumo.estado),
               // Indicador SGA
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
@@ -611,6 +633,7 @@ class _InventarioContentState extends State<InventarioContent> {
     final (label, color, bg) = switch (s) {
       'ROJO'     => ('CRÍTICO', kSemaforoRojo,    const Color(0xFFFFEBEE)),
       'AMARILLO' => ('BAJO',    const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+      'RESIDUO'  => ('RESIDUO', _kResiduo,        const Color(0xFFEFEBE9)),
       _          => ('OK',      kSemaforoVerde,   const Color(0xFFE8F5E9)),
     };
     return Padding(

@@ -1,5 +1,8 @@
 import '../core/presentaciones.dart';
 
+/// Nombre del TipoInsumo de los residuos de laboratorio.
+const kTipoResiduo = 'Residuo';
+
 /// Modelo de dominio para un insumo del inventario.
 ///
 /// [fromJson] construye desde la respuesta de `GET /api/inventario/lista/` (InsumoListSerializer).
@@ -41,6 +44,16 @@ class Insumo {
     this.formulaQuimica = '',
     this.presentaciones,
   });
+
+  /// Residuo de laboratorio (tipo "Residuo"): no se presta y no tiene
+  /// semáforo de stock (el backend devuelve VERDE por compatibilidad).
+  bool get esResiduo => tipo == kTipoResiduo;
+
+  /// Químicos y residuos tienen ficha SGA y etiqueta.
+  bool get usaSga => tipo == 'Químico' || esResiduo;
+
+  /// Estado a mostrar: el semáforo, o 'RESIDUO' para los residuos.
+  String get estado => esResiduo ? 'RESIDUO' : semaforo;
 
   factory Insumo.fromJson(Map<String, dynamic> json) {
     // La unidad viene de la primera presentación ACTIVA (las desactivadas

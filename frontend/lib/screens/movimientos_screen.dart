@@ -245,7 +245,8 @@ class _MovimientosContentState extends State<MovimientosContent> {
   /// Form sin ítems estructurados (solo texto libre en observaciones).
   Future<void> _agregarItem(String id) async {
     if (_enCurso.contains(id)) return;
-    final insumos = context.read<InventarioProvider>().insumos;
+    // Los residuos no se prestan.
+    final insumos = context.read<InventarioProvider>().insumos.where((i) => !i.esResiduo).toList();
     final items = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       builder: (_) => _AgregarItemDialog(insumos: insumos),
@@ -668,7 +669,8 @@ class _PrestamoFormState extends State<_PrestamoForm> {
 
   @override
   Widget build(BuildContext context) {
-    final insumos = context.read<InventarioProvider>().insumos;
+    // Los residuos no se prestan.
+    final insumos = context.read<InventarioProvider>().insumos.where((i) => !i.esResiduo).toList();
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),

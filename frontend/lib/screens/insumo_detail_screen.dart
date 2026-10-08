@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
+import '../models/insumo_model.dart' show kTipoResiduo;
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/presentaciones.dart';
@@ -331,7 +332,8 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
           style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold),
         ),
         actions: [
-          if (_insumo != null && _insumo!['tipo_nombre'] == 'Químico')
+          if (_insumo != null &&
+              (_insumo!['tipo_nombre'] == 'Químico' || _insumo!['tipo_nombre'] == kTipoResiduo))
             IconButton(
               icon: const Icon(Icons.science_outlined, color: kPrimary),
               tooltip: 'Ficha SGA',
@@ -381,9 +383,14 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
         ? (presentaciones.first as Map)['unidad_nombre']?.toString() ?? ''
         : d['unidad_abreviatura']?.toString() ?? '';
 
+    final esResiduo = tipo == kTipoResiduo;
     Color semaforoColor;
     String semaforoLabel;
-    if (stock <= stockMin) {
+    if (esResiduo) {
+      // Un residuo no tiene stock mínimo: solo se muestra lo acumulado.
+      semaforoColor = const Color(0xFF6D4C41);
+      semaforoLabel = 'Residuo acumulado · sale al entregarlo al gestor';
+    } else if (stock <= stockMin) {
       semaforoColor = kSemaforoRojo;
       semaforoLabel = 'Stock crítico';
     } else if (stock <= stockMin * 1.5) {
@@ -471,14 +478,16 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
           // ── Stock ────────────────────────────────────────────────────────
           Row(children: [
             Expanded(
-              child: _stockCard('Stock actual',
+              child: _stockCard(esResiduo ? 'Cantidad acumulada' : 'Stock actual',
                   '${stock.toStringAsFixed(0)} $unidad', semaforoColor),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _stockCard('Stock mínimo',
-                  '${stockMin.toStringAsFixed(0)} $unidad', kTextMuted),
-            ),
+            if (!esResiduo) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                child: _stockCard('Stock mínimo',
+                    '${stockMin.toStringAsFixed(0)} $unidad', kTextMuted),
+              ),
+            ],
           ]),
           const SizedBox(height: 6),
           Row(children: [
@@ -497,7 +506,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
           ]),
 
           // ── Detalle Químico ──────────────────────────────────────────────
-          if (tipo == 'Químico' && d['detalle_quimico'] != null) ...[
+          if ((tipo == 'Químico' || esResiduo) && d['detalle_quimico'] != null) ...[
             const SizedBox(height: 16),
             _buildDetalleQuimico(
                 Map<String, dynamic>.from(d['detalle_quimico'])),

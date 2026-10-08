@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
+import '../models/insumo_model.dart' show kTipoResiduo;
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -90,7 +91,9 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
   static double? _numero(String? texto) =>
       double.tryParse((texto ?? '').trim().replaceAll(',', '.'));
 
-  bool get _esQuimico  => _tipoNombre == 'Químico';
+  /// Químicos y residuos comparten la ficha SGA (DetalleQuimico).
+  bool get _esQuimico  => _tipoNombre == 'Químico' || _esResiduo;
+  bool get _esResiduo  => _tipoNombre == kTipoResiduo;
   bool get _esMaterial => _tipoNombre == 'Implemento' || _tipoNombre == 'Vidriería';
 
   @override
@@ -428,12 +431,15 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                     ],
                     onChanged: (v) => setState(() => _ubicacionId = v),
                   ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _stockMinimoCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: _deco('Stock crítico mínimo', Icons.warning_amber_outlined),
-                  ),
+                  // Un residuo no tiene stock mínimo (no se repone).
+                  if (!_esResiduo) ...[
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _stockMinimoCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: _deco('Stock crítico mínimo', Icons.warning_amber_outlined),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _observCtrl,
