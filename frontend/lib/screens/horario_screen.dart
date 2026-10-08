@@ -28,6 +28,34 @@ Future<List<Map<String, dynamic>>> _getTodo(Dio dio, String path,
             queryParameters: {...?params, if (pagina > 1) 'page': pagina}))
         .data);
 
+/// SnackBar corto de resultado (verde) o error (rojo).
+void _avisar(BuildContext context, String msg, {bool error = false}) {
+  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+    content: Text(msg),
+    backgroundColor: error ? kDanger : kSuccess,
+    duration: Duration(seconds: error ? 4 : 2),
+  ));
+}
+
+/// Aviso de error de carga con botón de reintento (en vez de una grilla
+/// vacía, que invita a volver a crear bloques que sí existen).
+Widget _errorCarga(String msg, VoidCallback reintentar) => Center(
+  child: Padding(
+    padding: const EdgeInsets.all(24),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.cloud_off_outlined, size: 40, color: kTextMuted),
+      const SizedBox(height: 8),
+      Text(msg, textAlign: TextAlign.center, style: const TextStyle(color: kDanger)),
+      const SizedBox(height: 8),
+      TextButton.icon(
+        onPressed: reintentar,
+        icon: const Icon(Icons.refresh, size: 16),
+        label: const Text('Reintentar'),
+      ),
+    ]),
+  ),
+);
+
 const double _colWidth   = 140;
 const double _labelWidth = 54;
 const double _rowHeight  = 40;
@@ -398,6 +426,8 @@ class _TabEncargadosState extends State<_TabEncargados>
   // Lista completa de registros HoraExtra (con id, usuario, nombre_completo, descripcion, duracion_horas)
   List<Map<String, dynamic>> _horasExtraList = [];
   bool _cargando = true;
+  bool _guardando = false;   // evita lanzar otra asignación mientras se guarda
+  String? _errorGrid;
 
   @override
   void initState() { super.initState(); Future.microtask(_cargar); }
@@ -405,7 +435,7 @@ class _TabEncargadosState extends State<_TabEncargados>
 
   Future<void> _cargar() async {
     if (!mounted) return;
-    setState(() => _cargando = true);
+    setState(() { _cargando = true; _errorGrid = null; });
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
 
@@ -420,7 +450,9 @@ class _TabEncargadosState extends State<_TabEncargados>
       }
       if (!mounted) return;
       setState(() => _grid = grid);
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) setState(() => _errorGrid = 'No se pudo cargar el horario de encargados.');
+    }
 
     try {
       final disponibles = await _getTodo(dio, 'academico/encargados-disponibles/');
@@ -453,8 +485,10 @@ class _TabEncargadosState extends State<_TabEncargados>
       return;
     }
 
+    if (_guardando) return;
+
     // Excluir los que ya están en este slot
-    final yaAsignados = _grid[dia]?[hora]?.map((e) => e['usuario'] as int).toSet() ?? {};
+    final yaAsignados = _grid[dia]?[hora]?.map((e) => e['usuario'] as int?).toSet() ?? {};
     final opciones = _disponibles.where((u) => !yaAsignados.contains(u['id'] as int)).toList();
 
     if (opciones.isEmpty) {
@@ -473,18 +507,35 @@ class _TabEncargadosState extends State<_TabEncargados>
 
     final horaFin = sel['hora_fin'] as int? ?? hora;
     final dio = ApiClient.instance.authenticatedDio(auth.token);
-    for (int h = hora; h <= horaFin; h++) {
-      // No crear si ya hay un slot para este usuario en esta hora
-      final yaEsta = _grid[dia]?[h]?.any((e) => e['usuario'] == sel['id']) ?? false;
-      if (yaEsta) continue;
-      try {
-        final r = await dio.post('academico/horario-encargado/', data: {
-          'usuario': sel['id'],
-          'dia_semana': dia,
-          'hora': h,
-        });
-        if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
-      } catch (_) {}
+    setState(() => _guardando = true);
+    int creadas = 0, fallidas = 0;
+    try {
+      for (int h = hora; h <= horaFin; h++) {
+        // No crear si ya hay un slot para este usuario en esta hora
+        final yaEsta = _grid[dia]?[h]?.any((e) => e['usuario'] == sel['id']) ?? false;
+        if (yaEsta) continue;
+        try {
+          final r = await dio.post('academico/horario-encargado/', data: {
+            'usuario': sel['id'],
+            'dia_semana': dia,
+            'hora': h,
+          });
+          creadas++;
+          if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
+        } catch (_) {
+          fallidas++;
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+    if (!mounted) return;
+    final nombre = sel['nombre_completo']?.toString() ?? sel['username']?.toString() ?? '';
+    if (fallidas > 0) {
+      _avisar(context, 'No se pudieron guardar $fallidas de ${creadas + fallidas} hora(s). '
+          'Pulsa Actualizar y revisa el horario.', error: true);
+    } else if (creadas > 0) {
+      _avisar(context, '$nombre asignado: ${_dias[dia]} ${_horaAmPm(hora)} – ${_horaAmPm(horaFin + 1)}');
     }
   }
 
@@ -494,8 +545,10 @@ class _TabEncargadosState extends State<_TabEncargados>
     final dio = ApiClient.instance.authenticatedDio(auth.token);
     try {
       await dio.delete('academico/horario-encargado/${item['id']}/');
-      setState(() => _grid[dia]?[hora]?.removeWhere((e) => e['id'] == item['id']));
-    } catch (_) {}
+      if (mounted) setState(() => _grid[dia]?[hora]?.removeWhere((e) => e['id'] == item['id']));
+    } catch (_) {
+      if (mounted) _avisar(context, 'No se pudo quitar el encargado', error: true);
+    }
   }
 
   Future<void> _editarEncargado(int dia, int hora, Map<String, dynamic> item) async {
@@ -530,7 +583,7 @@ class _TabEncargadosState extends State<_TabEncargados>
     if (accion == 'quitar') {
       await _eliminar(dia, hora, item);
     } else if (accion == 'cambiar') {
-      final yaAsignados = _grid[dia]?[hora]?.map((e) => e['usuario'] as int).toSet() ?? {};
+      final yaAsignados = _grid[dia]?[hora]?.map((e) => e['usuario'] as int?).toSet() ?? {};
       final opciones = _disponibles.where((u) => !yaAsignados.contains(u['id'] as int)).toList();
       if (opciones.isEmpty) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -549,6 +602,7 @@ class _TabEncargadosState extends State<_TabEncargados>
           'dia_semana': dia,
           'hora': hora,
         });
+        if (!mounted) return;
         setState(() {
           final list = _grid[dia]?[hora];
           if (list != null) {
@@ -846,6 +900,7 @@ class _TabEncargadosState extends State<_TabEncargados>
     final puedeEditar = auth.can(Perm.academicoGestionar);
 
     if (_cargando) return const Center(child: CircularProgressIndicator(color: kPrimary));
+    if (_errorGrid != null) return _errorCarga(_errorGrid!, _cargar);
 
     return Column(
       children: [
@@ -872,7 +927,9 @@ class _TabEncargadosState extends State<_TabEncargados>
             ),
           ]),
         ),
-        const Divider(height: 1),
+        _guardando
+            ? const LinearProgressIndicator(minHeight: 1, color: kPrimary)
+            : const Divider(height: 1),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -1096,13 +1153,15 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
   List<Map<String, dynamic>> _asignaturas = [];
   List<Map<String, dynamic>> _docentes    = [];
   bool _cargando = true;
+  bool _guardando = false;   // evita lanzar otra operación mientras se guarda
+  String? _errorGrid;
 
   @override
   void initState() { super.initState(); Future.microtask(_cargar); }
 
   Future<void> _cargar() async {
     if (!mounted) return;
-    setState(() => _cargando = true);
+    setState(() { _cargando = true; _errorGrid = null; });
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
 
@@ -1116,7 +1175,9 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       }
       if (!mounted) return;
       setState(() => _grid = grid);
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) setState(() => _errorGrid = 'No se pudo cargar el horario de asignaturas.');
+    }
 
     try {
       final asignaturas = await _getTodo(dio, 'academico/asignaturas/');
@@ -1148,6 +1209,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       return;
     }
 
+    if (_guardando) return;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (_) => _FormAsignaturaDialog(
@@ -1157,17 +1219,35 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
 
     final horaFin = result['hora_fin'] as int? ?? hora;
     final dio = ApiClient.instance.authenticatedDio(auth.token);
-    for (int h = hora; h <= horaFin; h++) {
-      try {
-        final r = await dio.post('academico/horario-asignatura/', data: {
-          'asignatura': result['asignatura_id'],
-          'dia_semana': dia,
-          'hora': h,
-          'docente': result['docente'],
-          'grupo': result['grupo'],
-        });
-        if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
-      } catch (_) {}
+    setState(() => _guardando = true);
+    int creadas = 0, fallidas = 0;
+    try {
+      for (int h = hora; h <= horaFin; h++) {
+        try {
+          final r = await dio.post('academico/horario-asignatura/', data: {
+            'asignatura': result['asignatura_id'],
+            'dia_semana': dia,
+            'hora': h,
+            'docente': result['docente'],
+            'grupo': result['grupo'],
+          });
+          creadas++;
+          if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
+        } catch (_) {
+          // Típicamente: la misma asignatura ya está en esa hora (único por
+          // asignatura+día+hora).
+          fallidas++;
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _guardando = false);
+    }
+    if (!mounted) return;
+    if (fallidas > 0) {
+      _avisar(context, 'No se pudieron guardar $fallidas de ${creadas + fallidas} hora(s) '
+          '(¿la asignatura ya estaba en ese horario?).', error: true);
+    } else if (creadas > 0) {
+      _avisar(context, 'Asignatura agregada: ${_dias[dia]} ${_horaAmPm(hora)} – ${_horaAmPm(horaFin + 1)}');
     }
   }
 
@@ -1177,8 +1257,10 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final dio = ApiClient.instance.authenticatedDio(auth.token);
     try {
       await dio.delete('academico/horario-asignatura/${item['id']}/');
-      setState(() => _grid[dia]?[hora]?.removeWhere((e) => e['id'] == item['id']));
-    } catch (_) {}
+      if (mounted) setState(() => _grid[dia]?[hora]?.removeWhere((e) => e['id'] == item['id']));
+    } catch (_) {
+      if (mounted) _avisar(context, 'No se pudo quitar la asignatura', error: true);
+    }
   }
 
   @override
@@ -1188,6 +1270,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final puedeEditar = auth.can(Perm.academicoGestionar);
 
     if (_cargando) return const Center(child: CircularProgressIndicator(color: kPrimary));
+    if (_errorGrid != null) return _errorCarga(_errorGrid!, _cargar);
 
     return Column(
       children: [
@@ -1213,7 +1296,9 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
             ),
           ]),
         ),
-        const Divider(height: 1),
+        _guardando
+            ? const LinearProgressIndicator(minHeight: 1, color: kPrimary)
+            : const Divider(height: 1),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -1269,14 +1354,20 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final auth = context.read<AuthProvider>();
     if (!auth.can(Perm.academicoGestionar)) return;
     final dio = ApiClient.instance.authenticatedDio(auth.token);
+    int fallidas = 0;
     for (int k = 0; k < b.duracion; k++) {
       final hora = _horas[b.horaIdx + k];
       for (final item in b.itemsByHora[k]) {
         try {
           await dio.delete('academico/horario-asignatura/${item['id']}/');
-          setState(() => _grid[dia]?[hora]?.removeWhere((e) => e['id'] == item['id']));
-        } catch (_) {}
+          if (mounted) setState(() => _grid[dia]?[hora]?.removeWhere((e) => e['id'] == item['id']));
+        } catch (_) {
+          fallidas++;
+        }
       }
+    }
+    if (fallidas > 0 && mounted) {
+      _avisar(context, 'No se pudieron quitar $fallidas hora(s) del bloque', error: true);
     }
   }
 
@@ -1332,6 +1423,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       if (result == null || !mounted) return;
       final dio = ApiClient.instance.authenticatedDio(auth.token);
       // Actualizar todas las filas del bloque con los nuevos datos
+      int fallidas = 0;
       for (int k = 0; k < b.duracion; k++) {
         final hora    = _horas[b.horaIdx + k];
         final rowItem = b.itemsByHora[k][0];
@@ -1341,6 +1433,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
             'docente':    result['docente'],
             'grupo':      result['grupo'],
           });
+          if (!mounted) return;
           setState(() {
             final list = _grid[dia]?[hora];
             if (list != null) {
@@ -1348,7 +1441,15 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
               if (idx >= 0) list[idx] = r.data as Map<String, dynamic>;
             }
           });
-        } catch (_) {}
+        } catch (_) {
+          fallidas++;
+        }
+      }
+      if (!mounted) return;
+      if (fallidas > 0) {
+        _avisar(context, 'No se pudieron actualizar $fallidas hora(s) del bloque', error: true);
+      } else {
+        _avisar(context, 'Bloque actualizado');
       }
     }
   }
@@ -1403,6 +1504,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
           'docente':    result['docente'],
           'grupo':      result['grupo'],
         });
+        if (!mounted) return;
         setState(() {
           final list = _grid[dia]?[hora];
           if (list != null) {
