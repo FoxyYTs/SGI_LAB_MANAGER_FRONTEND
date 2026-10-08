@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
@@ -18,9 +19,11 @@ class _PresentacionRow {
   /// el servidor registra la diferencia como AJUSTE en la bitácora, o
   /// responde 409 si alguien movió el stock mientras se editaba.
   String? stockServidor;
+  /// false = desactivada en el servidor (no se presta ni cuenta en el total).
+  bool activa;
 
   _PresentacionRow({this.id, String stock = '0', String foto = '', this.unidadId,
-      this.stockServidor})
+      this.stockServidor, this.activa = true})
       : stockCtrl = TextEditingController(text: stock),
         fotoCtrl  = TextEditingController(text: foto);
 
@@ -71,6 +74,11 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
   // Presentaciones dinámicas
   final List<_PresentacionRow> _presentaciones = [];
   final List<String> _presentacionesEliminar   = []; // ids a borrar en edición
+  // Unidad de cada presentación marcada para borrar (para el aviso si el
+  // backend no deja borrarla por tener historial).
+  final Map<String, String> _unidadEliminada = {};
+  // Presentación cuyo estado activa/inactiva se está cambiando.
+  String? _cambiandoEstado;
 
   bool _loading   = true;
   bool _guardando = false;
@@ -147,6 +155,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
         foto:     p['foto'] as String? ?? '',
         unidadId: p['unidad_medida']?.toString(),
         stockServidor: p['stock_actual']?.toString(),
+        activa:   p['activa'] != false,
       ));
     }
     if (_presentaciones.isEmpty) {
@@ -161,9 +170,81 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
   void _eliminarPresentacion(int index) {
     final row = _presentaciones[index];
-    if (row.id != null) _presentacionesEliminar.add(row.id!);
+    if (row.id != null) {
+      _presentacionesEliminar.add(row.id!);
+      _unidadEliminada[row.id!] = _nombreUnidad(row.unidadId);
+    }
     row.dispose();
     setState(() => _presentaciones.removeAt(index));
+  }
+
+  String _nombreUnidad(String? unidadId) => _unidades
+          .firstWhere((u) => u['id'].toString() == unidadId,
+              orElse: () => const {})['nombre_unidad']
+          ?.toString() ??
+      '';
+
+  String get _insumoId =>
+      (widget.insumo?['id']?.toString() ?? _insumoIdGuardado)!;
+
+  /// Desactiva / reactiva YA (no espera a "Guardar") una presentación
+  /// existente. Es la alternativa a borrarla cuando tiene historial.
+  Future<void> _cambiarEstado(_PresentacionRow p, bool activar) async {
+    if (p.id == null || _cambiandoEstado != null) return;
+    setState(() => _cambiandoEstado = p.id);
+    try {
+      final dio = ApiClient.instance
+          .authenticatedDio(context.read<AuthProvider>().token);
+      await dio.post('inventario/lista/$_insumoId/presentaciones/${p.id}/'
+          '${activar ? 'activar' : 'desactivar'}/');
+      if (!mounted) return;
+      setState(() => p.activa = activar);
+      _snack(activar ? 'Presentación reactivada.' : 'Presentación desactivada.',
+          kSuccess);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      _snack('No se pudo cambiar la presentación: '
+          '${data is Map ? (data['error'] ?? data['detail'] ?? data.values.first) : e.message}',
+          kDanger);
+    } finally {
+      if (mounted) setState(() => _cambiandoEstado = null);
+    }
+  }
+
+  /// Borra una presentación marcada para eliminar. Si el backend responde
+  /// 409 (tiene préstamos o movimientos) ofrece desactivarla en su lugar.
+  /// Devuelve normalmente en ambos casos; otros errores se propagan.
+  Future<void> _borrarPresentacion(Dio dio, String insumoId, String presId) async {
+    try {
+      await dio.delete('inventario/lista/$insumoId/presentaciones/$presId/');
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 409 || !mounted) rethrow;
+      final unidad = _unidadEliminada[presId] ?? '';
+      final desactivar = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('No se puede eliminar'),
+          content: Text(
+              'La presentación${unidad.isEmpty ? '' : ' "$unidad"'} tiene '
+              'préstamos o movimientos registrados y no se puede borrar.\n\n'
+              '¿Quieres desactivarla? Dejará de ofrecerse para préstamos y su '
+              'stock no contará en el total, pero conservará su historial.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Mantenerla activa')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Desactivar',
+                    style: TextStyle(color: kDanger))),
+          ],
+        ),
+      );
+      if (desactivar == true) {
+        await dio.post('inventario/lista/$insumoId/presentaciones/$presId/desactivar/');
+      }
+    }
   }
 
   Future<void> _guardar() async {
@@ -203,7 +284,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
       // Eliminar presentaciones borradas (se van quitando de la lista para
       // que un reintento no las vuelva a borrar)
       for (final presId in List<String>.from(_presentacionesEliminar)) {
-        await dio.delete('inventario/lista/$id/presentaciones/$presId/');
+        await _borrarPresentacion(dio, id.toString(), presId);
         _presentacionesEliminar.remove(presId);
       }
 
@@ -461,7 +542,38 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: kPrimary, fontSize: 13)),
+              if (!p.activa) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE9ECEF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text('INACTIVA',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold,
+                          color: kTextMuted)),
+                ),
+              ],
               const Spacer(),
+              if (p.id != null)
+                _cambiandoEstado == p.id
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: kPrimary)))
+                    : TextButton.icon(
+                        onPressed: () => _cambiarEstado(p, !p.activa),
+                        icon: Icon(p.activa ? Icons.block : Icons.restore,
+                            size: 16,
+                            color: p.activa ? kTextMuted : kSuccess),
+                        label: Text(p.activa ? 'Desactivar' : 'Reactivar',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: p.activa ? kTextMuted : kSuccess)),
+                      ),
               if (_presentaciones.length > 1)
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: kDanger, size: 20),
