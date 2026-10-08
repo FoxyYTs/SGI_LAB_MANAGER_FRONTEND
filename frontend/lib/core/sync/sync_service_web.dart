@@ -11,6 +11,8 @@ class SyncService extends ChangeNotifier {
 
   Future<void> init(String? token) async {}
   void updateToken(String? token) {}
+  Future<void> cerrarSesion() async {}
+  Future<void> sincronizarAhora({Duration timeout = const Duration(seconds: 10)}) async {}
   Future<void> encolar(String operacion, Map<String, dynamic> payload) async {}
   Future<List<Map<String, dynamic>>> historialCola() async => [];
 
