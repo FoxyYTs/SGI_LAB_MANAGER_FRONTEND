@@ -80,6 +80,20 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
   /// Verifica si el usuario tiene un permiso concreto.
   bool can(String permiso) => _permisos.contains(permiso);
 
+  /// Sesiones web: expiran a la medianoche del día de login. Una sesión sin
+  /// `login_date` (o con una fecha ilegible) se considera expirada: son las
+  /// guardadas antes de que existiera la expiración y, si no, no expirarían
+  /// nunca. Tras el logout, el siguiente login ya guarda la fecha, así que
+  /// esto fuerza el cierre una sola vez.
+  @visibleForTesting
+  static bool sesionWebExpirada(String? loginDate, DateTime ahora) {
+    final fecha = loginDate == null ? null : DateTime.tryParse(loginDate);
+    if (fecha == null) return true;
+    final diaLogin = DateTime(fecha.year, fecha.month, fecha.day);
+    final hoy      = DateTime(ahora.year, ahora.month, ahora.day);
+    return diaLogin.isBefore(hoy);
+  }
+
   /// Restaura el estado de la sesión desde el almacenamiento seguro del dispositivo.
   /// Llamado en el arranque de la app antes de mostrar cualquier pantalla.
   /// En web, verifica que la sesión no haya expirado a medianoche.
@@ -87,23 +101,15 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
     try {
       _token = await _storage.read(key: 'token');
 
-      if (_token != null && kIsWeb) {
-        // Sesiones web expiran a medianoche: comparar fecha de login con hoy.
-        final fechaStr = await _storage.read(key: 'login_date');
-        if (fechaStr != null) {
-          final fechaLogin = DateTime.parse(fechaStr);
-          final hoy = DateTime.now();
-          final expiro = fechaLogin.year < hoy.year ||
-              fechaLogin.month < hoy.month ||
-              fechaLogin.day < hoy.day;
-          if (expiro) {
-            // Antes solo se borraba el storage y `_token` quedaba en memoria:
-            // la app seguía "autenticada" con un token sin refresh.
-            _refreshToken = await _storage.read(key: 'refresh_token');
-            await logout(sesionExpirada: true);
-            return;
-          }
-        }
+      if (_token != null && kIsWeb &&
+          sesionWebExpirada(await _storage.read(key: 'login_date'), DateTime.now())) {
+        // Antes solo se borraba el storage y `_token` quedaba en memoria:
+        // la app seguía "autenticada" con un token sin refresh. Se pasa por
+        // logout() para invalidar también el refresh en el servidor.
+        LogService.log('Sesión web expirada o sin fecha de login — cerrando sesión.');
+        _refreshToken = await _storage.read(key: 'refresh_token');
+        await logout(sesionExpirada: true);
+        return;
       }
 
       _refreshToken      = await _storage.read(key: 'refresh_token');

@@ -105,4 +105,26 @@ void main() {
     expect(auth.isAuthenticated, isFalse);
     expect(http.veces('token/blacklist/'), 1);
   });
+
+  group('sesionWebExpirada', () {
+    final ahora = DateTime(2026, 10, 8, 9, 30);
+
+    test('sin login_date (sesión anterior a la expiración) → expirada', () {
+      expect(AuthProvider.sesionWebExpirada(null, ahora), isTrue);
+    });
+
+    test('login_date ilegible → expirada', () {
+      expect(AuthProvider.sesionWebExpirada('no-es-fecha', ahora), isTrue);
+    });
+
+    test('login de hoy → vigente', () {
+      expect(AuthProvider.sesionWebExpirada('2026-10-08T00:01:00.000', ahora), isFalse);
+    });
+
+    test('login de ayer, de otro mes o de otro año → expirada', () {
+      expect(AuthProvider.sesionWebExpirada('2026-10-07T23:59:00.000', ahora), isTrue);
+      expect(AuthProvider.sesionWebExpirada('2026-09-30T10:00:00.000', ahora), isTrue);
+      expect(AuthProvider.sesionWebExpirada('2025-12-31T10:00:00.000', ahora), isTrue);
+    });
+  });
 }
