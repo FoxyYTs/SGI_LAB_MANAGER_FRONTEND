@@ -901,6 +901,13 @@ class _PrestamoCard extends StatelessWidget {
     required this.onAgregarItem,
   });
 
+  /// true si la línea ya tuvo alguna devolución (pendiente ≠ prestado).
+  static bool _tieneDevolucionParcial(Map d) {
+    final pend  = double.tryParse(d['pendiente_devolucion']?.toString() ?? '');
+    final prest = double.tryParse(d['cantidad_prestada']?.toString() ?? '');
+    return pend != null && prest != null && pend != prest;
+  }
+
   static const _estadoColors = {
     'PENDIENTE': kWarning,
     'ACTIVO':    kPrimary,
@@ -1000,9 +1007,9 @@ class _PrestamoCard extends StatelessWidget {
                         style: const TextStyle(fontSize: 13))),
                     Text('×${d['cantidad_prestada']}',
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    if ((d['pendiente_devolucion'] != null &&
-                        double.tryParse(d['pendiente_devolucion'].toString()) !=
-                            d['cantidad_prestada']))
+                    // DRF envía los Decimal como texto ("2.00"): hay que
+                    // comparar ambos como double, no double contra String.
+                    if (_tieneDevolucionParcial(d))
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
                         child: Text('(pend. ${d['pendiente_devolucion']})',
