@@ -318,6 +318,68 @@ void main() {
     });
   });
 
+  group('RangosHorario: rangos distintos por día', () {
+    // Caso real (u3): mié 8,9 y 11,12 · jue 16–19 · vie 18,19 · sáb 8–11.
+    const u3 = [
+      RangoHoras(2, 8, 10),
+      RangoHoras(2, 11, 13),
+      RangoHoras(3, 16, 20),
+      RangoHoras(4, 18, 20),
+      RangoHoras(5, 8, 12),
+    ];
+
+    test('normalizar fusiona solapes y contiguos, ordena y recorta', () {
+      expect(RangosHorario.normalizar(const [
+        RangoHoras(3, 14, 15),
+        RangoHoras(0, 10, 13),
+        RangoHoras(0, 8, 11),
+        RangoHoras(0, 13, 14),
+        RangoHoras(0, 8, 11),
+      ]), const [RangoHoras(0, 8, 14), RangoHoras(3, 14, 15)]);
+      expect(RangosHorario.normalizar(u3), u3);
+      expect(RangosHorario.normalizar(const [
+        RangoHoras(1, 4, 8), RangoHoras(1, 21, 24), RangoHoras(1, 9, 9), RangoHoras(6, 8, 9),
+      ]), const [RangoHoras(1, 6, 8), RangoHoras(1, 21, 22)]);
+      expect(RangosHorario.normalizar(const []), isEmpty);
+    });
+
+    test('totales y resumen cuentan una vez las horas solapadas', () {
+      expect(RangosHorario.totalHoras(u3), 14);
+      expect(RangosHorario.diasCon(u3), {2, 3, 4, 5});
+      expect(RangosHorario.resumenTotal(u3), 'Total: 14 h en 4 días');
+      expect(RangosHorario.resumenTotal(const [RangoHoras(0, 8, 11), RangoHoras(0, 9, 12)]),
+          'Total: 4 h en 1 día');
+      expect(RangosHorario.resumenTotal(const []), 'Total: 0 h');
+    });
+
+    test('aBloquesJson arma el cuerpo normalizado para el backend', () {
+      expect(RangosHorario.aBloquesJson(const [
+        RangoHoras(2, 11, 13), RangoHoras(2, 8, 10), RangoHoras(2, 9, 11),
+      ]), [
+        {'dia': 2, 'hora_inicio': 8, 'hora_fin': 13},
+      ]);
+      expect(RangosHorario.aBloquesJson(u3).length, 5);
+    });
+
+    test('describirPorDia agrupa los rangos de cada día', () {
+      expect(RangosHorario.describirPorDia(u3.take(3)),
+          'X 8 AM – 10 AM, 11 AM – 1 PM · J 4 PM – 8 PM');
+    });
+
+    test('sugerirRangoNuevo deja una hora libre y respeta los límites', () {
+      const def = RangoHoras(0, 9, 12);
+      expect(RangosHorario.sugerirRangoNuevo(2, const [], def), const RangoHoras(2, 9, 12));
+      expect(RangosHorario.sugerirRangoNuevo(2, const [RangoHoras(2, 8, 10)], def),
+          const RangoHoras(2, 11, 12));
+      expect(RangosHorario.sugerirRangoNuevo(2, const [RangoHoras(2, 18, 21)], def),
+          const RangoHoras(2, 21, 22));
+      expect(RangosHorario.sugerirRangoNuevo(2, const [RangoHoras(2, 14, 22)], def),
+          const RangoHoras(2, 12, 13));
+      expect(RangosHorario.sugerirRangoNuevo(2, const [RangoHoras(2, 6, 22)], def),
+          const RangoHoras(2, 6, 7));
+    });
+  });
+
   group('RangosHorario.describirChoques()', () {
     test('formatea los choques del 409', () {
       final l = RangosHorario.describirChoques([
