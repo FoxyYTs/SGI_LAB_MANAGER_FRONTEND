@@ -51,6 +51,7 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _medianochTimer?.cancel();
+    _fcmRefreshSub?.cancel();
     super.dispose();
   }
 
@@ -62,6 +63,8 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
   String?      _fotoUrl;
   Set<String>  _permisos = {};
   Timer?       _medianochTimer;
+  Future<void>? _logoutEnCurso;
+  StreamSubscription<String>? _fcmRefreshSub;
 
   bool        get isAuthenticated     => _token != null;
   String?     get rol                 => _rol;
@@ -94,8 +97,10 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
               fechaLogin.month < hoy.month ||
               fechaLogin.day < hoy.day;
           if (expiro) {
-            await _storage.deleteAll();
-            notifyListeners();
+            // Antes solo se borraba el storage y `_token` quedaba en memoria:
+            // la app seguía "autenticada" con un token sin refresh.
+            _refreshToken = await _storage.read(key: 'refresh_token');
+            await logout(sesionExpirada: true);
             return;
           }
         }
@@ -112,58 +117,68 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
         _permisos = Set<String>.from(jsonDecode(permsJson) as List);
       }
 
-      if (_token != null) {
-        await SyncService.instance.init(_token);
-        if (_refreshToken != null) {
-          // Android: refrescar proactivamente al arrancar para obtener tokens frescos.
-          // Si falla por red (offline) se ignora; si falla por token expirado, logout.
-          if (!kIsWeb) {
-            try {
-              final resp = await ApiClient.instance.dio.post(
-                'token/refresh/',
-                data: {'refresh': _refreshToken},
-              );
-              _token = resp.data['access'] as String;
-              await _storage.write(key: 'token', value: _token);
-              final newRefresh = resp.data['refresh'] as String?;
-              if (newRefresh != null) {
-                _refreshToken = newRefresh;
-                await _storage.write(key: 'refresh_token', value: _refreshToken);
-              }
-            } on DioException catch (e) {
-              if (e.response?.statusCode != null) {
-                // Token expirado o blacklisteado: forzar logout
-                await _storage.deleteAll();
-                _token = _refreshToken = _rol = _username = null;
-                _haceTurnosMonitor = false;
-                _permisos = {};
-                notifyListeners();
-                return;
-              }
-              // Error de red (sin conexión): continuar con token cacheado
+      if (_token != null && _refreshToken != null) {
+        // Android: refrescar proactivamente al arrancar para obtener tokens frescos.
+        // Solo un rechazo del servidor de autenticación (401 / 400 de simplejwt)
+        // cierra la sesión; red caída, 5xx, 52x de Cloudflare, 429 o 426
+        // (versión obsoleta, ver ApiClient.requiereActualizacion) conservan la
+        // sesión cacheada.
+        if (!kIsWeb) {
+          try {
+            final resp = await ApiClient.instance.dio.post(
+              'token/refresh/',
+              data: {'refresh': _refreshToken},
+            );
+            final newRefresh = resp.data['refresh'] as String?;
+            if (newRefresh != null) {
+              // Primero el refresh: el anterior ya quedó blacklisteado.
+              _refreshToken = newRefresh;
+              await _storage.write(key: 'refresh_token', value: _refreshToken);
             }
+            _token = resp.data['access'] as String;
+            await _storage.write(key: 'token', value: _token);
+          } on DioException catch (e) {
+            if (esRechazoDeRefresh(e.response?.statusCode, e.response?.data) &&
+                !await _otroIsolateRotoElRefresh()) {
+              LogService.log('Sesión guardada rechazada por el servidor '
+                  '(HTTP ${e.response?.statusCode}) — cerrando sesión.');
+              await logout(sesionExpirada: true);
+              return;
+            }
+            LogService.log('Refresco al arrancar falló (${e.type.name} '
+                '${e.response?.statusCode ?? ''}) — se usa el token cacheado.');
           }
-
-          ApiClient.instance.setTokens(
-            _token!,
-            _refreshToken!,
-            onRefreshed:      _actualizarToken,
-            onLogout:         () => logout(),
-            onRefreshRotated: _actualizarRefreshToken,
-          );
         }
+
+        _configurarApiClient();
       }
+
+      // Tras setTokens: si la cola recibe un 401, el interceptor ya puede refrescar.
+      if (_token != null) await SyncService.instance.init(_token);
 
       if (_token != null && kIsWeb) _programarCierreMedianoche();
     } catch (e) {
       // Si el almacenamiento seguro falla (Keystore no disponible, etc.),
       // la sesión queda vacía y el usuario verá la pantalla de login.
       debugPrint('[AuthProvider] Error restaurando sesión: $e');
-      _token = _refreshToken = _rol = _username = null;
-      _haceTurnosMonitor = false;
-      _permisos = {};
+      ApiClient.instance.clearTokens();
+      _limpiarEstadoEnMemoria();
     }
     notifyListeners();
+  }
+
+  /// La tarea de Workmanager (otro isolate) también refresca y rota el
+  /// refresh token. Si el servidor rechazó el nuestro, comprobar si es porque
+  /// ese isolate lo acaba de rotar: en tal caso adoptar los tokens guardados.
+  Future<bool> _otroIsolateRotoElRefresh() async {
+    final usado = _refreshToken;
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+    final guardado = await _storage.read(key: 'refresh_token');
+    if (guardado == null || guardado == usado) return false;
+    _refreshToken = guardado;
+    _token = await _storage.read(key: 'token') ?? _token;
+    LogService.log('Refresh rotado por la tarea de fondo — se adoptan los tokens guardados.');
+    return true;
   }
 
   /// Devuelve `null` si el login fue exitoso, o un mensaje de error legible.
@@ -185,28 +200,6 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
       if (kIsWeb) {
         await _storage.write(key: 'login_date', value: DateTime.now().toIso8601String());
       }
-
-      await _cargarPermisos();
-      await SyncService.instance.init(_token);
-      ApiClient.instance.setTokens(
-        _token!,
-        _refreshToken!,
-        onRefreshed:      _actualizarToken,
-        onLogout:         () => logout(),
-        onRefreshRotated: _actualizarRefreshToken,
-      );
-      if (kIsWeb) _programarCierreMedianoche();
-
-      // Notificaciones y tareas de fondo solo en Android
-      if (!kIsWeb && Platform.isAndroid) {
-        await NotificationService.init();
-        await NotificationService.requestPermission();
-        await registerBackgroundTasks();
-        await _registrarFcmToken();
-      }
-
-      notifyListeners();
-      return null;
     } on DioException catch (e) {
       final code = e.response?.statusCode;
       LogService.log('Login error: status=$code type=${e.type.name} msg=${e.message}');
@@ -216,10 +209,61 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
       }
       return friendly;
     } catch (e) {
+      // Fallo guardando la sesión (Keystore, etc.): no dejar media sesión.
       LogService.log('Login error inesperado: $e');
+      _limpiarEstadoEnMemoria();
       if (LogService.devMode) return 'Error inesperado\n\n[DEV] $e';
       return 'Error inesperado. Intenta de nuevo.';
     }
+
+    _configurarApiClient();
+    await _cargarPermisos();
+    await SyncService.instance.init(_token);
+    if (kIsWeb) _programarCierreMedianoche();
+
+    notifyListeners();
+
+    // Notificaciones, tareas de fondo y FCM: opcionales — un fallo aquí no
+    // invalida un login que ya fue exitoso.
+    await iniciarServiciosDispositivo();
+    return null;
+  }
+
+  /// Registra en ApiClient los tokens actuales y los callbacks de refresco.
+  void _configurarApiClient() {
+    ApiClient.instance.setTokens(
+      _token!,
+      _refreshToken!,
+      onRefreshed:           _actualizarToken,
+      onLogout:              () => logout(sesionExpirada: true),
+      onRefreshRotated:      _actualizarRefreshToken,
+      leerTokensPersistidos: _leerTokensPersistidos,
+    );
+  }
+
+  Future<TokensPersistidos> _leerTokensPersistidos() async => (
+        access:  await _storage.read(key: 'token'),
+        refresh: await _storage.read(key: 'refresh_token'),
+      );
+
+  /// Notificaciones locales, tareas de Workmanager y token FCM (solo Android).
+  /// Se llama tras login y tras restaurar la sesión al arrancar. Cada paso es
+  /// best-effort e independiente.
+  Future<void> iniciarServiciosDispositivo() async {
+    if (kIsWeb || !Platform.isAndroid || !isAuthenticated) return;
+    Future<void> paso(String nombre, Future<void> Function() f) async {
+      try {
+        await f();
+      } catch (e) {
+        LogService.log('[AuthProvider] $nombre falló: $e');
+      }
+    }
+
+    await paso('NotificationService.init', NotificationService.init);
+    await paso('requestPermission', NotificationService.requestPermission);
+    await paso('registerBackgroundTasks', registerBackgroundTasks);
+    // Sin await: getToken() puede tardar y no debe retrasar la UI.
+    unawaited(paso('registrar FCM', _registrarFcmToken));
   }
 
   Future<void> _cargarPermisos() async {
@@ -238,7 +282,11 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
       );
     } catch (e) {
       debugPrint('Error cargando permisos: $e');
-      _permisos = {};
+      // Sin red / servidor caído: conservar los permisos que ya teníamos
+      // (si no, al volver a primer plano offline desaparecerían los menús).
+      // Solo un rechazo explícito de credenciales/permiso los vacía.
+      final code = e is DioException ? e.response?.statusCode : null;
+      if (code == 401 || code == 403) _permisos = {};
     }
     // Cargar foto de perfil de forma independiente para no bloquear el login
     try {
@@ -258,11 +306,13 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
   }
 
   /// Registra el token FCM del dispositivo en el backend y escucha rotaciones.
+  /// Idempotente: solo mantiene una suscripción a `onTokenRefresh`.
   Future<void> _registrarFcmToken() async {
     try {
+      await _fcmRefreshSub?.cancel();
+      _fcmRefreshSub = FirebaseMessaging.instance.onTokenRefresh.listen(_enviarFcmToken);
       final fcmToken = await FirebaseMessaging.instance.getToken();
       if (fcmToken != null) await _enviarFcmToken(fcmToken);
-      FirebaseMessaging.instance.onTokenRefresh.listen(_enviarFcmToken);
     } catch (e) {
       debugPrint('[AuthProvider] Error registrando FCM token: $e');
     }
@@ -274,22 +324,41 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
       final dio = ApiClient.instance.authenticatedDio(_token);
       await dio.post('usuarios/fcm-token/', data: {'token': fcmToken});
       debugPrint('[AuthProvider] FCM token registrado.');
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AuthProvider] No se pudo registrar el FCM token: $e');
+    }
   }
 
-  Future<void> _eliminarFcmToken() async {
+  /// Desvincula el dispositivo de las notificaciones push del usuario.
+  /// Best-effort y sin refresco de token (se llama durante el logout):
+  /// 1. DELETE en el backend con el access que haya (si ya caducó, falla).
+  /// 2. `deleteToken()` invalida el token en Firebase, así que aunque el
+  ///    paso 1 falle, el backend deja de poder entregarle push a este usuario.
+  Future<void> _eliminarFcmToken(String? access) async {
+    await _fcmRefreshSub?.cancel();
+    _fcmRefreshSub = null;
     try {
-      final fcmToken = await FirebaseMessaging.instance.getToken();
-      if (fcmToken != null && _token != null) {
-        final dio = ApiClient.instance.authenticatedDio(_token);
-        await dio.delete('usuarios/fcm-token/', data: {'token': fcmToken});
+      final fcmToken = await FirebaseMessaging.instance.getToken()
+          .timeout(const Duration(seconds: 5));
+      if (fcmToken != null && access != null) {
+        await ApiClient.instance
+            .dioSinRefresco(access)
+            .delete('usuarios/fcm-token/', data: {'token': fcmToken});
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AuthProvider] No se pudo eliminar el FCM token en el backend: $e');
+    }
+    try {
+      await FirebaseMessaging.instance.deleteToken().timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('[AuthProvider] Error en FirebaseMessaging.deleteToken: $e');
+    }
   }
 
   /// Callback invocado por ApiClient cuando obtiene un nuevo access token.
   Future<void> _actualizarToken(String newToken) async {
     _token = newToken;
+    SyncService.instance.updateToken(newToken);
     await _storage.write(key: 'token', value: newToken);
     debugPrint('[AuthProvider] Access token actualizado por refresco automático.');
   }
@@ -325,34 +394,72 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> logout() async {
+  /// Cierra la sesión. Reentrante: llamadas concurrentes (botón + refresh
+  /// rechazado + medianoche web) comparten la misma ejecución.
+  ///
+  /// [sesionExpirada] = la llamó ApiClient/arranque porque el servidor rechazó
+  /// el refresh: no se intenta sincronizar la cola (no hay credenciales).
+  Future<void> logout({bool sesionExpirada = false}) {
+    return _logoutEnCurso ??=
+        _logout(sesionExpirada).whenComplete(() => _logoutEnCurso = null);
+  }
+
+  Future<void> _logout(bool sesionExpirada) async {
     _medianochTimer?.cancel();
     _medianochTimer = null;
 
-    // Cancelar tareas de fondo al cerrar sesión (solo Android)
-    if (!kIsWeb && Platform.isAndroid) {
-      await cancelBackgroundTasks();
-      await _eliminarFcmToken();
+    // Logout voluntario con red: intentar subir las operaciones offline
+    // pendientes antes de borrarlas junto con el resto de datos locales.
+    if (!sesionExpirada) {
+      await SyncService.instance.sincronizarAhora();
     }
 
-    // Invalidar el refresh token en el servidor para que no pueda generar nuevos access tokens.
-    // Fallo silencioso: si no hay red o el token ya expiró, la sesión local se limpia igual.
-    if (_refreshToken != null) {
-      try {
-        await ApiClient.instance.dio.post(
-          'token/blacklist/',
-          data: {'refresh': _refreshToken},
-        );
-      } catch (_) {}
-    }
+    final access  = _token;
+    final refresh = _refreshToken;
 
+    // Lo primero: cortar el refresco automático. A partir de aquí ningún 401
+    // (p. ej. del DELETE de FCM con el access caducado) puede disparar otro
+    // refresh ni otro logout.
     ApiClient.instance.clearTokens();
+    SyncService.instance.updateToken(null);
+
+    final online = SyncService.instance.online;
+    await Future.wait([
+      // Cancelar tareas de fondo y desvincular FCM (solo Android)
+      if (!kIsWeb && Platform.isAndroid) ...[
+        _ignorarErrores(cancelBackgroundTasks()),
+        _eliminarFcmToken(online ? access : null),
+      ],
+      // Invalidar el refresh token en el servidor para que no pueda generar
+      // nuevos access tokens. Best-effort: sin red o ya expirado, se limpia
+      // igual la sesión local.
+      if (refresh != null && online)
+        _ignorarErrores(ApiClient.instance
+            .dioSinRefresco(null)
+            .post('token/blacklist/', data: {'refresh': refresh})),
+    ]);
+
+    // Cola offline y cachés del usuario: no deben sobrevivir al logout.
+    await SyncService.instance.cerrarSesion();
 
     try {
       await _storage.deleteAll();
     } catch (e) {
       debugPrint('[AuthProvider] Error al borrar storage en logout: $e');
     }
+    _limpiarEstadoEnMemoria();
+    notifyListeners();
+  }
+
+  static Future<void> _ignorarErrores(Future<dynamic> f) async {
+    try {
+      await f;
+    } catch (e) {
+      debugPrint('[AuthProvider] (logout best-effort) $e');
+    }
+  }
+
+  void _limpiarEstadoEnMemoria() {
     _token             = null;
     _refreshToken      = null;
     _rol               = null;
@@ -360,7 +467,6 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
     _username          = null;
     _fotoUrl           = null;
     _permisos          = {};
-    notifyListeners();
   }
 
   static String _mensajeAmigable(DioException e) {
