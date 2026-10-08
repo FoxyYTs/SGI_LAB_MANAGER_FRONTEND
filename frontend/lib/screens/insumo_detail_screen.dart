@@ -320,9 +320,14 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
   Widget _buildBody() {
     final d = _insumo!;
     final tipo = d['tipo_nombre']?.toString() ?? '';
-    final stock = double.tryParse(d['stock_actual']?.toString() ?? '0') ?? 0;
+    // stock_total = suma de presentaciones; stock_actual queda como fallback legacy
+    final stock = double.tryParse(
+            (d['stock_total'] ?? d['stock_actual'])?.toString() ?? '0') ?? 0;
     final stockMin = double.tryParse(d['stock_minimo']?.toString() ?? '0') ?? 0;
-    final unidad = d['unidad_abreviatura']?.toString() ?? '';
+    final presentaciones = d['presentaciones'] as List? ?? const [];
+    final unidad = presentaciones.isNotEmpty
+        ? (presentaciones.first as Map)['unidad_nombre']?.toString() ?? ''
+        : d['unidad_abreviatura']?.toString() ?? '';
 
     Color semaforoColor;
     String semaforoLabel;
