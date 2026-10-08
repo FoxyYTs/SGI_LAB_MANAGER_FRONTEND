@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
+import '../widgets/error_carga.dart';
 import '../core/theme/colors.dart';
 import '../core/text_utils.dart';
 
@@ -38,6 +40,9 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   bool _enviando = false;
   bool _enviado  = false;
   bool _idValidado = false;   // activa los mensajes de error en la identificación
+  bool _cargandoProgramas = true;
+  String? _errorProgramas;
+  String? _errorInsumos;
 
   final _idFormKey = GlobalKey<FormState>();
 
@@ -55,11 +60,18 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   }
 
   Future<void> _cargarProgramas() async {
+    setState(() { _cargandoProgramas = true; _errorProgramas = null; });
     try {
-      final r = await _dio.get('academico/programas-publico/');
+      final lista = await obtenerTodas(_dio, 'academico/programas-publico/');
       if (!mounted) return;
-      setState(() => _programas = List<Map<String, dynamic>>.from(r.data));
-    } catch (_) {}
+      setState(() { _programas = lista; _cargandoProgramas = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorProgramas = mensajeErrorCarga(e, 'los programas');
+        _cargandoProgramas = false;
+      });
+    }
   }
 
   @override
@@ -73,19 +85,24 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   Future<void> _continuar() async {
     setState(() => _idValidado = true);
     if (!(_idFormKey.currentState?.validate() ?? false)) return;
-    setState(() => _cargando = true);
+    setState(() { _cargando = true; _errorInsumos = null; });
     try {
-      final r = await _dio.get('inventario/lista/');
+      // Catálogo público mínimo (sin login): `inventario/lista/` exige
+      // permiso desde DEF-024 y respondía 401, así que "Continuar" no
+      // hacía nada.
+      final lista = await obtenerTodas(_dio, 'inventario/lista-publica/');
       if (!mounted) return;
-      final d = r.data;
       setState(() {
-        _insumos      = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _insumos      = lista;
         _identificado = true;
         _cargando     = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _cargando = false);
+      setState(() {
+        _errorInsumos = mensajeErrorCarga(e, 'la lista de materiales');
+        _cargando     = false;
+      });
     }
   }
 
@@ -348,15 +365,24 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
             fCel,
           ],
           const SizedBox(height: 12),
-          _programas.isEmpty
-              ? const Center(child: SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary)))
-              : fProg,
+          if (_cargandoProgramas)
+            const Center(child: SizedBox(width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary)))
+          else if (_errorProgramas != null)
+            ErrorCargaReintentar(mensaje: _errorProgramas!, onReintentar: _cargarProgramas)
+          else
+            fProg,
+          if (_errorInsumos != null) ...[
+            const SizedBox(height: 12),
+            ErrorCargaReintentar(mensaje: _errorInsumos!, onReintentar: _continuar),
+          ],
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _cargando ? null : _continuar,
+              onPressed: (_cargando || _cargandoProgramas || _errorProgramas != null)
+                  ? null
+                  : _continuar,
               style: ElevatedButton.styleFrom(
                 backgroundColor: kPrimary, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -542,8 +568,8 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
           if (_cargando)
             const Center(child: CircularProgressIndicator(color: kPrimary))
           else if (_insumos.isEmpty)
-            const Text('No se pudieron cargar los materiales.',
-                style: TextStyle(color: kDanger))
+            const Text('No hay materiales disponibles para préstamo.',
+                style: TextStyle(color: kTextMuted))
           else
             ...List.generate(_items.length, (i) => _buildItemRow(i)),
           TextButton.icon(

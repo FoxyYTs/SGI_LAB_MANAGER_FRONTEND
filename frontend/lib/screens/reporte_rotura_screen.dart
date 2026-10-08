@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
+import '../widgets/error_carga.dart';
 import '../core/theme/colors.dart';
 import '../core/text_utils.dart';
 
@@ -30,7 +32,17 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
 
   DateTime? _fechaIncidente;
 
-  bool _cargando = true;
+  // Cada catálogo se carga por separado: un fallo en uno no vacía los
+  // demás (antes un único Future.wait hacía que todo quedara vacío).
+  bool _cargandoInsumos     = true;
+  bool _cargandoProgramas   = true;
+  bool _cargandoAsignaturas = true;
+  String? _errorInsumos;
+  String? _errorProgramas;
+  String? _errorAsignaturas;
+
+  bool get _cargando =>
+      _cargandoInsumos || _cargandoProgramas || _cargandoAsignaturas;
   bool _enviando = false;
   bool _enviado  = false;
 
@@ -58,22 +70,56 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
     super.dispose();
   }
 
-  Future<void> _cargar() async {
+  void _cargar() {
+    _cargarInsumos();
+    _cargarProgramas();
+    _cargarAsignaturas();
+  }
+
+  /// Catálogo público mínimo (sin login): `inventario/lista/` exige
+  /// permiso desde DEF-024 y respondía 401 a este formulario.
+  Future<void> _cargarInsumos() async {
+    setState(() { _cargandoInsumos = true; _errorInsumos = null; });
     try {
-      final results = await Future.wait([
-        _dio.get('inventario/lista/'),
-        _dio.get('academico/programas-publico/'),
-        _dio.get('academico/asignaturas-publico/'),
-      ]);
-      final d = results[0].data;
+      final lista = await obtenerTodas(_dio, 'inventario/lista-publica/');
+      if (!mounted) return;
+      setState(() { _insumos = lista; _cargandoInsumos = false; });
+    } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _insumos     = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-        _programas   = List<Map<String, dynamic>>.from(results[1].data);
-        _asignaturas = List<Map<String, dynamic>>.from(results[2].data);
-        _cargando    = false;
+        _errorInsumos = mensajeErrorCarga(e, 'la lista de implementos');
+        _cargandoInsumos = false;
       });
-    } catch (_) {
-      setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _cargarProgramas() async {
+    setState(() { _cargandoProgramas = true; _errorProgramas = null; });
+    try {
+      final lista = await obtenerTodas(_dio, 'academico/programas-publico/');
+      if (!mounted) return;
+      setState(() { _programas = lista; _cargandoProgramas = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorProgramas = mensajeErrorCarga(e, 'los programas');
+        _cargandoProgramas = false;
+      });
+    }
+  }
+
+  Future<void> _cargarAsignaturas() async {
+    setState(() { _cargandoAsignaturas = true; _errorAsignaturas = null; });
+    try {
+      final lista = await obtenerTodas(_dio, 'academico/asignaturas-publico/');
+      if (!mounted) return;
+      setState(() { _asignaturas = lista; _cargandoAsignaturas = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorAsignaturas = mensajeErrorCarga(e, 'las asignaturas');
+        _cargandoAsignaturas = false;
+      });
     }
   }
 
@@ -394,7 +440,11 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
           ],
 
           const SizedBox(height: 12),
-          if (!_cargando && _programas.isNotEmpty)
+          if (_cargandoProgramas)
+            const LinearProgressIndicator(color: kPrimary)
+          else if (_errorProgramas != null)
+            ErrorCargaReintentar(mensaje: _errorProgramas!, onReintentar: _cargarProgramas)
+          else if (_programas.isNotEmpty)
             DropdownButtonFormField<Map<String, dynamic>>(
               initialValue: _programaSel,
               decoration: _deco('Programa académico *', Icons.school_outlined),
@@ -407,7 +457,11 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
               validator: (_) => _programaSel == null ? 'Selecciona tu programa' : null,
             ),
           const SizedBox(height: 12),
-          if (!_cargando && _asignaturas.isNotEmpty)
+          if (_cargandoAsignaturas)
+            const LinearProgressIndicator(color: kPrimary)
+          else if (_errorAsignaturas != null)
+            ErrorCargaReintentar(mensaje: _errorAsignaturas!, onReintentar: _cargarAsignaturas)
+          else if (_asignaturas.isNotEmpty)
             DropdownButtonFormField<Map<String, dynamic>>(
               initialValue: _asignaturaSel,
               decoration: _deco('Asignatura (opcional)', Icons.menu_book_outlined),
@@ -424,11 +478,13 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
 
           _seccionLabel('Implemento roto o perdido'),
 
-          if (_cargando)
+          if (_cargandoInsumos)
             const Center(child: CircularProgressIndicator(color: kPrimary))
+          else if (_errorInsumos != null)
+            ErrorCargaReintentar(mensaje: _errorInsumos!, onReintentar: _cargarInsumos)
           else if (_insumos.isEmpty)
-            const Text('No se pudo cargar la lista de implementos.',
-                style: TextStyle(color: kDanger))
+            const Text('No hay implementos registrados.',
+                style: TextStyle(color: kTextMuted))
           else
             FormField<String>(
               initialValue: _insumoId,
@@ -572,7 +628,12 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: (_enviando || _cargando) ? null : _enviar,
+              // Sin insumos o sin programas el formulario no puede validarse
+              // (ambos son obligatorios): se bloquea el envío hasta reintentar.
+              onPressed: (_enviando || _cargando ||
+                      _errorInsumos != null || _errorProgramas != null)
+                  ? null
+                  : _enviar,
               icon: _enviando
                   ? const SizedBox(width: 16, height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
