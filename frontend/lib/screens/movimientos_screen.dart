@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
@@ -20,10 +21,21 @@ class MovimientosContent extends StatefulWidget {
 }
 
 class _MovimientosContentState extends State<MovimientosContent> {
-  static const _cacheKey = 'prestamos';
+  String get _cacheKey => 'prestamos_$_filtroEstado';
+
+  /// Estados "activos": siempre se cargan COMPLETOS (todas las páginas),
+  /// porque son los que el personal tiene que gestionar y no pueden quedar
+  /// ocultos detrás de la primera página.
+  static const _estadosActivos   = 'PENDIENTE,ACTIVO';
+  /// Historial: crece sin límite, se carga por páginas ("Cargar más").
+  static const _estadosHistorial = 'DEVUELTO,RECHAZADO';
 
   List<Map<String, dynamic>> _prestamos   = [];
   bool      _cargando    = true;
+  // Paginación del historial (DEVUELTO/RECHAZADO) — ver _fetchPrestamos.
+  int       _paginaHistorial = 1;
+  bool      _historialHayMas = false;
+  bool      _cargandoMas     = false;
   bool      _mostrarForm = false;
   bool      _desdeCache  = false;
   DateTime? _cachedAt;
@@ -41,28 +53,110 @@ class _MovimientosContentState extends State<MovimientosContent> {
     });
   }
 
+  /// Estados del historial que corresponden al filtro actual (o null si el
+  /// filtro es un estado activo y no hay historial que paginar).
+  String? get _historialDelFiltro => switch (_filtroEstado) {
+    'Todos'                  => _estadosHistorial,
+    'DEVUELTO' || 'RECHAZADO' => _filtroEstado,
+    _                        => null,
+  };
+
+  /// Carga los préstamos filtrando por estado EN EL SERVIDOR (`?estado=`).
+  /// El listado está paginado (50 por página): antes se leía solo la
+  /// primera página y se filtraba en el cliente, así que los PENDIENTE/
+  /// ACTIVO antiguos quedaban invisibles.
+  ///  - PENDIENTE / ACTIVO: todas las páginas.
+  ///  - DEVUELTO / RECHAZADO: primera página + botón "Cargar más".
+  ///  - Todos: activos completos + primera página del historial.
   Future<void> _fetchPrestamos() async {
     setState(() => _cargando = true);
+    final filtro = _filtroEstado;
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final r    = await dio.get('operaciones/prestamos/');
-      final data = r.data;
-      final lista = List<Map<String, dynamic>>.from(
-          data is List ? data : (data['results'] ?? []));
+      final activos = switch (filtro) {
+        'Todos'                => _estadosActivos,
+        'PENDIENTE' || 'ACTIVO' => filtro,
+        _                      => null,
+      };
+      final historial = _historialDelFiltro;
+      final resultados = await Future.wait([
+        if (activos != null)
+          obtenerTodas(dio, 'operaciones/prestamos/',
+              queryParameters: {'estado': activos})
+              .then((l) => PaginaResultado(l, hayMas: false)),
+        if (historial != null)
+          obtenerPagina(dio, 'operaciones/prestamos/',
+              queryParameters: {'estado': historial}),
+      ]);
+      final lista = _ordenar([for (final r in resultados) ...r.items]);
+      final hayMas = historial != null && resultados.last.hayMas;
       await CacheService.instance.set(_cacheKey, lista);
-      if (mounted) setState(() { _prestamos = lista; _desdeCache = false; _cachedAt = null; _cargando = false; });
+      if (mounted && filtro == _filtroEstado) {
+        setState(() {
+          _prestamos       = lista;
+          _paginaHistorial = 1;
+          _historialHayMas = hayMas;
+          _desdeCache      = false;
+          _cachedAt        = null;
+          _cargando        = false;
+        });
+      }
     } catch (_) {
       final cached = await CacheService.instance.get(_cacheKey);
-      if (mounted) setState(() {
-        _prestamos  = cached != null
-            ? List<Map<String, dynamic>>.from(cached.data as List)
-            : [];
-        _desdeCache = cached != null;
-        _cachedAt   = cached?.cachedAt;
-        _cargando   = false;
-      });
+      if (mounted && filtro == _filtroEstado) {
+        setState(() {
+          _prestamos  = cached != null
+              ? List<Map<String, dynamic>>.from(cached.data as List)
+              : [];
+          _historialHayMas = false;
+          _desdeCache = cached != null;
+          _cachedAt   = cached?.cachedAt;
+          _cargando   = false;
+        });
+      }
     }
+  }
+
+  /// Trae la siguiente página del historial y la añade a la lista.
+  Future<void> _cargarMasHistorial() async {
+    final historial = _historialDelFiltro;
+    if (historial == null || _cargandoMas) return;
+    final filtro = _filtroEstado;
+    setState(() => _cargandoMas = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final pag  = await obtenerPagina(dio, 'operaciones/prestamos/',
+          queryParameters: {'estado': historial},
+          pagina: _paginaHistorial + 1);
+      if (!mounted || filtro != _filtroEstado) return;
+      final vistos = {for (final p in _prestamos) p['id']};
+      setState(() {
+        _prestamos = _ordenar([
+          ..._prestamos,
+          ...pag.items.where((p) => !vistos.contains(p['id'])),
+        ]);
+        _paginaHistorial++;
+        _historialHayMas = pag.hayMas;
+      });
+    } on DioException catch (e) {
+      _showError('No se pudieron cargar más préstamos: ${_mensajeDio(e)}');
+    } finally {
+      if (mounted) setState(() => _cargandoMas = false);
+    }
+  }
+
+  /// Más reciente primero (mismo orden que el servidor, `-fecha_solicitud`).
+  static List<Map<String, dynamic>> _ordenar(List<Map<String, dynamic>> l) {
+    final ordenada = [...l];
+    ordenada.sort((a, b) {
+      final fa = DateTime.tryParse(a['fecha_solicitud']?.toString() ?? '');
+      final fb = DateTime.tryParse(b['fecha_solicitud']?.toString() ?? '');
+      if (fa == null || fb == null) return 0;
+      return fb.compareTo(fa);
+    });
+    return ordenada;
   }
 
   bool get _estaOnline => kIsWeb || SyncService.instance.online;
@@ -262,7 +356,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
               ..._buildFiltroChips(),
               const SizedBox(width: 16),
               Text(
-                '${filtrados.length} préstamos',
+                '${filtrados.length}${_historialHayMas ? '+' : ''} préstamos',
                 style: const TextStyle(fontSize: 12, color: kTextMuted),
               ),
             ]),
@@ -287,9 +381,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
                 : filtrados.isEmpty
                     ? _buildEmpty()
                     : ListView.separated(
-                        itemCount: filtrados.length,
+                        itemCount: filtrados.length + (_historialHayMas ? 1 : 0),
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (ctx, i) => _PrestamoCard(
+                        itemBuilder: (ctx, i) => i >= filtrados.length
+                            ? _buildCargarMas()
+                            : _PrestamoCard(
                           prestamo: filtrados[i],
                           puedeGestionar: auth.can(Perm.prestamosGestionar),
                           onAprobar: _aprobar,
@@ -333,7 +429,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: GestureDetector(
-          onTap: () => setState(() => _filtroEstado = estado),
+          onTap: () {
+            if (_filtroEstado == estado) return;
+            setState(() => _filtroEstado = estado);
+            _fetchPrestamos();
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
@@ -354,6 +454,20 @@ class _MovimientosContentState extends State<MovimientosContent> {
       );
     }).toList();
   }
+
+  Widget _buildCargarMas() => Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: _cargandoMas
+              ? const SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary))
+              : OutlinedButton.icon(
+                  onPressed: _cargarMasHistorial,
+                  icon: const Icon(Icons.expand_more, size: 18),
+                  label: const Text('Cargar más del historial'),
+                ),
+        ),
+      );
 
   Widget _buildEmpty() => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
