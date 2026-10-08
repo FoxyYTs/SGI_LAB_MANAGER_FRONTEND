@@ -538,8 +538,9 @@ class _TabEncargadosState extends State<_TabEncargados>
   /// esa hora ya marcados (se pueden sumar más días).
   Future<void> _agregar(int dia, int hora) => _asignarBloques(dias: {dia}, hora: hora);
 
-  /// Asigna un encargado a un rango de horas en uno o varios días, en UNA
-  /// petición atómica (academico/horario-encargado/asignar-bloques/).
+  /// Asigna un encargado a uno o varios días, cada uno con sus propios
+  /// rangos de horas, en UNA petición atómica
+  /// (academico/horario-encargado/asignar-bloques/ con `bloques`).
   Future<void> _asignarBloques({Set<int> dias = const {}, int hora = 8}) async {
     final auth = context.read<AuthProvider>();
     if (!auth.can(Perm.academicoGestionar)) return;
@@ -574,10 +575,8 @@ class _TabEncargadosState extends State<_TabEncargados>
     final dio = ApiClient.instance.authenticatedDio(auth.token);
     setState(() => _guardando = true);
     final r = await postHorario(context, dio, 'academico/horario-encargado/asignar-bloques/', {
-      'usuario':     sel.usuario,
-      'dias':        sel.dias,
-      'hora_inicio': sel.horaInicio,
-      'hora_fin':    sel.horaFin,
+      'usuario': sel.usuario,
+      'bloques': sel.bloquesJson,
     });
     if (mounted) setState(() => _guardando = false);
     if (r == null || !mounted) return;
@@ -589,8 +588,7 @@ class _TabEncargadosState extends State<_TabEncargados>
     });
     final creados = r['creados'] ?? 0, existentes = r['existentes'] ?? 0;
     _avisar(context,
-        '${sel.nombreUsuario}: ${RangosHorario.diasCortos(sel.dias)} '
-        '${horaAmPm(sel.horaInicio)} – ${horaAmPm(sel.horaFin)} · '
+        '${sel.nombreUsuario}: ${RangosHorario.describirPorDia(sel.rangos)} · '
         '$creados hora(s) nueva(s)${existentes > 0 ? ', $existentes ya estaban' : ''}');
   }
 
@@ -1408,9 +1406,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       'asignatura':  sel.asignatura,
       'docente':     sel.docente,
       'grupo':       sel.grupo,
-      'dias':        sel.dias,
-      'hora_inicio': sel.horaInicio,
-      'hora_fin':    sel.horaFin,
+      'bloques':     sel.bloquesJson,
     });
     if (mounted) setState(() => _guardando = false);
     if (r == null || !mounted) return;
@@ -1422,8 +1418,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     });
     final creados = r['creados'] ?? 0, existentes = r['existentes'] ?? 0;
     _avisar(context,
-        'Asignatura agregada: ${RangosHorario.diasCortos(sel.dias)} '
-        '${horaAmPm(sel.horaInicio)} – ${horaAmPm(sel.horaFin)} · '
+        'Asignatura agregada: ${RangosHorario.describirPorDia(sel.rangos)} · '
         '$creados hora(s) nueva(s)${existentes > 0 ? ', $existentes ya estaban' : ''}');
   }
 
