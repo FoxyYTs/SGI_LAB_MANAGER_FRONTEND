@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -130,6 +131,15 @@ class MyApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'SGI LAB MANAGER',
       debugShowCheckedModeBanner: false,
+      // Español (Colombia) para los textos internos de Material: selectores
+      // de fecha/hora, rangos de fechas, tooltips, etc.
+      locale: const Locale('es', 'CO'),
+      supportedLocales: const [Locale('es', 'CO'), Locale('es')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: kPrimary),
         primaryColor: kPrimary,
