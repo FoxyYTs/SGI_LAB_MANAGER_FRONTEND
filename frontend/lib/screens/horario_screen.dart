@@ -720,20 +720,23 @@ class _TabEncargadosState extends State<_TabEncargados>
     if (_disponibles.isEmpty) return;
 
     int? usuarioSel;
+    String? error;
     final descCtrl  = TextEditingController();
     final horasCtrl = TextEditingController();
 
+    // La validación ocurre DENTRO del diálogo: si algo falta, el diálogo no
+    // se cierra y no se pierde lo ya escrito.
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Registrar horas en casa', style: TextStyle(fontSize: 16)),
-        content: StatefulBuilder(
-          builder: (ctx2, setSt) => Column(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setSt) => AlertDialog(
+          title: const Text('Registrar horas en casa', style: TextStyle(fontSize: 16)),
+          content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<int>(
                 decoration: const InputDecoration(labelText: 'Encargado', isDense: true),
-                value: usuarioSel,
+                initialValue: usuarioSel,
                 items: _disponibles.map((u) => DropdownMenuItem<int>(
                   value: u['id'] as int,
                   child: Text(u['nombre_completo']?.toString() ?? u['username'].toString(),
@@ -749,61 +752,87 @@ class _TabEncargadosState extends State<_TabEncargados>
               const SizedBox(height: 12),
               TextField(
                 controller: horasCtrl,
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: const InputDecoration(
                   labelText: 'Horas por semana',
-                  hintText: 'Ej: 2',
+                  hintText: 'Ej: 2 o 1,5',
                   isDense: true,
                 ),
               ),
+              if (error != null) ...[
+                const SizedBox(height: 10),
+                Text(error!, style: const TextStyle(color: kDanger, fontSize: 12)),
+              ],
             ],
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: () {
+                final h = parseHoras(horasCtrl.text);
+                final msg = usuarioSel == null
+                    ? 'Selecciona un encargado'
+                    : descCtrl.text.trim().isEmpty
+                        ? 'La descripción no puede estar vacía'
+                        : (h == null || h <= 0)
+                            ? 'Ingresa las horas por semana (ej: 2 o 1,5)'
+                            : null;
+                if (msg != null) {
+                  setSt(() => error = msg);
+                  return;
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Guardar')),
-        ],
       ),
     );
 
-    if (ok != true || usuarioSel == null) return;
-    final horas = int.tryParse(horasCtrl.text.trim());
-    if (horas == null || horas <= 0) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresa un número entero de horas (ej: 2)'),
-            backgroundColor: kDanger));
-      return;
-    }
-    if (descCtrl.text.trim().isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La descripción no puede estar vacía'),
-            backgroundColor: kDanger));
-      return;
-    }
+    final descripcion = descCtrl.text.trim();
+    final horas = parseHoras(horasCtrl.text);
+    if (ok != true || usuarioSel == null || horas == null || !mounted) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
       await dio.post('academico/horas-extra/', data: {
         'usuario':        usuarioSel,
-        'descripcion':    descCtrl.text.trim(),
-        'duracion_horas': horas,
+        'descripcion':    descripcion,
+        // El backend guarda 1 decimal (DecimalField 4,1).
+        'duracion_horas': double.parse(horas.toStringAsFixed(1)),
       });
       await _cargar();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Horas en casa registradas'), backgroundColor: kSuccess));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Error al guardar: $e'), backgroundColor: kDanger));
     }
   }
 
   Future<void> _eliminarHoraExtra(int id) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar delegación'),
+        content: const Text('Se dejarán de sumar estas horas en casa todas las semanas. ¿Continuar?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Eliminar', style: TextStyle(color: kDanger))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
       await dio.delete('academico/horas-extra/$id/');
-      setState(() => _horasExtraList.removeWhere((r) => r['id'] == id));
+      if (mounted) setState(() => _horasExtraList.removeWhere((r) => r['id'] == id));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error al eliminar: $e'), backgroundColor: kDanger));
@@ -924,7 +953,7 @@ class _TabEncargadosState extends State<_TabEncargados>
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          '${horas.toInt()} h/sem',
+                          '${formatoHoras(horas)}/sem',
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kPrimary),
                         ),
                       ),
