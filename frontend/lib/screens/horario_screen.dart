@@ -2782,6 +2782,10 @@ class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
     final horasFin = [
       for (int h = widget.horaInicio; h <= 21; h++) h
     ];
+    // Orden alfabético por nombre (el backend los entrega por username).
+    String nombreDe(Map<String, dynamic> u) =>
+        (u['nombre_completo']?.toString() ?? u['username']?.toString() ?? '').toLowerCase();
+    final opciones = [...widget.opciones]..sort((a, b) => nombreDe(a).compareTo(nombreDe(b)));
 
     return AlertDialog(
       title: const Text('Agregar encargado', style: TextStyle(color: kPrimary)),
@@ -2810,9 +2814,9 @@ class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
               constraints: const BoxConstraints(maxHeight: 260),
               child: ListView.builder(
                 shrinkWrap: true,
-                itemCount: widget.opciones.length,
+                itemCount: opciones.length,
                 itemBuilder: (_, i) {
-                  final u   = widget.opciones[i];
+                  final u   = opciones[i];
                   final rol = u['rol']?.toString() ?? '';
                   final sel = _seleccionado?['id'] == u['id'];
                   return ListTile(
