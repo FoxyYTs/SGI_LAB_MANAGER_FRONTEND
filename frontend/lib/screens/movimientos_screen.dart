@@ -8,6 +8,8 @@ import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
 import '../core/presentaciones.dart';
+import '../core/rango_fechas.dart';
+import '../widgets/filtro_rango_fechas.dart';
 import '../core/uuid_v4.dart';
 import '../core/cache/cache_service.dart';
 import '../core/sync/sync_service.dart';
@@ -42,6 +44,15 @@ class _MovimientosContentState extends State<MovimientosContent> {
   bool      _desdeCache  = false;
   DateTime? _cachedAt;
   String    _filtroEstado = 'Todos';
+  // Rango de fechas de solicitud (?desde/?hasta). Solo aplica en las vistas
+  // de historial (Todos / DEVUELTO / RECHAZADO); en PENDIENTE/ACTIVO se
+  // ignora para no esconder solicitudes que hay que gestionar.
+  DateTimeRange? _rango;
+  // Se incrementa en cada carga para descartar respuestas de un filtro viejo.
+  int       _version = 0;
+
+  Map<String, String> get _paramsRango =>
+      _historialDelFiltro == null ? const {} : paramsRango(_rango);
 
   // Préstamos con una acción (aprobar/rechazar/agregar ítems) en curso: un
   // doble tap en "Aprobar" mandaba dos POST; el segundo respondía error o,
@@ -90,8 +101,10 @@ class _MovimientosContentState extends State<MovimientosContent> {
   ///  - DEVUELTO / RECHAZADO: primera página + botón "Cargar más".
   ///  - Todos: activos completos + primera página del historial.
   Future<void> _fetchPrestamos() async {
+    final version = ++_version;
     setState(() => _cargando = true);
     final filtro = _filtroEstado;
+    final rango  = _paramsRango;
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
@@ -104,16 +117,17 @@ class _MovimientosContentState extends State<MovimientosContent> {
       final resultados = await Future.wait([
         if (activos != null)
           obtenerTodas(dio, 'operaciones/prestamos/',
-              queryParameters: {'estado': activos})
+              queryParameters: {'estado': activos, ...rango})
               .then((l) => PaginaResultado(l, hayMas: false)),
         if (historial != null)
           obtenerPagina(dio, 'operaciones/prestamos/',
-              queryParameters: {'estado': historial}),
+              queryParameters: {'estado': historial, ...rango}),
       ]);
       final lista = _ordenar([for (final r in resultados) ...r.items]);
       final hayMas = historial != null && resultados.last.hayMas;
-      await CacheService.instance.set(_cacheKey, lista);
-      if (mounted && filtro == _filtroEstado) {
+      // La caché offline guarda solo las vistas sin rango de fechas.
+      if (rango.isEmpty) await CacheService.instance.set(_cacheKey, lista);
+      if (mounted && version == _version) {
         setState(() {
           _prestamos       = lista;
           _paginaHistorial = 1;
@@ -124,8 +138,22 @@ class _MovimientosContentState extends State<MovimientosContent> {
         });
       }
     } catch (_) {
+      if (rango.isNotEmpty) {
+        // Sin red no se puede filtrar por fechas: no mostrar la caché sin
+        // filtrar como si fuera el resultado del rango.
+        if (mounted && version == _version) {
+          setState(() {
+            _prestamos       = [];
+            _historialHayMas = false;
+            _desdeCache      = false;
+            _cargando        = false;
+          });
+          _showError('No se pudo filtrar por fechas: revisa la conexión.');
+        }
+        return;
+      }
       final cached = await CacheService.instance.get(_cacheKey);
-      if (mounted && filtro == _filtroEstado) {
+      if (mounted && version == _version) {
         setState(() {
           _prestamos  = cached != null
               ? List<Map<String, dynamic>>.from(cached.data as List)
@@ -143,15 +171,15 @@ class _MovimientosContentState extends State<MovimientosContent> {
   Future<void> _cargarMasHistorial() async {
     final historial = _historialDelFiltro;
     if (historial == null || _cargandoMas) return;
-    final filtro = _filtroEstado;
+    final version = _version;
     setState(() => _cargandoMas = true);
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       final pag  = await obtenerPagina(dio, 'operaciones/prestamos/',
-          queryParameters: {'estado': historial},
+          queryParameters: {'estado': historial, ..._paramsRango},
           pagina: _paginaHistorial + 1);
-      if (!mounted || filtro != _filtroEstado) return;
+      if (!mounted || version != _version) return;
       final vistos = {for (final p in _prestamos) p['id']};
       setState(() {
         _prestamos = _ordenar([
@@ -388,6 +416,16 @@ class _MovimientosContentState extends State<MovimientosContent> {
             scrollDirection: Axis.horizontal,
             child: Row(children: [
               ..._buildFiltroChips(),
+              if (_historialDelFiltro != null) ...[
+                const SizedBox(width: 4),
+                FiltroRangoFechas(
+                  rango: _rango,
+                  onChanged: (r) {
+                    setState(() => _rango = r);
+                    _fetchPrestamos();
+                  },
+                ),
+              ],
               const SizedBox(width: 16),
               Text(
                 '${filtrados.length}${_historialHayMas ? '+' : ''} préstamos',
@@ -509,8 +547,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
           const Icon(Icons.swap_horiz_outlined,
               size: 64, color: kTextMuted),
           const SizedBox(height: 12),
-          const Text('Sin préstamos registrados',
-              style: TextStyle(color: kTextMuted, fontSize: 16)),
+          Text(
+              _rango != null && _historialDelFiltro != null
+                  ? 'Sin préstamos en ${etiquetaRango(_rango!)}'
+                  : 'Sin préstamos registrados',
+              style: const TextStyle(color: kTextMuted, fontSize: 16)),
           const SizedBox(height: 8),
           ElevatedButton.icon(
             icon: const Icon(Icons.add),
