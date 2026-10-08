@@ -184,6 +184,7 @@ const kHoraMinLab = 6;
 const kHoraFinMaxLab = 22;
 const kNombresDia = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const kInicialesDia = ['L', 'M', 'X', 'J', 'V', 'S'];
+const kDiasCortos = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
 /// Hora en formato 12 h corto: 8 → "8 AM", 12 → "12 PM", 14 → "2 PM".
 String horaAmPm(int hora) {
@@ -427,4 +428,40 @@ class MiSemana {
     }
     return out;
   }
+
+  /// Filas compactas para la tarjeta del dashboard: una por día, con los
+  /// rangos en formato 24 h corto ("8–9 · 15–18") y las horas del día.
+  /// Se limita a [maxDias] filas y [maxRangos] rangos por fila para que la
+  /// tarjeta no crezca sin control; lo que sobra se informa en
+  /// [ResumenSemana.diasOcultos] y en el sufijo "+N" de cada fila.
+  ResumenSemana resumen({int maxDias = 4, int maxRangos = 3}) {
+    final dias = rangosPorDia.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    final filas = <FilaResumenDia>[];
+    for (final e in dias.take(maxDias)) {
+      final rs = [...e.value]..sort((a, b) => a.inicio.compareTo(b.inicio));
+      final visibles = rs.take(maxRangos).map((r) => '${r.inicio}–${r.fin}').join(' · ');
+      final extra = rs.length - maxRangos;
+      filas.add(FilaResumenDia(
+        dia: kDiasCortos[e.key],
+        rangos: extra > 0 ? '$visibles +$extra' : visibles,
+        horas: rs.fold<int>(0, (t, r) => t + r.duracion),
+      ));
+    }
+    return ResumenSemana(filas, dias.length - filas.length);
+  }
+}
+
+/// Una fila de [MiSemana.resumen].
+class FilaResumenDia {
+  final String dia;
+  final String rangos;
+  final int horas;
+  const FilaResumenDia({required this.dia, required this.rangos, required this.horas});
+}
+
+/// Resultado de [MiSemana.resumen]: filas visibles y días que no caben.
+class ResumenSemana {
+  final List<FilaResumenDia> filas;
+  final int diasOcultos;
+  const ResumenSemana(this.filas, this.diasOcultos);
 }

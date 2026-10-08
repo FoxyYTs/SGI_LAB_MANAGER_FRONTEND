@@ -432,4 +432,33 @@ void main() {
       expect(s.completada, isFalse);
     });
   });
+
+  group('MiSemana.resumen', () {
+    MiSemana semana(List<List<int>> bloques) => MiSemana.desdeJson({
+          'bloques': [
+            for (final b in bloques)
+              for (int h = b[1]; h < b[2]; h++) {'dia_semana': b[0], 'hora': h}
+          ],
+        });
+
+    test('una fila por día con rangos cortos y total de horas', () {
+      final r = semana([[0, 8, 9], [0, 12, 13], [0, 15, 16], [1, 15, 18]]).resumen();
+      expect(r.filas.map((f) => f.dia), ['Lun', 'Mar']);
+      expect(r.filas[0].rangos, '8–9 · 12–13 · 15–16');
+      expect(r.filas[0].horas, 3);
+      expect(r.filas[1].rangos, '15–18');
+      expect(r.diasOcultos, 0);
+    });
+
+    test('limita días y rangos por fila', () {
+      final r = semana([
+        [0, 8, 9], [0, 10, 11], [0, 12, 13], [0, 14, 15], [0, 16, 17],
+        [1, 8, 9], [2, 8, 9], [3, 8, 9], [4, 8, 9], [5, 8, 9],
+      ]).resumen(maxDias: 4, maxRangos: 3);
+      expect(r.filas.length, 4);
+      expect(r.filas[0].rangos, '8–9 · 10–11 · 12–13 +2');
+      expect(r.filas[0].horas, 5);
+      expect(r.diasOcultos, 2);
+    });
+  });
 }

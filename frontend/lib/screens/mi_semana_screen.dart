@@ -315,6 +315,37 @@ class _Vacio extends StatelessWidget {
 
 /// Tarjeta de avance semanal (registradas vs. meta), reutilizada por el
 /// dashboard.
+/// Una fila por día ("Lun  8–9 · 15–18   4 h"), en una sola línea cada una,
+/// más "+N días más" si no caben todos.
+List<Widget> _filasResumen(ResumenSemana r) => [
+      for (final f in r.filas)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(children: [
+            SizedBox(
+              width: 36,
+              child: Text(f.dia,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87)),
+            ),
+            Expanded(
+              child: Text(f.rangos,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: kTextMuted)),
+            ),
+            const SizedBox(width: 8),
+            Text('${f.horas} h',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary)),
+          ]),
+        ),
+      if (r.diasOcultos > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text('+${r.diasOcultos} ${r.diasOcultos == 1 ? 'día' : 'días'} más · Ver todo',
+              style: const TextStyle(fontSize: 12, color: kPrimary)),
+        ),
+    ];
+
 class MiSemanaResumenCard extends StatelessWidget {
   final MiSemana semana;
   final VoidCallback? onTap;
@@ -378,12 +409,7 @@ class MiSemanaResumenCard extends StatelessWidget {
             ),
             if (compacta && semana.rangos.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text(
-                semana.rangosPorDia.entries
-                    .map((e) => '${kInicialesDia[e.key]} ${e.value.map((r) => r.texto).join(', ')}')
-                    .join('   ·   '),
-                style: const TextStyle(fontSize: 12, color: kTextMuted),
-              ),
+              ..._filasResumen(semana.resumen()),
             ],
             if (!compacta) ...[
               const SizedBox(height: 14),
