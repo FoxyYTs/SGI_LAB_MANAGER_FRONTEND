@@ -6,6 +6,7 @@ import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
+import '../core/uuid_v4.dart';
 import '../core/cache/cache_service.dart';
 import '../core/sync/sync_service.dart';
 import '../providers/auth_provider.dart';
@@ -396,6 +397,12 @@ class _PrestamoFormState extends State<_PrestamoForm> {
   final List<_ItemPrestamo> _items = [_ItemPrestamo()];
   bool _guardando = false;
 
+  // Clave de idempotencia del préstamo que se está llenando: se reutiliza
+  // en cada reintento (el cliente corta a los 15 s y, si el servidor ya lo
+  // había creado, reenviar duplicaba el préstamo). Se renueva solo tras un
+  // registro exitoso.
+  String _clientRequestId = uuidV4();
+
   @override
   void dispose() {
     _nitCtrl.dispose();
@@ -407,6 +414,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
   }
 
   Future<void> _registrar() async {
+    if (_guardando) return; // doble tap antes de que el botón se deshabilite
     if (!_formKey.currentState!.validate()) return;
     if (_items.any((i) => i.insumoId == null)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -424,6 +432,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
         'nombre_estudiante': _nombreCtrl.text.trim(),
         'correo_estudiante': _correoCtrl.text.trim(),
         'observaciones':     _obsCtrl.text.trim(),
+        'client_request_id': _clientRequestId,
         'detalles': _items
             .where((i) => i.insumoId != null)
             .map((i) => {
@@ -433,6 +442,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
                 })
             .toList(),
       });
+      _clientRequestId = uuidV4();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Préstamo registrado correctamente.'),
