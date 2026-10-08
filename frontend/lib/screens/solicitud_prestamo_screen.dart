@@ -5,6 +5,7 @@ import '../core/api/paginacion.dart';
 import '../widgets/error_carga.dart';
 import '../core/theme/colors.dart';
 import '../core/text_utils.dart';
+import '../core/uuid_v4.dart';
 
 class _ItemSolicitud {
   String? insumoId;
@@ -43,6 +44,12 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   bool _cargandoProgramas = true;
   String? _errorProgramas;
   String? _errorInsumos;
+
+  // Clave de idempotencia: se genera al abrir el formulario y se reutiliza
+  // en cada reintento. Si el primer envío sí llegó al servidor pero la
+  // respuesta se perdió (timeout), el reintento devuelve ese mismo
+  // préstamo en vez de crear un duplicado.
+  final String _clientRequestId = uuidV4();
 
   final _idFormKey = GlobalKey<FormState>();
 
@@ -107,6 +114,9 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   }
 
   Future<void> _enviar() async {
+    // Guarda temprana: evita un segundo POST si llega otro tap antes de
+    // que el botón se redibuje deshabilitado.
+    if (_enviando || _enviado) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _enviando = true);
     try {
@@ -118,12 +128,13 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
         'programa':            _programaId,
         'asignatura_texto':    _asgCtrl.text.trim(),
         'observaciones':       _obsCtrl.text.trim(),
+        'client_request_id':   _clientRequestId,
         'detalles': _items.map((i) => {
           'insumo':            i.insumoId,
           'cantidad_prestada': double.tryParse(i.cantCtrl.text) ?? 1,
         }).toList(),
       });
-      setState(() => _enviado = true);
+      if (mounted) setState(() => _enviado = true);
     } on DioException catch (e) {
       final String msg;
       if (e.response?.statusCode == 429) {
