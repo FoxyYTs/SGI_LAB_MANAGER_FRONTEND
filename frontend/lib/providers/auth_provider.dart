@@ -425,18 +425,30 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
   ///
   /// [sesionExpirada] = la llamó ApiClient/arranque porque el servidor rechazó
   /// el refresh: no se intenta sincronizar la cola (no hay credenciales).
-  Future<void> logout({bool sesionExpirada = false}) {
-    return _logoutEnCurso ??=
-        _logout(sesionExpirada).whenComplete(() => _logoutEnCurso = null);
+  ///
+  /// [sincronizarAntes] = false cuando el usuario ya intentó sincronizar y
+  /// eligió "Cerrar sesión igual" en el aviso de operaciones pendientes (ver
+  /// widgets/cerrar_sesion.dart): no tiene sentido esperar otros 10 s.
+  Future<void> logout({bool sesionExpirada = false, bool sincronizarAntes = true}) {
+    return _logoutEnCurso ??= _logout(sesionExpirada, sincronizarAntes)
+        .whenComplete(() => _logoutEnCurso = null);
   }
 
-  Future<void> _logout(bool sesionExpirada) async {
+  /// Intenta subir ya las operaciones offline pendientes (máx. 10 s) y
+  /// devuelve cuántas siguen sin sincronizar. Siempre 0 en web (sin cola).
+  /// Lo usa el botón de cerrar sesión para avisar antes de perderlas.
+  Future<int> sincronizarPendientes() async {
+    await SyncService.instance.sincronizarAhora();
+    return SyncService.instance.pending;
+  }
+
+  Future<void> _logout(bool sesionExpirada, bool sincronizarAntes) async {
     _medianochTimer?.cancel();
     _medianochTimer = null;
 
     // Logout voluntario con red: intentar subir las operaciones offline
     // pendientes antes de borrarlas junto con el resto de datos locales.
-    if (!sesionExpirada) {
+    if (!sesionExpirada && sincronizarAntes) {
       await SyncService.instance.sincronizarAhora();
     }
 

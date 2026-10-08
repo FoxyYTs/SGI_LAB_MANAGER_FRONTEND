@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/cerrar_sesion.dart';
 
 /// Mensaje legible de un error del backend ({'error': ...} / {'foto': ...} /
 /// {'email': ...}) en vez del texto crudo de DioException.
@@ -431,10 +432,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () async {
-              final auth = context.read<AuthProvider>();
-              await auth.logout();
-            },
+            onPressed: () => cerrarSesionVoluntaria(context),
             icon: const Icon(Icons.logout, size: 16, color: kDanger),
             label: const Text('Cerrar sesión',
                 style: TextStyle(color: kDanger, fontSize: 13)),
