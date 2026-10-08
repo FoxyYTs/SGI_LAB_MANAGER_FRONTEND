@@ -66,3 +66,15 @@ ResultadoSync clasificarErrorSync(String operacion, Object error) {
   }
   return ResultadoSync.fallido;
 }
+
+/// `true` si la petición falló sin respuesta del servidor por un problema de
+/// red (sin conexión, DNS, timeouts). Pasa justo después de activar el modo
+/// avión: el estado de conectividad aún dice "online" y la petición falla con
+/// "Failed host lookup". Para APROBAR/RECHAZAR es seguro encolar la
+/// operación: si la petición sí llegó, el reintento recibe "ya está en
+/// estado X" y [clasificarErrorSync] lo cuenta como éxito.
+bool esFalloDeRed(Object error) {
+  if (error is! DioException || error.response != null) return false;
+  return error.type != DioExceptionType.cancel &&
+      error.type != DioExceptionType.badCertificate;
+}

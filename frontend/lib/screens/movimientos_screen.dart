@@ -13,6 +13,7 @@ import '../widgets/filtro_rango_fechas.dart';
 import '../core/uuid_v4.dart';
 import '../core/cache/cache_service.dart';
 import '../core/sync/sync_service.dart';
+import '../core/sync/sync_errores.dart';
 import '../providers/auth_provider.dart';
 import '../providers/inventario_provider.dart';
 import '../models/insumo_model.dart';
@@ -224,6 +225,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
       await dio.post('operaciones/prestamos/$id/aprobar/');
       _fetchPrestamos();
     } on DioException catch (e) {
+      if (!kIsWeb && esFalloDeRed(e)) {
+        await SyncService.instance.encolar('APROBAR_PRESTAMO', {'prestamo_id': id});
+        _showInfo('Sin conexión — la aprobación se enviará cuando vuelva la red.');
+        return;
+      }
       _showError('Error al aprobar: ${_mensajeDio(e)}');
     } catch (e) {
       _showError('Error al aprobar: $e');
@@ -306,6 +312,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
       await dio.post('operaciones/prestamos/$id/rechazar/');
       _fetchPrestamos();
     } on DioException catch (e) {
+      if (!kIsWeb && esFalloDeRed(e)) {
+        await SyncService.instance.encolar('RECHAZAR_PRESTAMO', {'prestamo_id': id});
+        _showInfo('Sin conexión — el rechazo se enviará cuando vuelva la red.');
+        return;
+      }
       _showError('Error al rechazar: ${_mensajeDio(e)}');
     } catch (e) {
       _showError('Error al rechazar: $e');
@@ -321,6 +332,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
   String _mensajeDio(DioException e) {
     final data = e.response?.data;
     if (data is Map && data['error'] != null) return data['error'].toString();
+    if (esFalloDeRed(e)) return 'No se pudo conectar con el servidor. Revisa tu conexión.';
     return e.message ?? e.toString();
   }
 

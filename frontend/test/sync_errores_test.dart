@@ -76,4 +76,27 @@ void main() {
           ResultadoSync.fallido);
     });
   });
+
+  group('esFalloDeRed', () {
+    final req = RequestOptions(path: 'operaciones/prestamos/1/aprobar/');
+    test('host lookup sin respuesta (modo avión recién activado) → true', () {
+      expect(esFalloDeRed(DioException(
+          requestOptions: req,
+          type: DioExceptionType.connectionError,
+          error: "SocketException: Failed host lookup: 'dev-apisgi.foxyyts.qzz.io'")), isTrue);
+    });
+    test('timeouts sin respuesta → true', () {
+      expect(esFalloDeRed(DioException(requestOptions: req, type: DioExceptionType.connectionTimeout)), isTrue);
+      expect(esFalloDeRed(DioException(requestOptions: req, type: DioExceptionType.receiveTimeout)), isTrue);
+    });
+    test('respuesta del servidor (4xx/5xx), cancelación o certificado → false', () {
+      expect(esFalloDeRed(DioException(
+          requestOptions: req,
+          type: DioExceptionType.badResponse,
+          response: Response(requestOptions: req, statusCode: 400))), isFalse);
+      expect(esFalloDeRed(DioException(requestOptions: req, type: DioExceptionType.cancel)), isFalse);
+      expect(esFalloDeRed(DioException(requestOptions: req, type: DioExceptionType.badCertificate)), isFalse);
+      expect(esFalloDeRed(Exception('x')), isFalse);
+    });
+  });
 }
