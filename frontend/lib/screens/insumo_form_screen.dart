@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -92,17 +93,15 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
       final results = await Future.wait([
-        dio.get('inventario/tipos/'),
-        dio.get('inventario/ubicaciones/'),
-        dio.get('inventario/unidades/'),
+        obtenerTodas(dio, 'inventario/tipos/'),
+        obtenerTodas(dio, 'inventario/ubicaciones/'),
+        obtenerTodas(dio, 'inventario/unidades/'),
       ]);
-      List<Map<String, dynamic>> parse(dynamic d) =>
-          List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
       if (!mounted) return;
       setState(() {
-        _tipos       = parse(results[0].data);
-        _ubicaciones = parse(results[1].data);
-        _unidades    = parse(results[2].data);
+        _tipos       = results[0];
+        _ubicaciones = results[1];
+        _unidades    = results[2];
         _loading     = false;
       });
       _precargarEdicion();

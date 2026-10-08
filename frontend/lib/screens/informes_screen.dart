@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/download_helper.dart';
 import '../core/permissions.dart';
 import '../core/theme/colors.dart';
@@ -50,11 +51,10 @@ class _InformesContentState extends State<InformesContent> {
     final auth = context.read<AuthProvider>();
     try {
       final dio = ApiClient.instance.authenticatedDio(auth.token!);
-      final r = await dio.get('academico/informes-subidos/');
+      final subidos = await obtenerTodas(dio, 'academico/informes-subidos/');
       if (!mounted) return;
-      final d = r.data;
       setState(() {
-        _informesSubidos = List<dynamic>.from(d is List ? d : (d['results'] ?? []));
+        _informesSubidos = subidos;
         _cargandoSubidos = false;
       });
     } catch (_) {

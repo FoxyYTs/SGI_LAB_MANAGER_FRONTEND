@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
@@ -91,9 +92,7 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
-      final resp = await dio.get('usuarios/permisos-rol/');
-      final d     = resp.data;
-      final lista = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+      final lista = await obtenerTodas(dio, 'usuarios/permisos-rol/');
 
       final Map<String, Set<String>>    asignados = {for (final r in _roles) r: {}};
       final Map<String, Map<String, int>> ids     = {for (final r in _roles) r: {}};
@@ -336,14 +335,12 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
 
     try {
       final results = await Future.wait([
-        dio.get('usuarios/permisos-rol/?rol=$rol'),
-        dio.get('usuarios/permisos-usuario/?user=${usuario['id']}'),
+        obtenerTodas(dio, 'usuarios/permisos-rol/', queryParameters: {'rol': rol}),
+        obtenerTodas(dio, 'usuarios/permisos-usuario/',
+            queryParameters: {'user': usuario['id']}),
       ]);
-
-      List<Map<String, dynamic>> _parse(dynamic d) =>
-          List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-      final rolList   = _parse(results[0].data);
-      final userList  = _parse(results[1].data);
+      final rolList   = results[0];
+      final userList  = results[1];
 
       setState(() {
         _rolPermisos   = Set<String>.from(rolList.map((p) => p['codigo']));

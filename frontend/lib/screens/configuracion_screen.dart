@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
@@ -135,11 +136,10 @@ class _CrudListState extends State<_CrudList> {
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final resp = await dio.get(widget.endpoint);
+      final items = await obtenerTodas(dio, widget.endpoint);
       if (!mounted) return;
       setState(() {
-        final d  = resp.data;
-        _items   = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _items   = items;
         _loading = false;
       });
     } catch (e) {
@@ -457,15 +457,13 @@ class _DocentesTabState extends State<_DocentesTab> {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       final results = await Future.wait([
-        dio.get('academico/programas/'),
-        dio.get('academico/asignaturas/'),
+        obtenerTodas(dio, 'academico/programas/'),
+        obtenerTodas(dio, 'academico/asignaturas/'),
       ]);
       if (mounted) {
-        final dp = results[0].data;
-        final da = results[1].data;
         setState(() {
-          _programas   = List<Map<String, dynamic>>.from(dp is List ? dp : (dp['results'] ?? []));
-          _asignaturas = List<Map<String, dynamic>>.from(da is List ? da : (da['results'] ?? []));
+          _programas   = results[0];
+          _asignaturas = results[1];
         });
       }
     } catch (_) {}
@@ -679,15 +677,13 @@ class _GuiasTabState extends State<_GuiasTab> {
       final auth    = context.read<AuthProvider>();
       final dio     = ApiClient.instance.authenticatedDio(auth.token);
       final results = await Future.wait([
-        dio.get('academico/asignaturas/'),
-        dio.get('inventario/lista/'),
+        obtenerTodas(dio, 'academico/asignaturas/'),
+        obtenerTodas(dio, 'inventario/lista/'),
       ]);
       if (mounted) {
-        final da = results[0].data;
-        final di = results[1].data;
         setState(() {
-          _asignaturas = List<Map<String, dynamic>>.from(da is List ? da : (da['results'] ?? []));
-          _insumos     = List<Map<String, dynamic>>.from(di is List ? di : (di['results'] ?? []));
+          _asignaturas = results[0];
+          _insumos     = results[1];
         });
       }
     } catch (_) {}
@@ -700,11 +696,10 @@ class _GuiasTabState extends State<_GuiasTab> {
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final resp = await dio.get('academico/guias/');
+      final guias = await obtenerTodas(dio, 'academico/guias/');
       if (!mounted) return;
-      final d = resp.data;
       setState(() {
-        _guias = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _guias = guias;
         _loadingGuias = false;
       });
     } catch (_) {
@@ -845,9 +840,8 @@ class _GuiasTabState extends State<_GuiasTab> {
     List<Map<String, dynamic>> items = [];
     String? loadError;
     try {
-      final resp = await dio.get('academico/insumos-guia/', queryParameters: {'guia': guiaId});
-      final d = resp.data;
-      items = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+      items = await obtenerTodas(dio, 'academico/insumos-guia/',
+          queryParameters: {'guia': guiaId});
     } catch (_) {
       loadError = 'No se pudieron cargar los insumos requeridos';
     }
@@ -1378,12 +1372,9 @@ class _AsignaturasTabState extends State<_AsignaturasTab> {
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final resp = await dio.get('academico/areas/');
+      final areas = await obtenerTodas(dio, 'academico/areas/');
       if (mounted) {
-        final d = resp.data;
-        setState(() {
-          _areas = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-        });
+        setState(() => _areas = areas);
       }
     } catch (_) {}
   }
