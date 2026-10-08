@@ -70,9 +70,8 @@ class _DashboardContentState extends State<DashboardContent> {
 
       // Indexar encargados por día y hora
       final encByDia = <int, Map<int, List<Map<String, dynamic>>>>{};
-      final rawEnc = results[1].data;
-      final listaEnc = List<Map<String, dynamic>>.from(
-          rawEnc is List ? rawEnc : (rawEnc['results'] ?? []));
+      // Horarios sin paginar en el backend; ApiListas también tolera {results}.
+      final listaEnc = ApiListas.listaDe(results[1].data);
       for (final e in listaEnc) {
         final dia  = e['dia_semana'] as int? ?? -1;
         final hora = e['hora'] as int? ?? -1;
@@ -82,9 +81,7 @@ class _DashboardContentState extends State<DashboardContent> {
 
       // Indexar asignaturas por día y hora
       final asgByDia = <int, Map<int, List<Map<String, dynamic>>>>{};
-      final rawAsg = results[2].data;
-      final listaAsg = List<Map<String, dynamic>>.from(
-          rawAsg is List ? rawAsg : (rawAsg['results'] ?? []));
+      final listaAsg = ApiListas.listaDe(results[2].data);
       for (final a in listaAsg) {
         final dia  = a['dia_semana'] as int? ?? -1;
         final hora = a['hora'] as int? ?? -1;

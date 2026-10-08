@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/horario_utils.dart';
 import '../core/theme/colors.dart';
 
 class RegistroHorasScreen extends StatefulWidget {
@@ -93,7 +94,17 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
     if (picked != null) setState(() => _fechaActividad = picked);
   }
 
+  /// Mismo rango que valida el backend: 0 < duración ≤ 24 h. Acepta coma
+  /// decimal ("2,5"), habitual en teclados en español.
+  String? _validarDuracion(String? v) {
+    final d = parseHoras(v ?? '');
+    if (d == null || d <= 0) return 'Ingresa la duración en horas (ej: 2,5)';
+    if (d > 24) return 'Una sesión no puede superar 24 horas';
+    return null;
+  }
+
   Future<void> _enviar() async {
+    if (_enviando) return;  // evita doble envío por doble toque
     if (!_formKey.currentState!.validate()) return;
     setState(() => _enviando = true);
     try {
@@ -107,9 +118,10 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
         'fecha_actividad': _fechaActividad != null
             ? '${_fechaActividad!.year}-${_fechaActividad!.month.toString().padLeft(2, '0')}-${_fechaActividad!.day.toString().padLeft(2, '0')}'
             : null,
-        'duracion_horas':  double.tryParse(_durCtrl.text) ?? 0,
+        // El backend guarda 1 decimal (DecimalField 4,1).
+        'duracion_horas':  double.parse((parseHoras(_durCtrl.text) ?? 0).toStringAsFixed(1)),
       });
-      setState(() => _enviado = true);
+      if (mounted) setState(() => _enviado = true);
     } on DioException catch (e) {
       final String msg;
       if (e.response?.statusCode == 429) {
@@ -117,7 +129,9 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
       } else {
         final data = e.response?.data;
         if (data is Map && data.isNotEmpty) {
-          msg = data.values.first.toString();
+          // DRF devuelve {campo: ["mensaje"]}: mostrar solo el texto.
+          final v = data.values.first;
+          msg = v is List && v.isNotEmpty ? v.first.toString() : v.toString();
         } else {
           msg = 'Error al registrar. Intenta de nuevo.';
         }
@@ -416,11 +430,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
                 controller: _durCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: _deco('Duración (horas) *', Icons.timer_outlined),
-                validator: (v) {
-                  final d = double.tryParse(v ?? '');
-                  if (d == null || d <= 0) return 'Ingresa la duración en horas (ej: 2.5)';
-                  return null;
-                },
+                validator: _validarDuracion,
               )),
               const SizedBox(width: 16),
               const Expanded(child: SizedBox.shrink()),
@@ -431,11 +441,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
               controller: _durCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: _deco('Duración (horas) *', Icons.timer_outlined),
-              validator: (v) {
-                final d = double.tryParse(v ?? '');
-                if (d == null || d <= 0) return 'Ingresa la duración en horas (ej: 2.5)';
-                return null;
-              },
+              validator: _validarDuracion,
             ),
             const SizedBox(height: 12),
           ],

@@ -88,3 +88,88 @@ class HorarioUtils {
     return todos.indexOf(uid);
   }
 }
+
+// ── Respuestas de la API (lista o paginadas) ─────────────────────────────────
+// El backend pagina por defecto (PAGE_SIZE=50) y devuelve {count, next,
+// results}; algunos endpoints (horarios) devuelven la lista completa. Estas
+// funciones aceptan ambos formatos para que ninguna pantalla de horarios lea
+// solo la primera página.
+// TODO(integración): unificar con el helper de paginación del lote A.
+
+class ApiListas {
+  /// Extrae la lista de una respuesta que puede ser `List` o `{results: [...]}`.
+  static List<Map<String, dynamic>> listaDe(dynamic data) {
+    final raw = data is List
+        ? data
+        : (data is Map ? (data['results'] ?? const []) : const []);
+    return [
+      for (final e in raw as List)
+        if (e is Map) Map<String, dynamic>.from(e),
+    ];
+  }
+
+  /// Pide todas las páginas (`?page=1,2,…`) hasta que `next` sea null.
+  /// `pedir(pagina)` devuelve el `data` de la respuesta. Si la primera
+  /// respuesta ya es una lista (endpoint sin paginar), se devuelve tal cual.
+  /// `maxPaginas` evita un bucle infinito ante una respuesta inesperada.
+  static Future<List<Map<String, dynamic>>> todasLasPaginas(
+    Future<dynamic> Function(int pagina) pedir, {
+    int maxPaginas = 40,
+  }) async {
+    final resultado = <Map<String, dynamic>>[];
+    for (int pagina = 1; pagina <= maxPaginas; pagina++) {
+      final data = await pedir(pagina);
+      resultado.addAll(listaDe(data));
+      if (data is! Map || data['next'] == null) break;
+    }
+    return resultado;
+  }
+}
+
+// ── Seguimiento semanal de monitores ─────────────────────────────────────────
+
+/// Fila del seguimiento semanal ya normalizada. Tolera un backend anterior
+/// (sin meta fija ni desglose), en el que `horas_esperadas` eran solo las
+/// horas presenciales del horario.
+class SeguimientoFila {
+  final double meta;
+  final double presenciales;
+  final double noPresenciales;
+  final double registradas;
+
+  const SeguimientoFila({
+    required this.meta,
+    required this.presenciales,
+    required this.noPresenciales,
+    required this.registradas,
+  });
+
+  static double _num(dynamic v) =>
+      v is num ? v.toDouble() : (double.tryParse('${v ?? ''}') ?? 0);
+
+  factory SeguimientoFila.desdeJson(Map<String, dynamic> m) {
+    final esperadas = _num(m['horas_esperadas']);
+    return SeguimientoFila(
+      meta:           m.containsKey('meta_semanal') ? _num(m['meta_semanal']) : esperadas,
+      presenciales:   m.containsKey('horas_presenciales') ? _num(m['horas_presenciales']) : esperadas,
+      noPresenciales: _num(m['horas_no_presenciales']),
+      registradas:    _num(m['horas_registradas']),
+    );
+  }
+
+  double get asignadas  => presenciales + noPresenciales;
+  double get sinAsignar => (meta - asignadas).clamp(0, double.infinity).toDouble();
+  double get pendientes => (meta - registradas).clamp(0, double.infinity).toDouble();
+  bool   get cumple     => registradas >= meta;
+  /// Avance 0..1 de las horas registradas respecto a la meta.
+  double get progreso   => meta <= 0 ? 1 : (registradas / meta).clamp(0, 1).toDouble();
+}
+
+/// Formato corto de horas: 10 → "10 h", 2.5 → "2.5 h".
+String formatoHoras(double h) =>
+    h == h.truncateToDouble() ? '${h.toInt()} h' : '${h.toStringAsFixed(1)} h';
+
+/// Interpreta una cantidad de horas escrita por el usuario; acepta coma
+/// decimal ("2,5"). Devuelve null si no es un número.
+double? parseHoras(String texto) =>
+    double.tryParse(texto.trim().replaceAll(',', '.'));
