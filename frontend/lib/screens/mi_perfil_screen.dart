@@ -241,11 +241,18 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
-      await dio.post('usuarios/cambiar-password/', data: {
+      final resp = await dio.post('usuarios/cambiar-password/', data: {
         'password_actual': actual,
         'nueva_password':  nueva,
         'nueva_password2': nueva2,
       });
+      // El backend cierra las demás sesiones y entrega tokens nuevos para
+      // este dispositivo.
+      final data = resp.data;
+      if (data is Map && data['access'] is String && data['refresh'] is String && mounted) {
+        await context.read<AuthProvider>()
+            .reemplazarTokens(data['access'] as String, data['refresh'] as String);
+      }
       _passActualCtrl.clear();
       _passNuevaCtrl.clear();
       _passNueva2Ctrl.clear();

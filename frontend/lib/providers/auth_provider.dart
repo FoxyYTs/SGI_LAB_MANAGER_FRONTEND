@@ -302,6 +302,26 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
     debugPrint('[AuthProvider] Refresh token actualizado por rotación.');
   }
 
+  /// Reemplaza el par de tokens de la sesión actual. Lo usa MiPerfilScreen
+  /// tras cambiar la contraseña: el backend pone en la blacklist todos los
+  /// refresh tokens del usuario (cierra las demás sesiones) y devuelve un
+  /// par nuevo para este dispositivo — sin adoptarlo, el siguiente refresco
+  /// fallaría y la sesión se cerraría.
+  Future<void> reemplazarTokens(String access, String refresh) async {
+    _token        = access;
+    _refreshToken = refresh;
+    await _storage.write(key: 'token',         value: access);
+    await _storage.write(key: 'refresh_token', value: refresh);
+    ApiClient.instance.setTokens(
+      access,
+      refresh,
+      onRefreshed:      _actualizarToken,
+      onLogout:         () => logout(),
+      onRefreshRotated: _actualizarRefreshToken,
+    );
+    notifyListeners();
+  }
+
   /// Recarga solo la foto de perfil (llamar desde MiPerfilScreen tras subir foto).
   Future<void> recargarFoto() async {
     try {
