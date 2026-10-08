@@ -301,6 +301,70 @@ class RangosHorario {
     return fin > kHoraFinMaxLab ? kHoraFinMaxLab : fin;
   }
 
+  // ── Rangos distintos por día (diálogo "Varios días") ──────────────────────
+
+  /// Une los rangos que se solapan o se tocan dentro de cada día y los
+  /// ordena por día y hora. Recorta lo que quede fuera del horario del
+  /// laboratorio y descarta rangos vacíos o con día inválido.
+  /// Ej.: L 8–11 + L 10–13 + L 13–14 → L 8–14.
+  static List<RangoHoras> normalizar(Iterable<RangoHoras> rangos) => fusionar([
+        for (final r in rangos)
+          if (r.dia >= 0 && r.dia < kNombresDia.length)
+            for (int h = r.inicio < kHoraMinLab ? kHoraMinLab : r.inicio;
+                h < (r.fin > kHoraFinMaxLab ? kHoraFinMaxLab : r.fin);
+                h++)
+              (dia: r.dia, hora: h),
+      ]);
+
+  /// Horas (bloques de 1 h) distintas que cubren los rangos; las horas que
+  /// se solapan cuentan una sola vez.
+  static int totalHoras(Iterable<RangoHoras> rangos) =>
+      normalizar(rangos).fold(0, (n, r) => n + r.duracion);
+
+  /// Días distintos con al menos una hora.
+  static Set<int> diasCon(Iterable<RangoHoras> rangos) =>
+      {for (final r in normalizar(rangos)) r.dia};
+
+  /// "Total: 13 h en 4 días" (vacío → "Total: 0 h").
+  static String resumenTotal(Iterable<RangoHoras> rangos) {
+    final h = totalHoras(rangos);
+    final d = diasCon(rangos).length;
+    if (h == 0) return 'Total: 0 h';
+    return 'Total: $h h en $d día${d == 1 ? '' : 's'}';
+  }
+
+  /// Cuerpo `bloques` de asignar-bloques: [{dia, hora_inicio, hora_fin}]
+  /// ya normalizado (sin solapes).
+  static List<Map<String, int>> aBloquesJson(Iterable<RangoHoras> rangos) => [
+        for (final r in normalizar(rangos))
+          {'dia': r.dia, 'hora_inicio': r.inicio, 'hora_fin': r.fin},
+      ];
+
+  /// Texto corto por día: "L 8 AM – 11 AM · X 8 AM – 10 AM, 11 AM – 1 PM".
+  static String describirPorDia(Iterable<RangoHoras> rangos) {
+    final porDia = <int, List<RangoHoras>>{};
+    for (final r in normalizar(rangos)) {
+      porDia.putIfAbsent(r.dia, () => []).add(r);
+    }
+    return porDia.entries
+        .map((e) => '${kInicialesDia[e.key]} ${e.value.map((r) => r.texto).join(', ')}')
+        .join(' · ');
+  }
+
+  /// Rango que se propone al pulsar "+ rango" en un día que ya tiene
+  /// `delDia`: 1 h dejando una hora libre tras el último rango (caso típico
+  /// "8–10 y 11–13"); si no cabe después, antes del primero; si el día está
+  /// vacío, `porDefecto`.
+  static RangoHoras sugerirRangoNuevo(int dia, List<RangoHoras> delDia, RangoHoras porDefecto) {
+    if (delDia.isEmpty) return RangoHoras(dia, porDefecto.inicio, porDefecto.fin);
+    final ultimoFin = delDia.map((r) => r.fin).reduce((a, b) => a > b ? a : b);
+    final primerInicio = delDia.map((r) => r.inicio).reduce((a, b) => a < b ? a : b);
+    if (ultimoFin + 2 <= kHoraFinMaxLab) return RangoHoras(dia, ultimoFin + 1, ultimoFin + 2);
+    if (ultimoFin + 1 <= kHoraFinMaxLab) return RangoHoras(dia, ultimoFin, ultimoFin + 1);
+    if (primerInicio - 2 >= kHoraMinLab) return RangoHoras(dia, primerInicio - 2, primerInicio - 1);
+    return RangoHoras(dia, kHoraMinLab, kHoraMinLab + 1);
+  }
+
   /// Líneas legibles de los choques que devuelve el backend en un 409.
   static List<String> describirChoques(dynamic choques) {
     if (choques is! List) return const [];
