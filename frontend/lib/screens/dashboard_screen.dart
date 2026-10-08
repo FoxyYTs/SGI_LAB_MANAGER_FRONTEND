@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../core/sync/sync_service.dart';
 import '../core/horario_utils.dart';
 import '../widgets/qr_generator_dialog.dart';
+import 'mi_semana_screen.dart';
 
 String _horaAmPm(int hora) {
   if (hora == 12) return '12 PM';
@@ -34,6 +35,9 @@ class _DashboardContentState extends State<DashboardContent> {
   DateTime? _cachedAt;
   bool      _eraOnline  = true;
 
+  // Avance semanal del monitor logueado (solo si hace turnos de monitor).
+  MiSemana? _miSemana;
+
   @override
   void initState() {
     super.initState();
@@ -54,11 +58,26 @@ class _DashboardContentState extends State<DashboardContent> {
     super.dispose();
   }
 
+  /// Carga "Mi semana" aparte: si falla, el dashboard sigue igual.
+  Future<void> _cargarMiSemana() async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.haceTurnosMonitor) {
+      if (_miSemana != null && mounted) setState(() => _miSemana = null);
+      return;
+    }
+    try {
+      final r = await ApiClient.instance.authenticatedDio(auth.token).get('academico/mi-semana/');
+      if (!mounted) return;
+      setState(() => _miSemana = MiSemana.desdeJson(Map<String, dynamic>.from(r.data as Map)));
+    } catch (_) {}
+  }
+
   Future<void> _cargar() async {
     if (!mounted) return;
     setState(() => _cargando = true);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
+    _cargarMiSemana();
     try {
       final results = await Future.wait([
         dio.get('academico/dashboard/'),
@@ -142,6 +161,19 @@ class _DashboardContentState extends State<DashboardContent> {
                 else if (_data != null) ...[
                   _buildStatCards(constraints.maxWidth, isMobile),
                   SizedBox(height: isMobile ? 14 : 20),
+
+                  if (_miSemana != null) ...[
+                    MiSemanaResumenCard(
+                      semana: _miSemana!,
+                      compacta: true,
+                      onTap: () async {
+                        await Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => const MiSemanaScreen()));
+                        if (mounted) _cargarMiSemana();
+                      },
+                    ),
+                    SizedBox(height: isMobile ? 14 : 20),
+                  ],
 
                   // Horario + Acciones rápidas
                   if (isMobile)
