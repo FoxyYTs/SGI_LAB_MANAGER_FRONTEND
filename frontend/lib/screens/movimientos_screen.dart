@@ -30,6 +30,25 @@ class _MovimientosContentState extends State<MovimientosContent> {
   DateTime? _cachedAt;
   String    _filtroEstado = 'Todos';
 
+  // Préstamos con una acción (aprobar/rechazar/agregar ítems) en curso: un
+  // doble tap en "Aprobar" mandaba dos POST; el segundo respondía error o,
+  // si se encolaba offline, quedaba duplicado en la cola de sync.
+  final Set<String> _enCurso = {};
+
+  /// Marca `id` como ocupado mientras corre `accion`. Si ya estaba ocupado
+  /// no hace nada (devuelve sin ejecutar).
+  Future<void> _conGuarda(String id, Future<void> Function() accion) async {
+    if (_enCurso.contains(id)) return;
+    setState(() => _enCurso.add(id));
+    try {
+      await accion();
+    } finally {
+      if (mounted) {
+        setState(() => _enCurso.remove(id));
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -68,7 +87,9 @@ class _MovimientosContentState extends State<MovimientosContent> {
 
   bool get _estaOnline => kIsWeb || SyncService.instance.online;
 
-  Future<void> _aprobar(String id) async {
+  Future<void> _aprobar(String id) => _conGuarda(id, () => _aprobarSinGuarda(id));
+
+  Future<void> _aprobarSinGuarda(String id) async {
     if (!_estaOnline) {
       await SyncService.instance.encolar('APROBAR_PRESTAMO', {'prestamo_id': id});
       _showInfo('Sin conexión — la aprobación se enviará cuando vuelva la red.');
@@ -87,41 +108,48 @@ class _MovimientosContentState extends State<MovimientosContent> {
   }
 
   /// Abre el diálogo de selección de insumo(s) y, si el usuario confirma,
-  /// los agrega al préstamo `id` vía `POST .../agregar-item/` (uno por
-  /// ítem — el endpoint solo acepta una línea a la vez). Existe para
+  /// los agrega al préstamo `id` con UN solo `POST .../agregar-item/`
+  /// (`{"items": [...]}`): el backend los crea todos o ninguno en una
+  /// transacción. Antes se mandaba un POST por ítem y, si fallaba a mitad,
+  /// al reintentar se duplicaban los que sí habían entrado. Existe para
   /// completar préstamos que llegaron del formulario público de Google
   /// Form sin ítems estructurados (solo texto libre en observaciones).
   Future<void> _agregarItem(String id) async {
+    if (_enCurso.contains(id)) return;
     final insumos = context.read<InventarioProvider>().insumos;
-    final items = await showDialog<List<Map<String, String?>>>(
+    final items = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       builder: (_) => _AgregarItemDialog(insumos: insumos),
     );
     if (items == null || items.isEmpty || !mounted) return;
 
-    try {
-      final auth = context.read<AuthProvider>();
-      final dio = ApiClient.instance.authenticatedDio(auth.token);
-      for (final it in items) {
+    await _conGuarda(id, () async {
+      try {
+        final auth = context.read<AuthProvider>();
+        final dio = ApiClient.instance.authenticatedDio(auth.token);
         await dio.post('operaciones/prestamos/$id/agregar-item/', data: {
-          'insumo': it['insumoId'],
-          'cantidad_prestada': double.tryParse(it['cantidad'] ?? '') ?? 1,
+          'items': [
+            for (final it in items)
+              {'insumo': it['insumoId'], 'cantidad_prestada': it['cantidad']},
+          ],
         });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Ítem(s) agregado(s) al préstamo.'),
+              backgroundColor: kSuccess));
+          _fetchPrestamos();
+        }
+      } on DioException catch (e) {
+        _showError('Error al agregar ítem: ${_mensajeDio(e)}');
+      } catch (e) {
+        _showError('Error al agregar ítem: $e');
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Ítem(s) agregado(s) al préstamo.'),
-            backgroundColor: kSuccess));
-        _fetchPrestamos();
-      }
-    } on DioException catch (e) {
-      _showError('Error al agregar ítem: ${_mensajeDio(e)}');
-    } catch (e) {
-      _showError('Error al agregar ítem: $e');
-    }
+    });
   }
 
-  Future<void> _rechazar(String id) async {
+  Future<void> _rechazar(String id) => _conGuarda(id, () => _rechazarSinGuarda(id));
+
+  Future<void> _rechazarSinGuarda(String id) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -292,6 +320,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (ctx, i) => _PrestamoCard(
                           prestamo: filtrados[i],
+                          ocupado: _enCurso.contains(filtrados[i]['id']?.toString() ?? ''),
                           puedeGestionar: auth.can(Perm.prestamosGestionar),
                           onAprobar: _aprobar,
                           onRechazar: _rechazar,
@@ -783,6 +812,9 @@ class _SelectorInsumoDialogState extends State<_SelectorInsumoDialog> {
 class _PrestamoCard extends StatelessWidget {
   final Map<String, dynamic> prestamo;
   final bool puedeGestionar;
+  /// true mientras hay una acción en curso sobre este préstamo: deshabilita
+  /// los botones para evitar dobles envíos.
+  final bool ocupado;
   final void Function(String) onAprobar;
   final void Function(String) onRechazar;
   final VoidCallback onDevuelto;
@@ -791,6 +823,7 @@ class _PrestamoCard extends StatelessWidget {
   const _PrestamoCard({
     required this.prestamo,
     required this.puedeGestionar,
+    this.ocupado = false,
     required this.onAprobar,
     required this.onRechazar,
     required this.onDevuelto,
@@ -925,7 +958,7 @@ class _PrestamoCard extends StatelessWidget {
                     icon: const Icon(Icons.add_circle_outline, size: 16),
                     label: const Text('Agregar ítem', style: TextStyle(fontSize: 13)),
                     style: TextButton.styleFrom(foregroundColor: kPrimary),
-                    onPressed: () => onAgregarItem(id),
+                    onPressed: ocupado ? null : () => onAgregarItem(id),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -938,7 +971,7 @@ class _PrestamoCard extends StatelessWidget {
                           foregroundColor: kDanger,
                           side: const BorderSide(color: kDanger),
                           padding: const EdgeInsets.symmetric(vertical: 8)),
-                      onPressed: () => onRechazar(id),
+                      onPressed: ocupado ? null : () => onRechazar(id),
                       child: const Text('Rechazar', style: TextStyle(fontSize: 13)),
                     ),
                   ),
@@ -949,7 +982,7 @@ class _PrestamoCard extends StatelessWidget {
                           backgroundColor: kPrimary, foregroundColor: Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 8)),
-                      onPressed: () => onAprobar(id),
+                      onPressed: ocupado ? null : () => onAprobar(id),
                       child: const Text('Aprobar', style: TextStyle(fontSize: 13)),
                     ),
                   ),
@@ -1070,6 +1103,10 @@ class _PrestamoCard extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Error: $e'), backgroundColor: kDanger));
+        // Se manda un POST por línea: si falló a mitad, las primeras ya
+        // quedaron registradas. Recargar para que un reintento parta de los
+        // pendientes reales y no vuelva a devolver lo ya devuelto.
+        onDevuelto();
       }
     }
   }
@@ -1086,7 +1123,27 @@ class _AgregarItemDialog extends StatefulWidget {
 }
 
 class _AgregarItemDialogState extends State<_AgregarItemDialog> {
+  final _formKey = GlobalKey<FormState>();
   final List<_ItemPrestamo> _items = [_ItemPrestamo()];
+
+  /// Cantidad válida (> 0) o null. Acepta coma decimal ("1,5").
+  static double? _cantidadValida(String? texto) {
+    final v = double.tryParse((texto ?? '').trim().replaceAll(',', '.'));
+    return (v != null && v > 0) ? v : null;
+  }
+
+  void _confirmar() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.pop(
+        context,
+        _items
+            .where((i) => i.insumoId != null)
+            .map((i) => <String, dynamic>{
+                  'insumoId': i.insumoId,
+                  'cantidad': _cantidadValida(i.cantCtrl.text),
+                })
+            .toList());
+  }
 
   @override
   void dispose() {
@@ -1101,7 +1158,9 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
           style: TextStyle(color: kPrimary, fontSize: 16)),
       content: SizedBox(
         width: 420,
-        child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1113,6 +1172,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
               ),
             ],
           ),
+          ),
         ),
       ),
       actions: [
@@ -1123,17 +1183,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
         ElevatedButton(
           style: ElevatedButton.styleFrom(
               backgroundColor: kPrimary, foregroundColor: Colors.white),
-          onPressed: _items.any((i) => i.insumoId != null)
-              ? () => Navigator.pop(
-                  context,
-                  _items
-                      .where((i) => i.insumoId != null)
-                      .map((i) => {
-                            'insumoId': i.insumoId,
-                            'cantidad': i.cantCtrl.text,
-                          })
-                      .toList())
-              : null,
+          onPressed: _items.any((i) => i.insumoId != null) ? _confirmar : null,
           child: const Text('Agregar'),
         ),
       ],
@@ -1155,7 +1205,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: TextField(
+          child: TextFormField(
             controller: item.cantCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
@@ -1164,6 +1214,10 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
               isDense: true,
               contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             ),
+            // Solo valida las filas con insumo elegido (las vacías se ignoran)
+            validator: (v) => item.insumoId != null && _cantidadValida(v) == null
+                ? '>0'
+                : null,
           ),
         ),
         if (_items.length > 1)
