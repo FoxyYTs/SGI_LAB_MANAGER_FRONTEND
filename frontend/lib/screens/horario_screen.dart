@@ -2144,32 +2144,40 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
 
   DateTime _lunes = _lunesDe(DateTime.now());
   List<Map<String, dynamic>> _monitores = [];
+  double? _metaSemanal;
   bool _cargando = true;
+  String? _error;
   final Set<int> _marcando = {};
 
   String _semanaStr(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  String _fmt(double h) =>
-      h == h.truncateToDouble() ? '${h.toInt()} h' : '${h.toStringAsFixed(1)} h';
+  bool get _esSemanaActual => _lunes == _lunesDe(DateTime.now());
 
   @override
   void initState() { super.initState(); Future.microtask(_cargar); }
 
   Future<void> _cargar() async {
     if (!mounted) return;
-    setState(() => _cargando = true);
+    setState(() { _cargando = true; _error = null; });
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
       final resp = await dio.get('academico/seguimiento-monitores/',
           queryParameters: {'semana': _semanaStr(_lunes)});
       final monitores = List<Map<String, dynamic>>.from(resp.data['monitores'] ?? []);
+      final meta = resp.data['meta_semanal'];
       if (!mounted) return;
-      setState(() => _monitores = monitores);
+      setState(() {
+        _monitores   = monitores;
+        _metaSemanal = meta is num ? meta.toDouble() : null;
+      });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _monitores = []);
+      setState(() {
+        _monitores = [];
+        _error = 'No se pudo cargar el seguimiento. Revisa la conexión e intenta de nuevo.';
+      });
     }
     if (!mounted) return;
     setState(() => _cargando = false);
@@ -2180,8 +2188,15 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
     _cargar();
   }
 
+  void _irASemanaActual() {
+    setState(() => _lunes = _lunesDe(DateTime.now()));
+    _cargar();
+  }
+
   Future<void> _marcar(int usuarioId, bool completada) async {
+    if (_marcando.contains(usuarioId)) return;  // evita doble toque
     setState(() => _marcando.add(usuarioId));
+    final messenger = ScaffoldMessenger.of(context);
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
@@ -2191,8 +2206,13 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
         'completada':    completada,
       });
       await _cargar();
+      messenger.showSnackBar(SnackBar(
+        content: Text(completada ? 'Semana marcada como completada' : 'Semana desmarcada'),
+        backgroundColor: kSuccess,
+        duration: const Duration(seconds: 2),
+      ));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text('Error al actualizar: $e'), backgroundColor: kDanger));
     } finally {
       if (mounted) setState(() => _marcando.remove(usuarioId));
@@ -2205,11 +2225,26 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
     return 'Semana del ${f(_lunes)} al ${f(fin)}';
   }
 
+  Widget _celda(Widget child) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+    child: child,
+  );
+
+  Widget _textoHoras(double h, {Color? color, bool bold = false}) => Text(
+    formatoHoras(h),
+    style: TextStyle(fontSize: 12, color: color,
+        fontWeight: bold ? FontWeight.bold : FontWeight.normal),
+  );
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
     if (_cargando) return const Center(child: CircularProgressIndicator(color: kPrimary));
+
+    final filas = _monitores.map((m) => (m, SeguimientoFila.desdeJson(m))).toList();
+    final meta = _metaSemanal ?? (filas.isNotEmpty ? filas.first.$2.meta : null);
+    final cumplen = filas.where((f) => f.$2.cumple).length;
 
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -2218,6 +2253,7 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
         children: [
           Row(children: [
             IconButton(
+              tooltip: 'Semana anterior',
               icon: const Icon(Icons.chevron_left, color: kPrimary),
               onPressed: () => _cambiarSemana(-7),
             ),
@@ -2227,110 +2263,172 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             ),
             IconButton(
+              tooltip: 'Semana siguiente',
               icon: const Icon(Icons.chevron_right, color: kPrimary),
               onPressed: () => _cambiarSemana(7),
             ),
           ]),
-          const SizedBox(height: 8),
-          if (_monitores.isEmpty)
+          if (!_esSemanaActual)
+            Center(
+              child: TextButton.icon(
+                onPressed: _irASemanaActual,
+                icon: const Icon(Icons.today_outlined, size: 16),
+                label: const Text('Ir a esta semana', style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          if (meta != null && filas.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Meta semanal: ${formatoHoras(meta)} por monitor (presenciales + no presenciales) · '
+                '$cumplen de ${filas.length} la cumplen',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: kTextMuted),
+              ),
+            ),
+          const SizedBox(height: 4),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 40),
+              child: Column(children: [
+                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: kDanger)),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: _cargar,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Reintentar'),
+                ),
+              ]),
+            )
+          else if (filas.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 40),
               child: Center(child: Text('No hay monitores activos registrados.',
                   style: TextStyle(color: kTextMuted))),
             )
           else
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFDEE2E6)),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Table(
-                columnWidths: const {
-                  0: FlexColumnWidth(3),
-                  1: FlexColumnWidth(2),
-                  2: FlexColumnWidth(2),
-                  3: FlexColumnWidth(2),
-                  4: IntrinsicColumnWidth(),
-                },
-                children: [
-                  TableRow(
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF8F9FA),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
-                    ),
-                    children: const [
-                      _CeldaHeader('Monitor'),
-                      _CeldaHeader('Esperadas'),
-                      _CeldaHeader('Registradas'),
-                      _CeldaHeader('Estado'),
-                      _CeldaHeader(''),
-                    ],
-                  ),
-                  ..._monitores.map((m) {
-                    final esperadas   = (m['horas_esperadas'] as num).toDouble();
-                    final registradas = (m['horas_registradas'] as num).toDouble();
-                    final completada  = m['completada'] == true;
-                    final puedeMarcar = m['puede_marcar'] == true;
-                    final uid         = m['usuario'] as int;
-                    final marcando    = _marcando.contains(uid);
-                    final colorHoras  = registradas >= esperadas ? kSuccess : kWarning;
+            LayoutBuilder(builder: (_, box) {
+              const double kMin = 760;
+              final w = box.maxWidth < kMin ? kMin : box.maxWidth;
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(width: w, child: _buildTabla(filas)),
+              );
+            }),
+        ],
+      ),
+    );
+  }
 
-                    return TableRow(
-                      decoration: const BoxDecoration(
-                        border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
-                      ),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          child: Text(m['nombre_completo']?.toString() ?? '',
-                              style: const TextStyle(fontSize: 12)),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                          child: Text(_fmt(esperadas), style: const TextStyle(fontSize: 12)),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                          child: Text(_fmt(registradas),
-                              style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.bold, color: colorHoras)),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                          child: Tooltip(
-                            message: completada && m['marcado_por'] != null
-                                ? 'Marcada por ${m['marcado_por']}' : '',
-                            child: _Badge(
-                              completada ? 'Completada' : 'Pendiente',
-                              completada ? kSuccess : kTextMuted,
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          child: !puedeMarcar
-                              ? const SizedBox.shrink()
-                              : marcando
-                                  ? const SizedBox(width: 18, height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary))
-                                  : IconButton(
-                                      tooltip: completada ? 'Desmarcar' : 'Marcar como completada',
-                                      icon: Icon(
-                                        completada ? Icons.check_box : Icons.check_box_outline_blank,
-                                        color: completada ? kSuccess : kTextMuted,
-                                        size: 20,
-                                      ),
-                                      onPressed: () => _marcar(uid, !completada),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                    ),
-                        ),
-                      ],
-                    );
-                  }),
-                ],
-              ),
+  Widget _buildTabla(List<(Map<String, dynamic>, SeguimientoFila)> filas) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFDEE2E6)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Table(
+        columnWidths: const {
+          0: FlexColumnWidth(3),
+          1: FlexColumnWidth(1.2),
+          2: FlexColumnWidth(1.4),
+          3: FlexColumnWidth(1.6),
+          4: FlexColumnWidth(2.2),
+          5: FlexColumnWidth(1.4),
+          6: FlexColumnWidth(1.6),
+          7: IntrinsicColumnWidth(),
+        },
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          TableRow(
+            decoration: const BoxDecoration(
+              color: Color(0xFFF8F9FA),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
             ),
+            children: const [
+              _CeldaHeader('Monitor'),
+              _CeldaHeader('Meta'),
+              _CeldaHeader('Presencial'),
+              _CeldaHeader('No presencial'),
+              _CeldaHeader('Registradas'),
+              _CeldaHeader('Pendientes'),
+              _CeldaHeader('Estado'),
+              _CeldaHeader(''),
+            ],
+          ),
+          ...filas.map((par) {
+            final (m, f)      = par;
+            final completada  = m['completada'] == true;
+            final puedeMarcar = m['puede_marcar'] == true;
+            final uid         = m['usuario'] as int;
+            final marcando    = _marcando.contains(uid);
+            final colorHoras  = f.cumple ? kSuccess : kWarning;
+
+            return TableRow(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(m['nombre_completo']?.toString() ?? '',
+                        style: const TextStyle(fontSize: 12)),
+                    if (f.sinAsignar > 0)
+                      Tooltip(
+                        message: 'Entre horario presencial y horas en casa suma '
+                            '${formatoHoras(f.asignadas)} de ${formatoHoras(f.meta)}',
+                        child: Text('${formatoHoras(f.sinAsignar)} sin asignar',
+                            style: const TextStyle(fontSize: 10, color: kWarning)),
+                      ),
+                  ]),
+                ),
+                _celda(_textoHoras(f.meta, bold: true)),
+                _celda(_textoHoras(f.presenciales)),
+                _celda(_textoHoras(f.noPresenciales, color: f.noPresenciales > 0 ? null : kTextMuted)),
+                _celda(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _textoHoras(f.registradas, color: colorHoras, bold: true),
+                  const SizedBox(height: 4),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(
+                      value: f.progreso,
+                      minHeight: 4,
+                      color: colorHoras,
+                      backgroundColor: const Color(0xFFE9ECEF),
+                    ),
+                  ),
+                ])),
+                _celda(_textoHoras(f.pendientes, color: f.pendientes > 0 ? kWarning : kTextMuted)),
+                _celda(Tooltip(
+                  message: completada && m['marcado_por'] != null
+                      ? 'Marcada por ${m['marcado_por']}' : '',
+                  child: _Badge(
+                    completada ? 'Completada' : 'Pendiente',
+                    completada ? kSuccess : kTextMuted,
+                  ),
+                )),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: !puedeMarcar
+                      ? const SizedBox.shrink()
+                      : marcando
+                          ? const SizedBox(width: 18, height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary))
+                          : IconButton(
+                              tooltip: completada ? 'Desmarcar' : 'Marcar como completada',
+                              icon: Icon(
+                                completada ? Icons.check_box : Icons.check_box_outline_blank,
+                                color: completada ? kSuccess : kTextMuted,
+                                size: 20,
+                              ),
+                              onPressed: () => _marcar(uid, !completada),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                ),
+              ],
+            );
+          }),
         ],
       ),
     );
