@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/cache/cache_service.dart';
 import '../providers/auth_provider.dart';
@@ -18,6 +20,12 @@ class _BitacoraContentState extends State<BitacoraContent> {
   bool      _desdeCache = false;
   DateTime? _cachedAt;
   String    _filtroTipo = 'Todos';
+  // La bitácora crece sin límite y el servidor la pagina (50 por página):
+  // se muestra la primera página y se ofrece "Cargar más".
+  int       _pagina      = 1;
+  bool      _hayMas      = false;
+  int?      _total;
+  bool      _cargandoMas = false;
 
   static const _tipos = [
     'Todos', 'ENTRADA', 'SALIDA', 'AJUSTE', 'ROTURA', 'CONSUMO_PRACTICA',
@@ -39,19 +47,23 @@ class _BitacoraContentState extends State<BitacoraContent> {
 
   String get _cacheKey => 'bitacora_$_filtroTipo';
 
+  Map<String, dynamic>? get _query =>
+      _filtroTipo == 'Todos' ? null : {'tipo': _filtroTipo};
+
   Future<void> _cargar() async {
     setState(() => _cargando = true);
     try {
       final auth   = context.read<AuthProvider>();
       final dio    = ApiClient.instance.authenticatedDio(auth.token);
-      final params = _filtroTipo == 'Todos' ? '' : '?tipo=$_filtroTipo';
-      final r      = await dio.get('operaciones/bitacora/$params');
-      final data   = r.data;
-      final lista  = List<Map<String, dynamic>>.from(
-          data is List ? data : (data['results'] ?? []));
+      final pag    = await obtenerPagina(dio, 'operaciones/bitacora/',
+          queryParameters: _query);
+      final lista  = pag.items;
       await CacheService.instance.set(_cacheKey, lista);
       if (mounted) setState(() {
         _movimientos = lista;
+        _pagina      = 1;
+        _hayMas      = pag.hayMas;
+        _total       = pag.total;
         _desdeCache  = false;
         _cachedAt    = null;
         _cargando    = false;
@@ -62,10 +74,42 @@ class _BitacoraContentState extends State<BitacoraContent> {
         _movimientos = cached != null
             ? List<Map<String, dynamic>>.from(cached.data as List)
             : [];
+        _hayMas      = false;
+        _total       = null;
         _desdeCache  = cached != null;
         _cachedAt    = cached?.cachedAt;
         _cargando    = false;
       });
+    }
+  }
+
+  Future<void> _cargarMas() async {
+    if (_cargandoMas || !_hayMas) return;
+    final filtro = _filtroTipo;
+    setState(() => _cargandoMas = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final pag  = await obtenerPagina(dio, 'operaciones/bitacora/',
+          queryParameters: _query, pagina: _pagina + 1);
+      if (!mounted || filtro != _filtroTipo) return;
+      final vistos = {for (final m in _movimientos) m['id']};
+      setState(() {
+        _movimientos = [
+          ..._movimientos,
+          ...pag.items.where((m) => !vistos.contains(m['id'])),
+        ];
+        _pagina++;
+        _hayMas = pag.hayMas;
+      });
+    } on DioException catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No se pudieron cargar más movimientos.'),
+            backgroundColor: kDanger));
+      }
+    } finally {
+      if (mounted) setState(() => _cargandoMas = false);
     }
   }
 
@@ -214,13 +258,24 @@ class _BitacoraContentState extends State<BitacoraContent> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            'Mostrando ${_movimientos.length} movimiento${_movimientos.length != 1 ? "s" : ""}',
+                        Row(children: [
+                          if (_hayMas)
+                            _cargandoMas
+                                ? const SizedBox(width: 18, height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary))
+                                : TextButton.icon(
+                                    onPressed: _cargarMas,
+                                    icon: const Icon(Icons.expand_more, size: 18),
+                                    label: const Text('Cargar más'),
+                                  ),
+                          const Spacer(),
+                          Text(
+                            'Mostrando ${_movimientos.length}'
+                            '${_total != null && _total! > _movimientos.length ? ' de $_total' : ''}'
+                            ' movimiento${_movimientos.length != 1 ? "s" : ""}',
                             style: const TextStyle(fontSize: 12, color: kTextMuted),
                           ),
-                        ),
+                        ]),
                       ]),
           ),
         ],
