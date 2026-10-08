@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/horario_utils.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../providers/auth_provider.dart';
@@ -17,6 +19,14 @@ String _horaAmPm(int hora) {
   if (hora > 12) return '${hora - 12} PM';
   return '$hora AM';
 }
+
+/// GET que devuelve TODAS las filas, sea el endpoint paginado o no (ver
+/// ApiListas). Con PAGE_SIZE=50 leer solo `results` cortaba los listados.
+Future<List<Map<String, dynamic>>> _getTodo(Dio dio, String path,
+        [Map<String, dynamic>? params]) =>
+    ApiListas.todasLasPaginas((pagina) async => (await dio.get(path,
+            queryParameters: {...?params, if (pagina > 1) 'page': pagina}))
+        .data);
 
 const double _colWidth   = 140;
 const double _labelWidth = 54;
@@ -147,14 +157,14 @@ class _GuiasDialogState extends State<_GuiasDialog> {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       final asigId = widget.asignatura['id'].toString();
-      final r = await dio.get('academico/guias/?asignatura=$asigId');
+      final guias = await _getTodo(dio, 'academico/guias/', {'asignatura': asigId});
+      if (!mounted) return;
       setState(() {
-        _guias = List<Map<String, dynamic>>.from(
-            r.data is List ? r.data : (r.data['results'] ?? []));
+        _guias = guias;
         _cargando = false;
       });
     } catch (_) {
-      setState(() => _cargando = false);
+      if (mounted) setState(() => _cargando = false);
     }
   }
 
@@ -401,9 +411,7 @@ class _TabEncargadosState extends State<_TabEncargados>
 
     // Grid y disponibles se cargan por separado: un fallo en uno no bloquea al otro
     try {
-      final resp = await dio.get('academico/horario-encargado/');
-      final registros = List<Map<String, dynamic>>.from(
-          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      final registros = await _getTodo(dio, 'academico/horario-encargado/');
       final Map<int, Map<int, List<Map<String, dynamic>>>> grid = {
         for (final d in [0,1,2,3,4,5]) d: {for (final h in _horas) h: []},
       };
@@ -415,17 +423,13 @@ class _TabEncargadosState extends State<_TabEncargados>
     } catch (_) {}
 
     try {
-      final resp = await dio.get('academico/encargados-disponibles/');
-      final disponibles = List<Map<String, dynamic>>.from(
-          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      final disponibles = await _getTodo(dio, 'academico/encargados-disponibles/');
       if (!mounted) return;
       setState(() => _disponibles = disponibles);
     } catch (_) {}
 
     try {
-      final resp = await dio.get('academico/horas-extra/');
-      final lista = List<Map<String, dynamic>>.from(
-          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      final lista = await _getTodo(dio, 'academico/horas-extra/');
       if (!mounted) return;
       setState(() => _horasExtraList = lista);
     } catch (_) {}
@@ -1074,9 +1078,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
 
     try {
-      final resp = await dio.get('academico/horario-asignatura/');
-      final registros = List<Map<String, dynamic>>.from(
-          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      final registros = await _getTodo(dio, 'academico/horario-asignatura/');
       final Map<int, Map<int, List<Map<String, dynamic>>>> grid = {
         for (final d in [0,1,2,3,4,5]) d: {for (final h in _horas) h: []},
       };
@@ -1088,17 +1090,13 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     } catch (_) {}
 
     try {
-      final resp = await dio.get('academico/asignaturas/');
-      final asignaturas = List<Map<String, dynamic>>.from(
-          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      final asignaturas = await _getTodo(dio, 'academico/asignaturas/');
       if (!mounted) return;
       setState(() => _asignaturas = asignaturas);
     } catch (_) {}
 
     try {
-      final resp = await dio.get('academico/docentes/');
-      final docentes = List<Map<String, dynamic>>.from(
-          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      final docentes = await _getTodo(dio, 'academico/docentes/');
       if (!mounted) return;
       setState(() => _docentes = docentes.where((d) => d['activo'] == true).toList());
     } catch (_) {}
@@ -1657,17 +1655,15 @@ class _TabGestionState extends State<_TabGestion>
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
 
     try {
-      final r = await dio.get('academico/areas/');
+      final lista = await _getTodo(dio, 'academico/areas/');
       if (!mounted) return;
-      setState(() => _areas = List<Map<String, dynamic>>.from(
-          r.data is List ? r.data : (r.data['results'] ?? [])));
+      setState(() => _areas = lista);
     } catch (_) {}
 
     try {
-      final r = await dio.get('academico/asignaturas/');
+      final lista = await _getTodo(dio, 'academico/asignaturas/');
       if (!mounted) return;
-      setState(() => _asignaturas = List<Map<String, dynamic>>.from(
-          r.data is List ? r.data : (r.data['results'] ?? [])));
+      setState(() => _asignaturas = lista);
     } catch (_) {}
 
     if (!mounted) return;
@@ -2350,9 +2346,7 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
     if (_fechaHasta != null) params['fecha_hasta'] = _fechaIso(_fechaHasta!);
     if (_busquedaCtrl.text.trim().isNotEmpty) params['nombre'] = _busquedaCtrl.text.trim();
     try {
-      final resp = await dio.get('academico/registro-horas/', queryParameters: params);
-      final registros = List<Map<String, dynamic>>.from(
-          resp.data is List ? resp.data : (resp.data['results'] ?? []));
+      final registros = await _getTodo(dio, 'academico/registro-horas/', params);
       if (!mounted) return;
       setState(() => _registros = registros);
     } catch (_) {
