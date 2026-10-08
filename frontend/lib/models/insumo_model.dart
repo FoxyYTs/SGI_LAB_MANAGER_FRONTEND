@@ -1,3 +1,5 @@
+import '../core/presentaciones.dart';
+
 /// Modelo de dominio para un insumo del inventario.
 ///
 /// [fromJson] construye desde la respuesta de `GET /api/inventario/lista/` (InsumoListSerializer).
@@ -17,6 +19,11 @@ class Insumo {
   final String? observaciones;
   final String? fotoUrl;
   final String formulaQuimica;
+  /// Presentaciones tal como llegan del backend (`id`, `unidad_nombre`,
+  /// `stock_actual`, `activa`). null = desconocidas (insumo leído de la
+  /// caché offline, que no las guarda): en ese caso el préstamo se envía
+  /// solo con `insumo` y el backend usa la primera presentación activa.
+  final List<Map<String, dynamic>>? presentaciones;
 
   const Insumo({
     required this.id,
@@ -32,13 +39,19 @@ class Insumo {
     this.observaciones,
     this.fotoUrl,
     this.formulaQuimica = '',
+    this.presentaciones,
   });
 
   factory Insumo.fromJson(Map<String, dynamic> json) {
-    // La unidad viene de la primera presentación (nuevo modelo multi-presentación)
+    // La unidad viene de la primera presentación ACTIVA (las desactivadas
+    // no cuentan en stock_total); si no hay activas, de la primera.
     final presentaciones = json['presentaciones'] as List?;
-    final primeraUnidad  = presentaciones?.isNotEmpty == true
-        ? (presentaciones!.first as Map<String, dynamic>)['unidad_nombre'] as String? ?? ''
+    final activas = presentacionesActivas(presentaciones);
+    final referencia = activas.isNotEmpty
+        ? activas.first
+        : (presentaciones?.isNotEmpty == true ? presentaciones!.first as Map : null);
+    final primeraUnidad = referencia != null
+        ? referencia['unidad_nombre'] as String? ?? ''
         : json['unidad_abreviatura'] as String? ?? '';
 
     // stock_total es la suma de presentaciones; fallback a stock_actual legacy
@@ -58,6 +71,10 @@ class Insumo {
       observaciones: json['observaciones'] as String?,
       fotoUrl:     json['foto'] as String?,
       formulaQuimica: json['formula_quimica'] as String? ?? '',
+      presentaciones: presentaciones
+          ?.whereType<Map>()
+          .map((p) => Map<String, dynamic>.from(p))
+          .toList(),
     );
   }
 

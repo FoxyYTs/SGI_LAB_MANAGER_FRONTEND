@@ -7,6 +7,9 @@ import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
+import '../core/presentaciones.dart';
+import '../core/rango_fechas.dart';
+import '../widgets/filtro_rango_fechas.dart';
 import '../core/uuid_v4.dart';
 import '../core/cache/cache_service.dart';
 import '../core/sync/sync_service.dart';
@@ -41,6 +44,15 @@ class _MovimientosContentState extends State<MovimientosContent> {
   bool      _desdeCache  = false;
   DateTime? _cachedAt;
   String    _filtroEstado = 'Todos';
+  // Rango de fechas de solicitud (?desde/?hasta). Solo aplica en las vistas
+  // de historial (Todos / DEVUELTO / RECHAZADO); en PENDIENTE/ACTIVO se
+  // ignora para no esconder solicitudes que hay que gestionar.
+  DateTimeRange? _rango;
+  // Se incrementa en cada carga para descartar respuestas de un filtro viejo.
+  int       _version = 0;
+
+  Map<String, String> get _paramsRango =>
+      _historialDelFiltro == null ? const {} : paramsRango(_rango);
 
   // Préstamos con una acción (aprobar/rechazar/agregar ítems) en curso: un
   // doble tap en "Aprobar" mandaba dos POST; el segundo respondía error o,
@@ -89,8 +101,10 @@ class _MovimientosContentState extends State<MovimientosContent> {
   ///  - DEVUELTO / RECHAZADO: primera página + botón "Cargar más".
   ///  - Todos: activos completos + primera página del historial.
   Future<void> _fetchPrestamos() async {
+    final version = ++_version;
     setState(() => _cargando = true);
     final filtro = _filtroEstado;
+    final rango  = _paramsRango;
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
@@ -103,16 +117,17 @@ class _MovimientosContentState extends State<MovimientosContent> {
       final resultados = await Future.wait([
         if (activos != null)
           obtenerTodas(dio, 'operaciones/prestamos/',
-              queryParameters: {'estado': activos})
+              queryParameters: {'estado': activos, ...rango})
               .then((l) => PaginaResultado(l, hayMas: false)),
         if (historial != null)
           obtenerPagina(dio, 'operaciones/prestamos/',
-              queryParameters: {'estado': historial}),
+              queryParameters: {'estado': historial, ...rango}),
       ]);
       final lista = _ordenar([for (final r in resultados) ...r.items]);
       final hayMas = historial != null && resultados.last.hayMas;
-      await CacheService.instance.set(_cacheKey, lista);
-      if (mounted && filtro == _filtroEstado) {
+      // La caché offline guarda solo las vistas sin rango de fechas.
+      if (rango.isEmpty) await CacheService.instance.set(_cacheKey, lista);
+      if (mounted && version == _version) {
         setState(() {
           _prestamos       = lista;
           _paginaHistorial = 1;
@@ -123,8 +138,22 @@ class _MovimientosContentState extends State<MovimientosContent> {
         });
       }
     } catch (_) {
+      if (rango.isNotEmpty) {
+        // Sin red no se puede filtrar por fechas: no mostrar la caché sin
+        // filtrar como si fuera el resultado del rango.
+        if (mounted && version == _version) {
+          setState(() {
+            _prestamos       = [];
+            _historialHayMas = false;
+            _desdeCache      = false;
+            _cargando        = false;
+          });
+          _showError('No se pudo filtrar por fechas: revisa la conexión.');
+        }
+        return;
+      }
       final cached = await CacheService.instance.get(_cacheKey);
-      if (mounted && filtro == _filtroEstado) {
+      if (mounted && version == _version) {
         setState(() {
           _prestamos  = cached != null
               ? List<Map<String, dynamic>>.from(cached.data as List)
@@ -142,15 +171,15 @@ class _MovimientosContentState extends State<MovimientosContent> {
   Future<void> _cargarMasHistorial() async {
     final historial = _historialDelFiltro;
     if (historial == null || _cargandoMas) return;
-    final filtro = _filtroEstado;
+    final version = _version;
     setState(() => _cargandoMas = true);
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       final pag  = await obtenerPagina(dio, 'operaciones/prestamos/',
-          queryParameters: {'estado': historial},
+          queryParameters: {'estado': historial, ..._paramsRango},
           pagina: _paginaHistorial + 1);
-      if (!mounted || filtro != _filtroEstado) return;
+      if (!mounted || version != _version) return;
       final vistos = {for (final p in _prestamos) p['id']};
       setState(() {
         _prestamos = _ordenar([
@@ -224,7 +253,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
         await dio.post('operaciones/prestamos/$id/agregar-item/', data: {
           'items': [
             for (final it in items)
-              {'insumo': it['insumoId'], 'cantidad_prestada': it['cantidad']},
+              {
+                'insumo': it['insumoId'],
+                if (it['presentacionId'] != null) 'presentacion': it['presentacionId'],
+                'cantidad_prestada': it['cantidad'],
+              },
           ],
         });
         if (mounted) {
@@ -383,6 +416,16 @@ class _MovimientosContentState extends State<MovimientosContent> {
             scrollDirection: Axis.horizontal,
             child: Row(children: [
               ..._buildFiltroChips(),
+              if (_historialDelFiltro != null) ...[
+                const SizedBox(width: 4),
+                FiltroRangoFechas(
+                  rango: _rango,
+                  onChanged: (r) {
+                    setState(() => _rango = r);
+                    _fetchPrestamos();
+                  },
+                ),
+              ],
               const SizedBox(width: 16),
               Text(
                 '${filtrados.length}${_historialHayMas ? '+' : ''} préstamos',
@@ -504,8 +547,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
           const Icon(Icons.swap_horiz_outlined,
               size: 64, color: kTextMuted),
           const SizedBox(height: 12),
-          const Text('Sin préstamos registrados',
-              style: TextStyle(color: kTextMuted, fontSize: 16)),
+          Text(
+              _rango != null && _historialDelFiltro != null
+                  ? 'Sin préstamos en ${etiquetaRango(_rango!)}'
+                  : 'Sin préstamos registrados',
+              style: const TextStyle(color: kTextMuted, fontSize: 16)),
           const SizedBox(height: 8),
           ElevatedButton.icon(
             icon: const Icon(Icons.add),
@@ -580,6 +626,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
             .where((i) => i.insumoId != null)
             .map((i) => {
                   'insumo': i.insumoId,
+                  if (i.presentacionId != null) 'presentacion': i.presentacionId,
                   'cantidad_prestada':
                       double.tryParse(i.cantCtrl.text) ?? 1,
                 })
@@ -718,13 +765,14 @@ class _PrestamoFormState extends State<_PrestamoForm> {
     final item = _items[i];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         Expanded(
           flex: 3,
           child: _InsumoSelectorButton(
             insumos: insumos,
             selectedId: item.insumoId,
-            onSelected: (id) => setState(() => item.insumoId = id),
+            onSelected: (ins) => setState(() => item.elegir(ins)),
           ),
         ),
         const SizedBox(width: 8),
@@ -750,6 +798,12 @@ class _PrestamoFormState extends State<_PrestamoForm> {
             }),
           ),
       ]),
+      _SelectorPresentacion(
+        item: item,
+        insumos: insumos,
+        onChanged: (v) => setState(() => item.presentacionId = v),
+      ),
+      ]),
     );
   }
 
@@ -767,8 +821,74 @@ class _PrestamoFormState extends State<_PrestamoForm> {
 
 class _ItemPrestamo {
   String? insumoId;
+  /// null = el backend usa la primera presentación activa (p. ej. si el
+  /// insumo viene de la caché offline y no se conocen sus presentaciones).
+  String? presentacionId;
   final cantCtrl = TextEditingController(text: '1');
+
+  void elegir(Insumo? ins) {
+    insumoId = ins?.id;
+    presentacionId =
+        presentacionPorDefecto(ins?.presentaciones)?['id']?.toString();
+  }
+
   void dispose() => cantCtrl.dispose();
+}
+
+// ── Selector de presentación (solo si el insumo tiene varias activas) ────────
+
+class _SelectorPresentacion extends StatelessWidget {
+  final _ItemPrestamo item;
+  final List<Insumo> insumos;
+  final ValueChanged<String?> onChanged;
+
+  const _SelectorPresentacion({
+    required this.item,
+    required this.insumos,
+    required this.onChanged,
+  });
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  @override
+  Widget build(BuildContext context) {
+    if (item.insumoId == null) return const SizedBox.shrink();
+    final ins = insumos.where((i) => i.id == item.insumoId).firstOrNull;
+    final activas = presentacionesActivas(ins?.presentaciones);
+    if (activas.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('pres_${item.insumoId}'),
+        initialValue: item.presentacionId,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Presentación *',
+          prefixIcon: Icon(Icons.science_outlined, color: kPrimary, size: 18),
+          border: OutlineInputBorder(),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        ),
+        items: activas.map((p) {
+          final stock = double.tryParse(p['stock_actual']?.toString() ?? '');
+          final unidad = p['unidad_nombre']?.toString() ?? '';
+          return DropdownMenuItem(
+            value: p['id']?.toString(),
+            child: Text(
+              stock == null ? unidad : '$unidad — stock ${_fmt(stock)}',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: (stock ?? 1) <= 0 ? kDanger : null),
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }).toList(),
+        onChanged: onChanged,
+        validator: (v) => v == null ? 'Elige la presentación' : null,
+      ),
+    );
+  }
 }
 
 // ── Botón de selección de insumo con búsqueda ─────────────────────────────────
@@ -776,7 +896,7 @@ class _ItemPrestamo {
 class _InsumoSelectorButton extends StatelessWidget {
   final List<Insumo> insumos;
   final String? selectedId;
-  final ValueChanged<String?> onSelected;
+  final ValueChanged<Insumo?> onSelected;
 
   const _InsumoSelectorButton({
     required this.insumos,
@@ -801,7 +921,7 @@ class _InsumoSelectorButton extends StatelessWidget {
           context: context,
           builder: (_) => _SelectorInsumoDialog(insumos: insumos),
         );
-        if (sel != null) onSelected(sel.id);
+        if (sel != null) onSelected(sel);
       },
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -852,6 +972,11 @@ class _SelectorInsumoDialogState extends State<_SelectorInsumoDialog> {
   Widget build(BuildContext context) {
     final query = normalizarBusqueda(_query);
     final filtrados = widget.insumos
+        // Sin presentaciones activas no hay nada que prestar (si no se
+        // conocen — caché offline — se muestra y decide el backend).
+        .where((i) =>
+            i.presentaciones == null ||
+            presentacionesActivas(i.presentaciones).isNotEmpty)
         .where((i) =>
             normalizarBusqueda(i.nombre).contains(query) ||
             normalizarBusqueda(i.tipo).contains(query))
@@ -1261,6 +1386,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
             .where((i) => i.insumoId != null)
             .map((i) => <String, dynamic>{
                   'insumoId': i.insumoId,
+                  'presentacionId': i.presentacionId,
                   'cantidad': _cantidadValida(i.cantCtrl.text),
                 })
             .toList());
@@ -1315,13 +1441,14 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
     final item = _items[i];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         Expanded(
           flex: 3,
           child: _InsumoSelectorButton(
             insumos: widget.insumos,
             selectedId: item.insumoId,
-            onSelected: (id) => setState(() => item.insumoId = id),
+            onSelected: (ins) => setState(() => item.elegir(ins)),
           ),
         ),
         const SizedBox(width: 8),
@@ -1349,6 +1476,12 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
               _items.removeAt(i);
             }),
           ),
+      ]),
+      _SelectorPresentacion(
+        item: item,
+        insumos: widget.insumos,
+        onChanged: (v) => setState(() => item.presentacionId = v),
+      ),
       ]),
     );
   }
