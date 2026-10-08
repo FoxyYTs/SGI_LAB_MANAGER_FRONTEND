@@ -11,8 +11,15 @@ class _PresentacionRow {
   final TextEditingController stockCtrl;
   final TextEditingController fotoCtrl;
   String? unidadId;
+  /// Stock que tenía la presentación en el servidor cuando se cargó (o tras
+  /// el último guardado). El backend ya no acepta `stock_actual` "a ciegas":
+  /// para cambiarlo hay que mandar también este valor (`stock_anterior`) y
+  /// el servidor registra la diferencia como AJUSTE en la bitácora, o
+  /// responde 409 si alguien movió el stock mientras se editaba.
+  String? stockServidor;
 
-  _PresentacionRow({this.id, String stock = '0', String foto = '', this.unidadId})
+  _PresentacionRow({this.id, String stock = '0', String foto = '', this.unidadId,
+      this.stockServidor})
       : stockCtrl = TextEditingController(text: stock),
         fotoCtrl  = TextEditingController(text: foto);
 
@@ -66,6 +73,13 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
   bool _loading   = true;
   bool _guardando = false;
+  // id del insumo ya creado en un intento anterior de "Guardar" que falló
+  // a mitad (p. ej. en las presentaciones): los reintentos hacen PATCH sobre
+  // él en vez de crear otro insumo duplicado.
+  String? _insumoIdGuardado;
+
+  static double? _numero(String? texto) =>
+      double.tryParse((texto ?? '').trim().replaceAll(',', '.'));
 
   bool get _esQuimico  => _tipoNombre == 'Químico';
   bool get _esMaterial => _tipoNombre == 'Implemento' || _tipoNombre == 'Vidriería';
@@ -133,6 +147,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
         stock:    p['stock_actual']?.toString() ?? '0',
         foto:     p['foto'] as String? ?? '',
         unidadId: p['unidad_medida']?.toString(),
+        stockServidor: p['stock_actual']?.toString(),
       ));
     }
     if (_presentaciones.isEmpty) {
@@ -153,6 +168,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
   }
 
   Future<void> _guardar() async {
+    if (_guardando) return; // doble tap antes de que se deshabilite
     if (!_formKey.currentState!.validate()) return;
     if (_presentaciones.isEmpty) {
       _snack('Agrega al menos una presentación.', kDanger);
@@ -173,33 +189,49 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
     try {
       Map<String, dynamic> insumo;
-      if (widget.insumo != null) {
-        final id = widget.insumo!['id'];
-        final r  = await dio.patch('inventario/lista/$id/', data: body);
+      final idExistente = widget.insumo?['id']?.toString() ?? _insumoIdGuardado;
+      if (idExistente != null) {
+        final r  = await dio.patch('inventario/lista/$idExistente/', data: body);
         insumo   = Map<String, dynamic>.from(r.data);
       } else {
         final r = await dio.post('inventario/lista/', data: body);
         insumo  = Map<String, dynamic>.from(r.data);
+        _insumoIdGuardado = insumo['id']?.toString();
       }
 
       final id = insumo['id'];
 
-      // Eliminar presentaciones borradas
-      for (final presId in _presentacionesEliminar) {
+      // Eliminar presentaciones borradas (se van quitando de la lista para
+      // que un reintento no las vuelva a borrar)
+      for (final presId in List<String>.from(_presentacionesEliminar)) {
         await dio.delete('inventario/lista/$id/presentaciones/$presId/');
+        _presentacionesEliminar.remove(presId);
       }
 
       // Guardar presentaciones
       for (final p in _presentaciones) {
-        final presBody = {
-          'stock_actual':  double.tryParse(p.stockCtrl.text) ?? 0,
+        final presBody = <String, dynamic>{
           'unidad_medida': p.unidadId,
           'foto':          p.fotoCtrl.text.trim().isEmpty ? null : p.fotoCtrl.text.trim(),
         };
+        final stock = _numero(p.stockCtrl.text) ?? 0;
         if (p.id != null) {
-          await dio.patch('inventario/lista/$id/presentaciones/${p.id}/', data: presBody);
+          // Solo se manda el stock si el usuario lo cambió, junto con el
+          // valor que vio (stock_anterior): el backend lo registra como
+          // AJUSTE o responde 409 si cambió mientras tanto.
+          if (p.stockServidor != null && _numero(p.stockServidor) != stock) {
+            presBody['stock_actual']   = stock;
+            presBody['stock_anterior'] = p.stockServidor;
+          }
+          final r = await dio.patch('inventario/lista/$id/presentaciones/${p.id}/', data: presBody);
+          p.stockServidor = r.data['stock_actual']?.toString() ?? p.stockServidor;
         } else {
-          await dio.post('inventario/lista/$id/presentaciones/', data: presBody);
+          presBody['stock_actual'] = stock;
+          final r = await dio.post('inventario/lista/$id/presentaciones/', data: presBody);
+          // Recordar el id: si algo posterior falla, el reintento hace PATCH
+          // en vez de crear la presentación (y su stock inicial) otra vez.
+          p.id = r.data['id']?.toString();
+          p.stockServidor = r.data['stock_actual']?.toString();
         }
       }
 
@@ -450,8 +482,13 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: _deco('Stock actual *', Icons.numbers),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Requerido';
+                  final n = _numero(v);
+                  if (n == null) return 'Número inválido';
+                  if (n < 0) return 'No puede ser negativo';
+                  return null;
+                },
               ),
             ),
             const SizedBox(width: 12),
