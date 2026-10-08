@@ -7,6 +7,7 @@ import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
+import '../core/presentaciones.dart';
 import '../core/uuid_v4.dart';
 import '../core/cache/cache_service.dart';
 import '../core/sync/sync_service.dart';
@@ -224,7 +225,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
         await dio.post('operaciones/prestamos/$id/agregar-item/', data: {
           'items': [
             for (final it in items)
-              {'insumo': it['insumoId'], 'cantidad_prestada': it['cantidad']},
+              {
+                'insumo': it['insumoId'],
+                if (it['presentacionId'] != null) 'presentacion': it['presentacionId'],
+                'cantidad_prestada': it['cantidad'],
+              },
           ],
         });
         if (mounted) {
@@ -580,6 +585,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
             .where((i) => i.insumoId != null)
             .map((i) => {
                   'insumo': i.insumoId,
+                  if (i.presentacionId != null) 'presentacion': i.presentacionId,
                   'cantidad_prestada':
                       double.tryParse(i.cantCtrl.text) ?? 1,
                 })
@@ -718,13 +724,14 @@ class _PrestamoFormState extends State<_PrestamoForm> {
     final item = _items[i];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         Expanded(
           flex: 3,
           child: _InsumoSelectorButton(
             insumos: insumos,
             selectedId: item.insumoId,
-            onSelected: (id) => setState(() => item.insumoId = id),
+            onSelected: (ins) => setState(() => item.elegir(ins)),
           ),
         ),
         const SizedBox(width: 8),
@@ -750,6 +757,12 @@ class _PrestamoFormState extends State<_PrestamoForm> {
             }),
           ),
       ]),
+      _SelectorPresentacion(
+        item: item,
+        insumos: insumos,
+        onChanged: (v) => setState(() => item.presentacionId = v),
+      ),
+      ]),
     );
   }
 
@@ -767,8 +780,74 @@ class _PrestamoFormState extends State<_PrestamoForm> {
 
 class _ItemPrestamo {
   String? insumoId;
+  /// null = el backend usa la primera presentación activa (p. ej. si el
+  /// insumo viene de la caché offline y no se conocen sus presentaciones).
+  String? presentacionId;
   final cantCtrl = TextEditingController(text: '1');
+
+  void elegir(Insumo? ins) {
+    insumoId = ins?.id;
+    presentacionId =
+        presentacionPorDefecto(ins?.presentaciones)?['id']?.toString();
+  }
+
   void dispose() => cantCtrl.dispose();
+}
+
+// ── Selector de presentación (solo si el insumo tiene varias activas) ────────
+
+class _SelectorPresentacion extends StatelessWidget {
+  final _ItemPrestamo item;
+  final List<Insumo> insumos;
+  final ValueChanged<String?> onChanged;
+
+  const _SelectorPresentacion({
+    required this.item,
+    required this.insumos,
+    required this.onChanged,
+  });
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  @override
+  Widget build(BuildContext context) {
+    if (item.insumoId == null) return const SizedBox.shrink();
+    final ins = insumos.where((i) => i.id == item.insumoId).firstOrNull;
+    final activas = presentacionesActivas(ins?.presentaciones);
+    if (activas.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('pres_${item.insumoId}'),
+        initialValue: item.presentacionId,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Presentación *',
+          prefixIcon: Icon(Icons.science_outlined, color: kPrimary, size: 18),
+          border: OutlineInputBorder(),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        ),
+        items: activas.map((p) {
+          final stock = double.tryParse(p['stock_actual']?.toString() ?? '');
+          final unidad = p['unidad_nombre']?.toString() ?? '';
+          return DropdownMenuItem(
+            value: p['id']?.toString(),
+            child: Text(
+              stock == null ? unidad : '$unidad — stock ${_fmt(stock)}',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: (stock ?? 1) <= 0 ? kDanger : null),
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }).toList(),
+        onChanged: onChanged,
+        validator: (v) => v == null ? 'Elige la presentación' : null,
+      ),
+    );
+  }
 }
 
 // ── Botón de selección de insumo con búsqueda ─────────────────────────────────
@@ -776,7 +855,7 @@ class _ItemPrestamo {
 class _InsumoSelectorButton extends StatelessWidget {
   final List<Insumo> insumos;
   final String? selectedId;
-  final ValueChanged<String?> onSelected;
+  final ValueChanged<Insumo?> onSelected;
 
   const _InsumoSelectorButton({
     required this.insumos,
@@ -801,7 +880,7 @@ class _InsumoSelectorButton extends StatelessWidget {
           context: context,
           builder: (_) => _SelectorInsumoDialog(insumos: insumos),
         );
-        if (sel != null) onSelected(sel.id);
+        if (sel != null) onSelected(sel);
       },
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -852,6 +931,11 @@ class _SelectorInsumoDialogState extends State<_SelectorInsumoDialog> {
   Widget build(BuildContext context) {
     final query = normalizarBusqueda(_query);
     final filtrados = widget.insumos
+        // Sin presentaciones activas no hay nada que prestar (si no se
+        // conocen — caché offline — se muestra y decide el backend).
+        .where((i) =>
+            i.presentaciones == null ||
+            presentacionesActivas(i.presentaciones).isNotEmpty)
         .where((i) =>
             normalizarBusqueda(i.nombre).contains(query) ||
             normalizarBusqueda(i.tipo).contains(query))
@@ -1261,6 +1345,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
             .where((i) => i.insumoId != null)
             .map((i) => <String, dynamic>{
                   'insumoId': i.insumoId,
+                  'presentacionId': i.presentacionId,
                   'cantidad': _cantidadValida(i.cantCtrl.text),
                 })
             .toList());
@@ -1315,13 +1400,14 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
     final item = _items[i];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         Expanded(
           flex: 3,
           child: _InsumoSelectorButton(
             insumos: widget.insumos,
             selectedId: item.insumoId,
-            onSelected: (id) => setState(() => item.insumoId = id),
+            onSelected: (ins) => setState(() => item.elegir(ins)),
           ),
         ),
         const SizedBox(width: 8),
@@ -1349,6 +1435,12 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
               _items.removeAt(i);
             }),
           ),
+      ]),
+      _SelectorPresentacion(
+        item: item,
+        insumos: widget.insumos,
+        onChanged: (v) => setState(() => item.presentacionId = v),
+      ),
       ]),
     );
   }

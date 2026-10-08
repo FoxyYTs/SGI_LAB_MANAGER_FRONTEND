@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:frontend/core/presentaciones.dart';
+import 'package:frontend/models/insumo_model.dart';
 
 void main() {
   group('presentacionActiva', () {
@@ -71,6 +72,31 @@ void main() {
     });
     test('null si no se sabe', () {
       expect(insumoDisponible([{'id': 'a'}]), isNull);
+    });
+  });
+
+  group('Insumo.fromJson', () {
+    Map<String, dynamic> json(List pres) => {
+          'id': 'i1', 'nombre_insumo': 'Etanol', 'stock_minimo': '1',
+          'semaforo': 'VERDE', 'stock_total': '5', 'presentaciones': pres,
+        };
+
+    test('guarda las presentaciones y toma la unidad de la primera activa', () {
+      final ins = Insumo.fromJson(json([
+        {'id': 'p1', 'unidad_nombre': 'L', 'stock_actual': '9', 'activa': false},
+        {'id': 'p2', 'unidad_nombre': 'mL', 'stock_actual': '5', 'activa': true},
+      ]));
+      expect(ins.unidad, 'mL');
+      expect(ins.presentaciones?.length, 2);
+      expect(presentacionPorDefecto(ins.presentaciones)?['id'], 'p2');
+    });
+
+    test('desde la caché offline las presentaciones son desconocidas', () {
+      final ins = Insumo.fromLocal({
+        'id': 'i1', 'nombre': 'Etanol', 'tipo': 'Químico', 'stock': 5,
+        'stock_min': 1, 'semaforo': 'VERDE', 'activo': 1,
+      });
+      expect(ins.presentaciones, isNull);
     });
   });
 }
