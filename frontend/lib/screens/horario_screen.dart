@@ -2555,6 +2555,7 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
   DateTime? _fechaHasta;
   List<Map<String, dynamic>> _registros = [];
   bool _cargando = true;
+  bool _error = false;
 
   @override
   void initState() { super.initState(); Future.microtask(_cargar); }
@@ -2577,10 +2578,10 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
     try {
       final registros = await _getTodo(dio, 'academico/registro-horas/', params);
       if (!mounted) return;
-      setState(() => _registros = registros);
+      setState(() { _registros = registros; _error = false; });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _registros = []);
+      setState(() { _registros = []; _error = true; });
     }
     if (!mounted) return;
     setState(() => _cargando = false);
@@ -2648,6 +2649,8 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
       Expanded(
         child: _cargando
             ? const Center(child: CircularProgressIndicator(color: kPrimary))
+            : _error
+                ? _errorCarga('No se pudieron cargar los registros.', _cargar)
             : _registros.isEmpty
                 ? const Center(child: Text('No hay registros para los filtros seleccionados.',
                     style: TextStyle(color: kTextMuted)))
@@ -2682,7 +2685,8 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
           child: Align(
             alignment: Alignment.centerRight,
             child: Text(
-              'Mostrando ${_registros.length} registro${_registros.length != 1 ? "s" : ""}',
+              'Mostrando ${_registros.length} registro${_registros.length != 1 ? "s" : ""} · '
+              'Total ${formatoHoras(_registros.fold<double>(0, (a, r) => a + (double.tryParse('${r['duracion_horas']}') ?? 0)))}',
               style: const TextStyle(fontSize: 12, color: kTextMuted),
             ),
           ),
