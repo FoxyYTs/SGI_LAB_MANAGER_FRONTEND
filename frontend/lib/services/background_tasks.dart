@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 import 'dart:ui';
 
+import '../core/api/paginacion.dart';
+
 // URL del servidor compilada en el APK (--dart-define=SERVER_URL=...)
 const _kServerUrl = String.fromEnvironment(
   'SERVER_URL',
@@ -175,8 +177,9 @@ Future<void> _checkSchedule(String token, bool haceTurnosMonitor, String usernam
 
 Future<List> _getHorarioEncargado(String token) async {
   try {
-    final r = await _dio(token).get('academico/horario-encargado/');
-    return r.data is List ? r.data as List : [];
+    // La respuesta puede venir paginada ({results: [...]}): antes se
+    // descartaba por no ser List y los recordatorios nunca se disparaban.
+    return await obtenerTodas(_dio(token), 'academico/horario-encargado/');
   } catch (_) {
     return [];
   }
@@ -184,8 +187,9 @@ Future<List> _getHorarioEncargado(String token) async {
 
 Future<List> _getHorarioAsignatura(String token) async {
   try {
-    final r = await _dio(token).get('academico/horario-asignatura/');
-    return r.data is List ? r.data as List : [];
+    // La respuesta puede venir paginada ({results: [...]}): antes se
+    // descartaba por no ser List y los recordatorios nunca se disparaban.
+    return await obtenerTodas(_dio(token), 'academico/horario-asignatura/');
   } catch (_) {
     return [];
   }
