@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../providers/auth_provider.dart';
@@ -38,13 +39,14 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     try {
       final results = await Future.wait([
         dio.get('inventario/lista/${widget.insumoId}/'),
-        dio.get('operaciones/bitacora/?insumo=${widget.insumoId}&limit=8'),
+        // `limit` no existe en el backend (PageNumberPagination, 50/pág,
+        // más reciente primero): se pide la 1.ª página y se toman 8.
+        dio.get('operaciones/bitacora/',
+            queryParameters: {'insumo': widget.insumoId}),
       ]);
-      final bData = results[1].data;
       setState(() {
         _insumo = Map<String, dynamic>.from(results[0].data);
-        _movimientos = List<Map<String, dynamic>>.from(
-          bData is List ? bData : (bData['results'] ?? []));
+        _movimientos = listaDeRespuesta(results[1].data).take(8).toList();
         _cargando = false;
       });
     } catch (_) {
