@@ -8,6 +8,9 @@ import '../core/horario_utils.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/horario_bloque_dialog.dart';
+import 'mi_semana_screen.dart';
+import 'plantillas_horario_screen.dart';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -55,6 +58,47 @@ Widget _errorCarga(String msg, VoidCallback reintentar) => Center(
     ]),
   ),
 );
+
+/// Se incrementa cuando el horario cambia por fuera de una pestaña (p. ej.
+/// al aplicar una plantilla) para que Encargados y Asignaturas recarguen.
+final _horarioCambiado = ValueNotifier<int>(0);
+
+/// Botón de la barra superior de cada pestaña: con texto en pantallas
+/// anchas, solo ícono (con tooltip) en móvil.
+Widget _accionBarra(IconData icono, String texto, VoidCallback? onPressed, bool compacto) =>
+    compacto
+        ? IconButton(
+            tooltip: texto,
+            icon: Icon(icono, size: 20),
+            color: kPrimary,
+            visualDensity: VisualDensity.compact,
+            onPressed: onPressed,
+          )
+        : TextButton.icon(
+            onPressed: onPressed,
+            icon: Icon(icono, size: 16),
+            label: Text(texto, style: const TextStyle(fontSize: 12)),
+          );
+
+/// Abre "Mi semana": la propia o, para quien gestiona el horario, la de
+/// cualquier monitor (con selector).
+void _abrirMiSemana(BuildContext context, {int? usuarioId}) {
+  final auth = context.read<AuthProvider>();
+  Navigator.push(context, MaterialPageRoute(
+    builder: (_) => MiSemanaScreen(
+      usuarioId: usuarioId,
+      puedeElegir: auth.can(Perm.academicoGestionar),
+    ),
+  ));
+}
+
+/// Abre la pantalla de plantillas; si se aplicó una, avisa a las pestañas.
+Future<void> _abrirPlantillas(BuildContext context) async {
+  final aplicada = await Navigator.push<bool>(context, MaterialPageRoute(
+    builder: (_) => const PlantillasHorarioScreen(),
+  ));
+  if (aplicada == true) _horarioCambiado.value++;
+}
 
 const double _colWidth   = 140;
 const double _labelWidth = 54;
@@ -430,16 +474,23 @@ class _TabEncargadosState extends State<_TabEncargados>
   String? _errorGrid;
 
   @override
-  void initState() { super.initState(); Future.microtask(_cargar); }
+  void initState() {
+    super.initState();
+    _horarioCambiado.addListener(_cargar);
+    Future.microtask(_cargar);
+  }
 
+  @override
+  void dispose() {
+    _horarioCambiado.removeListener(_cargar);
+    super.dispose();
+  }
 
-  Future<void> _cargar() async {
-    if (!mounted) return;
-    setState(() { _cargando = true; _errorGrid = null; });
+  /// Recarga solo la grilla, sin el indicador de carga de pantalla completa
+  /// (se usa tras editar un bloque). Devuelve false si falló.
+  Future<bool> _cargarGrid() async {
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
-
-    // Grid y disponibles se cargan por separado: un fallo en uno no bloquea al otro
     try {
       final registros = await _getTodo(dio, 'academico/horario-encargado/');
       final Map<int, Map<int, List<Map<String, dynamic>>>> grid = {
@@ -448,9 +499,22 @@ class _TabEncargadosState extends State<_TabEncargados>
       for (final r in registros) {
         grid[r['dia_semana'] as int]?[r['hora'] as int]?.add(r);
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _grid = grid);
+      return true;
     } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _cargar() async {
+    if (!mounted) return;
+    setState(() { _cargando = true; _errorGrid = null; });
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+
+    // Grid y disponibles se cargan por separado: un fallo en uno no bloquea al otro
+    if (!await _cargarGrid()) {
       if (mounted) setState(() => _errorGrid = 'No se pudo cargar el horario de encargados.');
     }
 
@@ -470,7 +534,13 @@ class _TabEncargadosState extends State<_TabEncargados>
     setState(() => _cargando = false);
   }
 
-  Future<void> _agregar(int dia, int hora) async {
+  /// Tocar una celda vacía: abre el diálogo de asignación con ese día y
+  /// esa hora ya marcados (se pueden sumar más días).
+  Future<void> _agregar(int dia, int hora) => _asignarBloques(dias: {dia}, hora: hora);
+
+  /// Asigna un encargado a un rango de horas en uno o varios días, en UNA
+  /// petición atómica (academico/horario-encargado/asignar-bloques/).
+  Future<void> _asignarBloques({Set<int> dias = const {}, int hora = 8}) async {
     final auth = context.read<AuthProvider>();
     if (!auth.can(Perm.academicoGestionar)) return;
 
@@ -484,59 +554,92 @@ class _TabEncargadosState extends State<_TabEncargados>
       }
       return;
     }
-
     if (_guardando) return;
 
-    // Excluir los que ya están en este slot
-    final yaAsignados = _grid[dia]?[hora]?.map((e) => e['usuario'] as int?).toSet() ?? {};
-    final opciones = _disponibles.where((u) => !yaAsignados.contains(u['id'] as int)).toList();
-
-    if (opciones.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Todos los encargados disponibles ya están en este bloque.')));
-      }
-      return;
-    }
-
-    final sel = await showDialog<Map<String, dynamic>>(
+    final sel = await showDialog<BloqueFormResultado>(
       context: context,
-      builder: (_) => _SelectorEncargadoDialog(opciones: opciones, horaInicio: hora),
+      builder: (_) => BloqueFormDialog(
+        modo: ModoBloque.encargado,
+        titulo: dias.length == 1 ? 'Agregar encargado' : 'Asignar varios días',
+        textoBoton: 'Asignar',
+        multiDia: true,
+        diasIniciales: dias,
+        horaInicio: hora,
+        horaFin: hora + 1,
+        encargados: _disponibles,
+      ),
     );
     if (sel == null || !mounted) return;
 
-    final horaFin = sel['hora_fin'] as int? ?? hora;
     final dio = ApiClient.instance.authenticatedDio(auth.token);
     setState(() => _guardando = true);
-    int creadas = 0, fallidas = 0;
-    try {
-      for (int h = hora; h <= horaFin; h++) {
-        // No crear si ya hay un slot para este usuario en esta hora
-        final yaEsta = _grid[dia]?[h]?.any((e) => e['usuario'] == sel['id']) ?? false;
-        if (yaEsta) continue;
-        try {
-          final r = await dio.post('academico/horario-encargado/', data: {
-            'usuario': sel['id'],
-            'dia_semana': dia,
-            'hora': h,
-          });
-          creadas++;
-          if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
-        } catch (_) {
-          fallidas++;
-        }
+    final r = await postHorario(context, dio, 'academico/horario-encargado/asignar-bloques/', {
+      'usuario':     sel.usuario,
+      'dias':        sel.dias,
+      'hora_inicio': sel.horaInicio,
+      'hora_fin':    sel.horaFin,
+    });
+    if (mounted) setState(() => _guardando = false);
+    if (r == null || !mounted) return;
+
+    setState(() {
+      for (final b in ApiListas.listaDe(r['bloques'])) {
+        _grid[b['dia_semana'] as int]?[b['hora'] as int]?.add(b);
       }
-    } finally {
+    });
+    final creados = r['creados'] ?? 0, existentes = r['existentes'] ?? 0;
+    _avisar(context,
+        '${sel.nombreUsuario}: ${RangosHorario.diasCortos(sel.dias)} '
+        '${horaAmPm(sel.horaInicio)} – ${horaAmPm(sel.horaFin)} · '
+        '$creados hora(s) nueva(s)${existentes > 0 ? ', $existentes ya estaban' : ''}');
+  }
+
+  /// Cambia horas y/o encargado de un bloque consecutivo (mismo día) de
+  /// forma atómica (academico/horario-encargado/reemplazar-rango/).
+  Future<void> _editarRangoEncargado(RangoHoras rango, Map<String, dynamic> item) async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.can(Perm.academicoGestionar) || _guardando) return;
+    final uid = item['usuario'] as int?;
+    if (uid == null) return;
+    final nombre = item['nombre_completo']?.toString() ?? item['username']?.toString() ?? '?';
+
+    final sel = await showDialog<BloqueFormResultado>(
+      context: context,
+      builder: (_) => BloqueFormDialog(
+        modo: ModoBloque.encargado,
+        titulo: 'Editar bloque',
+        textoBoton: 'Guardar',
+        multiDia: false,
+        diasIniciales: {rango.dia},
+        horaInicio: rango.inicio,
+        horaFin: rango.fin,
+        encargados: _disponibles,
+        usuarioInicial: uid,
+        nota: 'Ahora: $nombre, ${rango.textoConDia}',
+      ),
+    );
+    if (sel == null || !mounted) return;
+    if (sel.usuario == uid && sel.horaInicio == rango.inicio && sel.horaFin == rango.fin) return;
+
+    final dio = ApiClient.instance.authenticatedDio(auth.token);
+    setState(() => _guardando = true);
+    final r = await postHorario(context, dio, 'academico/horario-encargado/reemplazar-rango/', {
+      'original': {'usuario': uid, 'dia': rango.dia,
+                   'hora_inicio': rango.inicio, 'hora_fin': rango.fin},
+      'nuevo':    {'usuario': sel.usuario,
+                   'hora_inicio': sel.horaInicio, 'hora_fin': sel.horaFin},
+    });
+    if (r == null) {
       if (mounted) setState(() => _guardando = false);
+      return;
     }
+    final ok = await _cargarGrid();
     if (!mounted) return;
-    final nombre = sel['nombre_completo']?.toString() ?? sel['username']?.toString() ?? '';
-    if (fallidas > 0) {
-      _avisar(context, 'No se pudieron guardar $fallidas de ${creadas + fallidas} hora(s). '
-          'Pulsa Actualizar y revisa el horario.', error: true);
-    } else if (creadas > 0) {
-      _avisar(context, '$nombre asignado: ${_dias[dia]} ${_horaAmPm(hora)} – ${_horaAmPm(horaFin + 1)}');
-    }
+    setState(() => _guardando = false);
+    _avisar(context, ok
+        ? 'Bloque actualizado: ${sel.nombreUsuario}, '
+          '${RangoHoras(rango.dia, sel.horaInicio, sel.horaFin).textoConDia}'
+        : 'Bloque actualizado. Pulsa Actualizar para ver los cambios.');
   }
 
   Future<void> _eliminar(int dia, int hora, Map<String, dynamic> item) async {
@@ -555,31 +658,68 @@ class _TabEncargadosState extends State<_TabEncargados>
     final auth = context.read<AuthProvider>();
     if (!auth.can(Perm.academicoGestionar)) return;
 
+    // Bloque consecutivo de esta persona ese día (p. ej. 8–11) para
+    // ofrecer editarlo completo.
+    final uid = item['usuario'] as int?;
+    final horasDia = <int>{
+      for (final e in (_grid[dia] ?? const <int, List<Map<String, dynamic>>>{}).entries)
+        if (uid != null && e.value.any((x) => x['usuario'] == uid)) e.key,
+    };
+    final rango = uid == null ? null : RangosHorario.rangoQueContiene(horasDia, dia, hora);
+
     final accion = await showDialog<String>(
       context: context,
-      builder: (_) {
+      builder: (ctx) {
         final nombre = item['nombre_completo']?.toString() ?? item['username']?.toString() ?? '?';
         final rol    = item['rol']?.toString() ?? '';
         return AlertDialog(
           title: Text(nombre, style: const TextStyle(color: kPrimary, fontSize: 15)),
-          content: Text('$rol · ${_dias[dia]} ${_horaAmPm(hora)}',
-              style: const TextStyle(color: kTextMuted, fontSize: 12)),
+          scrollable: true,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$rol · ${rango?.textoConDia ?? '${_dias[dia]} ${_horaAmPm(hora)}'}',
+                  style: const TextStyle(color: kTextMuted, fontSize: 12)),
+              const SizedBox(height: 8),
+              if (rango != null)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.edit_calendar_outlined, color: kPrimary),
+                  title: const Text('Editar bloque'),
+                  subtitle: Text('Cambiar horas o encargado de ${rango.texto}'),
+                  onTap: () => Navigator.pop(ctx, 'bloque'),
+                ),
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.swap_horiz, color: kPrimary),
+                title: const Text('Cambiar encargado solo a esta hora'),
+                subtitle: Text('${_horaAmPm(hora)} – ${_horaAmPm(hora + 1)}'),
+                onTap: () => Navigator.pop(ctx, 'cambiar'),
+              ),
+              ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.remove_circle_outline, color: kDanger),
+                title: const Text('Quitar solo esta hora', style: TextStyle(color: kDanger)),
+                onTap: () => Navigator.pop(ctx, 'quitar'),
+              ),
+            ],
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'cambiar'),
-              child: const Text('Cambiar encargado'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'quitar'),
-              child: const Text('Quitar', style: TextStyle(color: kDanger)),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ],
         );
       },
     );
     if (!mounted) return;
 
+    if (accion == 'bloque' && rango != null) {
+      await _editarRangoEncargado(rango, item);
+      return;
+    }
     if (accion == 'quitar') {
       await _eliminar(dia, hora, item);
     } else if (accion == 'cambiar') {
@@ -904,28 +1044,37 @@ class _TabEncargadosState extends State<_TabEncargados>
 
     return Column(
       children: [
-        // Barra superior con info de encargados + botón actualizar
+        // Barra superior con info de encargados + acciones
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(children: [
-            Icon(Icons.people_outline, size: 16, color: _disponibles.isEmpty ? kDanger : kTextMuted),
-            const SizedBox(width: 6),
-            Text(
-              _disponibles.isEmpty
-                  ? 'Sin encargados LAB/MONITOR disponibles'
-                  : '${_disponibles.length} encargado${_disponibles.length != 1 ? 's' : ''} disponible${_disponibles.length != 1 ? 's' : ''}',
-              style: TextStyle(
-                fontSize: 12,
-                color: _disponibles.isEmpty ? kDanger : kTextMuted,
+          child: LayoutBuilder(builder: (_, box) {
+            final compacto = box.maxWidth < 720;
+            return Row(children: [
+              Icon(Icons.people_outline, size: 16, color: _disponibles.isEmpty ? kDanger : kTextMuted),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _disponibles.isEmpty
+                      ? 'Sin encargados LAB/MONITOR disponibles'
+                      : '${_disponibles.length} encargado${_disponibles.length != 1 ? 's' : ''} disponible${_disponibles.length != 1 ? 's' : ''}',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _disponibles.isEmpty ? kDanger : kTextMuted,
+                  ),
+                ),
               ),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: _cargar,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Actualizar', style: TextStyle(fontSize: 12)),
-            ),
-          ]),
+              if (puedeEditar)
+                _accionBarra(Icons.event_repeat_outlined, 'Varios días',
+                    _guardando ? null : () => _asignarBloques(), compacto),
+              _accionBarra(Icons.insights_outlined, 'Mi semana',
+                  () => _abrirMiSemana(context), compacto),
+              if (puedeEditar)
+                _accionBarra(Icons.bookmarks_outlined, 'Plantillas',
+                    () => _abrirPlantillas(context), compacto),
+              _accionBarra(Icons.refresh, 'Actualizar', _cargar, compacto),
+            ]);
+          }),
         ),
         _guardando
             ? const LinearProgressIndicator(minHeight: 1, color: kPrimary)
@@ -1157,14 +1306,22 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
   String? _errorGrid;
 
   @override
-  void initState() { super.initState(); Future.microtask(_cargar); }
+  void initState() {
+    super.initState();
+    _horarioCambiado.addListener(_cargar);
+    Future.microtask(_cargar);
+  }
 
-  Future<void> _cargar() async {
-    if (!mounted) return;
-    setState(() { _cargando = true; _errorGrid = null; });
+  @override
+  void dispose() {
+    _horarioCambiado.removeListener(_cargar);
+    super.dispose();
+  }
+
+  /// Recarga solo la grilla (sin el indicador de pantalla completa).
+  Future<bool> _cargarGrid() async {
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
-
     try {
       final registros = await _getTodo(dio, 'academico/horario-asignatura/');
       final Map<int, Map<int, List<Map<String, dynamic>>>> grid = {
@@ -1173,9 +1330,21 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       for (final r in registros) {
         grid[r['dia_semana'] as int]?[r['hora'] as int]?.add(r);
       }
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _grid = grid);
+      return true;
     } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _cargar() async {
+    if (!mounted) return;
+    setState(() { _cargando = true; _errorGrid = null; });
+    final auth = context.read<AuthProvider>();
+    final dio  = ApiClient.instance.authenticatedDio(auth.token);
+
+    if (!await _cargarGrid()) {
       if (mounted) setState(() => _errorGrid = 'No se pudo cargar el horario de asignaturas.');
     }
 
@@ -1195,7 +1364,14 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     setState(() => _cargando = false);
   }
 
-  Future<void> _agregar(int dia, int hora) async {
+  /// Tocar una celda vacía: abre el diálogo de asignación con ese día y
+  /// esa hora ya marcados (se pueden sumar más días).
+  Future<void> _agregar(int dia, int hora) => _asignarBloques(dias: {dia}, hora: hora);
+
+  /// Asigna una asignatura (docente + grupo) a un rango de horas en uno o
+  /// varios días en UNA petición atómica; si choca con la misma asignatura
+  /// con otro docente/grupo, no se guarda nada y se muestran los choques.
+  Future<void> _asignarBloques({Set<int> dias = const {}, int hora = 8}) async {
     final auth = context.read<AuthProvider>();
     if (!auth.can(Perm.academicoGestionar)) return;
 
@@ -1208,47 +1384,47 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       }
       return;
     }
-
     if (_guardando) return;
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => _FormAsignaturaDialog(
-          asignaturas: _asignaturas, docentes: _docentes, horaInicio: hora),
-    );
-    if (result == null || !mounted) return;
 
-    final horaFin = result['hora_fin'] as int? ?? hora;
+    final sel = await showDialog<BloqueFormResultado>(
+      context: context,
+      builder: (_) => BloqueFormDialog(
+        modo: ModoBloque.asignatura,
+        titulo: dias.length == 1 ? 'Agregar asignatura' : 'Asignar varios días',
+        textoBoton: 'Asignar',
+        multiDia: true,
+        diasIniciales: dias,
+        horaInicio: hora,
+        horaFin: hora + 1,
+        asignaturas: _asignaturas,
+        docentes: _docentes,
+      ),
+    );
+    if (sel == null || !mounted) return;
+
     final dio = ApiClient.instance.authenticatedDio(auth.token);
     setState(() => _guardando = true);
-    int creadas = 0, fallidas = 0;
-    try {
-      for (int h = hora; h <= horaFin; h++) {
-        try {
-          final r = await dio.post('academico/horario-asignatura/', data: {
-            'asignatura': result['asignatura_id'],
-            'dia_semana': dia,
-            'hora': h,
-            'docente': result['docente'],
-            'grupo': result['grupo'],
-          });
-          creadas++;
-          if (mounted) setState(() => _grid[dia]?[h]?.add(r.data as Map<String, dynamic>));
-        } catch (_) {
-          // Típicamente: la misma asignatura ya está en esa hora (único por
-          // asignatura+día+hora).
-          fallidas++;
-        }
+    final r = await postHorario(context, dio, 'academico/horario-asignatura/asignar-bloques/', {
+      'asignatura':  sel.asignatura,
+      'docente':     sel.docente,
+      'grupo':       sel.grupo,
+      'dias':        sel.dias,
+      'hora_inicio': sel.horaInicio,
+      'hora_fin':    sel.horaFin,
+    });
+    if (mounted) setState(() => _guardando = false);
+    if (r == null || !mounted) return;
+
+    setState(() {
+      for (final b in ApiListas.listaDe(r['bloques'])) {
+        _grid[b['dia_semana'] as int]?[b['hora'] as int]?.add(b);
       }
-    } finally {
-      if (mounted) setState(() => _guardando = false);
-    }
-    if (!mounted) return;
-    if (fallidas > 0) {
-      _avisar(context, 'No se pudieron guardar $fallidas de ${creadas + fallidas} hora(s) '
-          '(¿la asignatura ya estaba en ese horario?).', error: true);
-    } else if (creadas > 0) {
-      _avisar(context, 'Asignatura agregada: ${_dias[dia]} ${_horaAmPm(hora)} – ${_horaAmPm(horaFin + 1)}');
-    }
+    });
+    final creados = r['creados'] ?? 0, existentes = r['existentes'] ?? 0;
+    _avisar(context,
+        'Asignatura agregada: ${RangosHorario.diasCortos(sel.dias)} '
+        '${horaAmPm(sel.horaInicio)} – ${horaAmPm(sel.horaFin)} · '
+        '$creados hora(s) nueva(s)${existentes > 0 ? ', $existentes ya estaban' : ''}');
   }
 
   Future<void> _eliminar(int dia, int hora, Map<String, dynamic> item) async {
@@ -1276,25 +1452,32 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(children: [
+          child: LayoutBuilder(builder: (_, box) {
+            final compacto = box.maxWidth < 720;
+            return Row(children: [
             Icon(Icons.school_outlined, size: 16, color: _asignaturas.isEmpty ? kDanger : kTextMuted),
             const SizedBox(width: 6),
-            Text(
-              _asignaturas.isEmpty
-                  ? 'Sin asignaturas registradas'
-                  : '${_asignaturas.length} asignatura${_asignaturas.length != 1 ? 's' : ''} disponible${_asignaturas.length != 1 ? 's' : ''}',
-              style: TextStyle(
-                fontSize: 12,
-                color: _asignaturas.isEmpty ? kDanger : kTextMuted,
+            Expanded(
+              child: Text(
+                _asignaturas.isEmpty
+                    ? 'Sin asignaturas registradas'
+                    : '${_asignaturas.length} asignatura${_asignaturas.length != 1 ? 's' : ''} disponible${_asignaturas.length != 1 ? 's' : ''}',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _asignaturas.isEmpty ? kDanger : kTextMuted,
+                ),
               ),
             ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: _cargar,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Actualizar', style: TextStyle(fontSize: 12)),
-            ),
-          ]),
+            if (puedeEditar)
+              _accionBarra(Icons.event_repeat_outlined, 'Varios días',
+                  _guardando ? null : () => _asignarBloques(), compacto),
+            if (puedeEditar)
+              _accionBarra(Icons.bookmarks_outlined, 'Plantillas',
+                  () => _abrirPlantillas(context), compacto),
+            _accionBarra(Icons.refresh, 'Actualizar', _cargar, compacto),
+          ]);
+          }),
         ),
         _guardando
             ? const LinearProgressIndicator(minHeight: 1, color: kPrimary)
@@ -1410,48 +1593,65 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
     if (accion == 'quitar') {
       await _eliminarBloque(dia, b);
     } else if (accion == 'editar') {
-      final result = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (_) => _FormAsignaturaDialog(
-          asignaturas: _asignaturas,
-          docentes: _docentes,
-          initialAsignaturaId: item['asignatura']?.toString(),
-          initialDocente: item['docente']?.toString() ?? '',
-          initialGrupo:   item['grupo']?.toString()   ?? '',
-        ),
-      );
-      if (result == null || !mounted) return;
-      final dio = ApiClient.instance.authenticatedDio(auth.token);
-      // Actualizar todas las filas del bloque con los nuevos datos
-      int fallidas = 0;
-      for (int k = 0; k < b.duracion; k++) {
-        final hora    = _horas[b.horaIdx + k];
-        final rowItem = b.itemsByHora[k][0];
-        try {
-          final r = await dio.patch('academico/horario-asignatura/${rowItem['id']}/', data: {
-            'asignatura': result['asignatura_id'],
-            'docente':    result['docente'],
-            'grupo':      result['grupo'],
-          });
-          if (!mounted) return;
-          setState(() {
-            final list = _grid[dia]?[hora];
-            if (list != null) {
-              final idx = list.indexWhere((e) => e['id'] == rowItem['id']);
-              if (idx >= 0) list[idx] = r.data as Map<String, dynamic>;
-            }
-          });
-        } catch (_) {
-          fallidas++;
-        }
-      }
-      if (!mounted) return;
-      if (fallidas > 0) {
-        _avisar(context, 'No se pudieron actualizar $fallidas hora(s) del bloque', error: true);
-      } else {
-        _avisar(context, 'Bloque actualizado');
-      }
+      await _editarRangoAsignatura(dia, b);
     }
+  }
+
+  /// Edita un bloque fusionado (horas, asignatura, docente, grupo) de forma
+  /// atómica con academico/horario-asignatura/reemplazar-rango/.
+  Future<void> _editarRangoAsignatura(int dia, _Bloque b) async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.can(Perm.academicoGestionar) || _guardando) return;
+    final item = b.itemsByHora[0][0];
+    final inicio = _horas[b.horaIdx];
+    final rango = RangoHoras(dia, inicio, inicio + b.duracion);
+    final asignaturaId = item['asignatura']?.toString();
+    final docente = item['docente']?.toString() ?? '';
+    final grupo   = item['grupo']?.toString() ?? '';
+    if (asignaturaId == null) {
+      _avisar(context, 'La asignatura de este bloque ya no existe; quítalo y vuelve a crearlo.',
+          error: true);
+      return;
+    }
+
+    final sel = await showDialog<BloqueFormResultado>(
+      context: context,
+      builder: (_) => BloqueFormDialog(
+        modo: ModoBloque.asignatura,
+        titulo: 'Editar bloque',
+        textoBoton: 'Guardar',
+        multiDia: false,
+        diasIniciales: {dia},
+        horaInicio: rango.inicio,
+        horaFin: rango.fin,
+        asignaturas: _asignaturas,
+        docentes: _docentes,
+        asignaturaInicial: asignaturaId,
+        docenteInicial: docente,
+        grupoInicial: grupo,
+        nota: 'Ahora: ${item['nombre_asignatura'] ?? '?'}, ${rango.textoConDia}',
+      ),
+    );
+    if (sel == null || !mounted) return;
+
+    final dio = ApiClient.instance.authenticatedDio(auth.token);
+    setState(() => _guardando = true);
+    final r = await postHorario(context, dio, 'academico/horario-asignatura/reemplazar-rango/', {
+      'original': {'asignatura': asignaturaId, 'docente': docente, 'grupo': grupo,
+                   'dia': dia, 'hora_inicio': rango.inicio, 'hora_fin': rango.fin},
+      'nuevo':    {'asignatura': sel.asignatura, 'docente': sel.docente, 'grupo': sel.grupo,
+                   'hora_inicio': sel.horaInicio, 'hora_fin': sel.horaFin},
+    });
+    if (r == null) {
+      if (mounted) setState(() => _guardando = false);
+      return;
+    }
+    final ok = await _cargarGrid();
+    if (!mounted) return;
+    setState(() => _guardando = false);
+    _avisar(context, ok
+        ? 'Bloque actualizado: ${RangoHoras(dia, sel.horaInicio, sel.horaFin).textoConDia}'
+        : 'Bloque actualizado. Pulsa Actualizar para ver los cambios.');
   }
 
   Future<void> _editarItem(int dia, int hora, Map<String, dynamic> item) async {
@@ -2423,6 +2623,7 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
   }
 
   Widget _buildTabla(List<(Map<String, dynamic>, SeguimientoFila)> filas) {
+    final gestor = context.read<AuthProvider>().can(Perm.academicoGestionar);
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: const Color(0xFFDEE2E6)),
@@ -2470,11 +2671,20 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
                 border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
               ),
               children: [
-                Padding(
+                InkWell(
+                  // Abre "Mi semana" de ese monitor (quien gestiona: cualquiera;
+                  // un monitor: solo la suya, la única que puede marcar).
+                  onTap: (gestor || puedeMarcar) ? () => _abrirMiSemana(context, usuarioId: uid) : null,
+                  child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(m['nombre_completo']?.toString() ?? '',
-                        style: const TextStyle(fontSize: 12)),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: (gestor || puedeMarcar) ? kPrimary : null,
+                          decoration: (gestor || puedeMarcar) ? TextDecoration.underline : null,
+                          decorationColor: kPrimary.withValues(alpha: 0.4),
+                        )),
                     if (f.sinAsignar > 0)
                       Tooltip(
                         message: 'Entre horario presencial y horas en casa suma '
@@ -2483,6 +2693,7 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
                             style: const TextStyle(fontSize: 10, color: kWarning)),
                       ),
                   ]),
+                ),
                 ),
                 _celda(_textoHoras(f.meta, bold: true)),
                 _celda(_textoHoras(f.presenciales)),
@@ -2871,15 +3082,14 @@ class _FormAsignaturaDialog extends StatefulWidget {
   final String? initialAsignaturaId;
   final String  initialDocente;
   final String  initialGrupo;
-  // null = modo edición (sin selector de hora de fin)
-  final int?    horaInicio;
+  // Solo edita UNA hora (asignaturas simultáneas); agregar y editar
+  // bloques completos usan BloqueFormDialog.
   const _FormAsignaturaDialog({
     required this.asignaturas,
     this.docentes            = const [],
     this.initialAsignaturaId,
     this.initialDocente      = '',
     this.initialGrupo        = '',
-    this.horaInicio,
   });
   @override State<_FormAsignaturaDialog> createState() => _FormAsignaturaDialogState();
 }
@@ -2887,7 +3097,6 @@ class _FormAsignaturaDialog extends StatefulWidget {
 class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
   String?  _asignaturaId;
   String?  _docenteDropdown;
-  int?     _horaFin;
   late final TextEditingController _docenteOtroCtrl;
   late final TextEditingController _grupoCtrl;
 
@@ -2895,7 +3104,6 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
   void initState() {
     super.initState();
     _asignaturaId = widget.initialAsignaturaId;
-    _horaFin      = widget.horaInicio;
     _grupoCtrl    = TextEditingController(text: widget.initialGrupo);
     _docenteOtroCtrl = TextEditingController();
 
@@ -2998,23 +3206,6 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
               ),
             ],
             const SizedBox(height: 12),
-            // Hora de fin (solo al crear, no al editar)
-            if (widget.horaInicio != null) ...[
-              DropdownButtonFormField<int>(
-                initialValue: _horaFin ?? widget.horaInicio,
-                decoration: const InputDecoration(
-                  labelText: 'Hora de fin',
-                  prefixIcon: Icon(Icons.schedule_outlined, color: kPrimary),
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  for (int h = widget.horaInicio!; h <= 21; h++)
-                    DropdownMenuItem(value: h, child: Text(_horaAmPm(h + 1)))
-                ],
-                onChanged: (v) => setState(() => _horaFin = v),
-              ),
-              const SizedBox(height: 12),
-            ],
             // Grupo
             TextField(
               controller: _grupoCtrl,
@@ -3037,7 +3228,6 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
               'asignatura_id': _asignaturaId,
               'docente':  _nombreDocente(),
               'grupo':    _grupoCtrl.text.trim(),
-              'hora_fin': _horaFin ?? widget.horaInicio,
             });
           },
           child: Text(_esEdicion ? 'Guardar' : 'Agregar'),

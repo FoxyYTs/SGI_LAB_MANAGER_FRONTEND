@@ -235,4 +235,139 @@ void main() {
       expect(parseHoras('dos'), isNull);
     });
   });
+
+  // ── Rangos de horas ───────────────────────────────────────────────────────
+
+  group('RangosHorario.fusionar()', () {
+    test('fusiona horas consecutivas por día y ordena', () {
+      final r = RangosHorario.fusionar([
+        (dia: 2, hora: 14),
+        (dia: 0, hora: 9),
+        (dia: 0, hora: 8),
+        (dia: 0, hora: 10),
+        (dia: 0, hora: 13),
+        (dia: 2, hora: 15),
+      ]);
+      expect(r, [
+        const RangoHoras(0, 8, 11),
+        const RangoHoras(0, 13, 14),
+        const RangoHoras(2, 14, 16),
+      ]);
+      expect(r.first.duracion, 3);
+      expect(r.first.texto, '8 AM – 11 AM');
+      expect(r.last.textoConDia, 'Miércoles 2 PM – 4 PM');
+    });
+
+    test('ignora duplicados y lista vacía', () {
+      expect(RangosHorario.fusionar(const []), isEmpty);
+      expect(RangosHorario.fusionar([(dia: 1, hora: 8), (dia: 1, hora: 8)]),
+          [const RangoHoras(1, 8, 9)]);
+    });
+
+    test('desdeFilas lee filas del API y descarta las inválidas', () {
+      final r = RangosHorario.desdeFilas([
+        {'dia_semana': 5, 'hora': 21},
+        {'dia_semana': 5, 'hora': 20},
+        {'dia_semana': null, 'hora': 9},
+      ]);
+      expect(r, [const RangoHoras(5, 20, 22)]);
+      expect(r.first.texto, '8 PM – 10 PM');
+    });
+  });
+
+  group('RangosHorario.rangoQueContiene()', () {
+    test('encuentra el bloque consecutivo alrededor de la hora', () {
+      final horas = {8, 9, 10, 14};
+      expect(RangosHorario.rangoQueContiene(horas, 0, 9), const RangoHoras(0, 8, 11));
+      expect(RangosHorario.rangoQueContiene(horas, 0, 14), const RangoHoras(0, 14, 15));
+      expect(RangosHorario.rangoQueContiene(horas, 0, 12), isNull);
+    });
+  });
+
+  group('RangosHorario.validar() y opciones', () {
+    test('valida inicio/fin con fin exclusivo', () {
+      expect(RangosHorario.validar(8, 11), isNull);
+      expect(RangosHorario.validar(6, 22), isNull);
+      expect(RangosHorario.validar(null, 9), isNotNull);
+      expect(RangosHorario.validar(9, 9), contains('posterior'));
+      expect(RangosHorario.validar(10, 9), contains('posterior'));
+      expect(RangosHorario.validar(5, 9), isNotNull);
+      expect(RangosHorario.validar(21, 23), isNotNull);
+      expect(RangosHorario.validar(22, 23), isNotNull);
+    });
+
+    test('opciones de inicio y fin', () {
+      expect(RangosHorario.iniciosPosibles.first, 6);
+      expect(RangosHorario.iniciosPosibles.last, 21);
+      expect(RangosHorario.finesPosibles(20), [21, 22]);
+      expect(RangosHorario.finesPosibles(21), [22]);
+    });
+
+    test('ajustarFin conserva la duración si cabe', () {
+      expect(RangosHorario.ajustarFin(10, 8, 11), 13);
+      expect(RangosHorario.ajustarFin(20, 8, 11), 22);
+      expect(RangosHorario.ajustarFin(9, 8, 8), 10);
+    });
+
+    test('bloquesACrear y diasCortos', () {
+      expect(RangosHorario.bloquesACrear([0, 2, 4], 8, 11), 9);
+      expect(RangosHorario.bloquesACrear([0, 0], 8, 10), 2);
+      expect(RangosHorario.bloquesACrear([0], 10, 8), 0);
+      expect(RangosHorario.diasCortos([4, 0, 2]), 'L, X, V');
+      expect(RangosHorario.diasCortos([5, 3]), 'J, S');
+    });
+  });
+
+  group('RangosHorario.describirChoques()', () {
+    test('formatea los choques del 409', () {
+      final l = RangosHorario.describirChoques([
+        {'dia_semana': 3, 'hora': 15, 'ocupado_por': 'Química', 'docente': 'Dra. Y', 'grupo': 'G2'},
+        {'dia_semana': 0, 'hora': 8, 'ocupado_por': 'Física', 'docente': '', 'grupo': ''},
+      ]);
+      expect(l, ['Jueves 3 PM — Química — (Dra. Y · G2)', 'Lunes 8 AM — Física']);
+      expect(RangosHorario.describirChoques(null), isEmpty);
+    });
+  });
+
+  group('horaAmPm()', () {
+    test('formato 12 h', () {
+      expect(horaAmPm(6), '6 AM');
+      expect(horaAmPm(12), '12 PM');
+      expect(horaAmPm(21), '9 PM');
+      expect(horaAmPm(22), '10 PM');
+    });
+  });
+
+  group('MiSemana.desdeJson()', () {
+    test('agrupa bloques por día y lee horas', () {
+      final s = MiSemana.desdeJson({
+        'usuario': 7,
+        'nombre_completo': 'Ana Ruiz',
+        'semana_inicio': '2026-10-05',
+        'meta_semanal': 10.0,
+        'bloques': [
+          {'dia_semana': 0, 'hora': 8},
+          {'dia_semana': 0, 'hora': 9},
+          {'dia_semana': 2, 'hora': 14},
+        ],
+        'en_casa': [
+          {'id': 1, 'descripcion': 'Informe', 'duracion_horas': 2.5},
+        ],
+        'registros': [],
+        'horas_presenciales': 3.0,
+        'horas_no_presenciales': 2.5,
+        'horas_registradas': 4.5,
+        'completada': false,
+      });
+      expect(s.usuario, 7);
+      expect(s.semanaInicio, DateTime(2026, 10, 5));
+      expect(s.rangosPorDia.keys, [0, 2]);
+      expect(s.rangosPorDia[0], [const RangoHoras(0, 8, 10)]);
+      expect(s.enCasa.single['descripcion'], 'Informe');
+      expect(s.horas.asignadas, 5.5);
+      expect(s.horas.pendientes, 5.5);
+      expect(s.horas.progreso, closeTo(0.45, 1e-9));
+      expect(s.completada, isFalse);
+    });
+  });
 }
