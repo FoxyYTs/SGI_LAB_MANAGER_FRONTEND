@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
+import '../widgets/error_carga.dart';
 import '../core/theme/colors.dart';
 import '../core/text_utils.dart';
+import '../core/presentaciones.dart';
+import '../core/uuid_v4.dart';
 
 class _ItemSolicitud {
   String? insumoId;
+  /// Presentación elegida (frasco 500 mL, caja…). Se preselecciona la
+  /// primera con existencias; si el insumo tiene varias se puede cambiar.
+  String? presentacionId;
   final cantCtrl = TextEditingController(text: '1');
   void dispose() => cantCtrl.dispose();
 }
@@ -38,6 +45,15 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   bool _enviando = false;
   bool _enviado  = false;
   bool _idValidado = false;   // activa los mensajes de error en la identificación
+  bool _cargandoProgramas = true;
+  String? _errorProgramas;
+  String? _errorInsumos;
+
+  // Clave de idempotencia: se genera al abrir el formulario y se reutiliza
+  // en cada reintento. Si el primer envío sí llegó al servidor pero la
+  // respuesta se perdió (timeout), el reintento devuelve ese mismo
+  // préstamo en vez de crear un duplicado.
+  final String _clientRequestId = uuidV4();
 
   final _idFormKey = GlobalKey<FormState>();
 
@@ -55,11 +71,18 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   }
 
   Future<void> _cargarProgramas() async {
+    setState(() { _cargandoProgramas = true; _errorProgramas = null; });
     try {
-      final r = await _dio.get('academico/programas-publico/');
+      final lista = await obtenerTodas(_dio, 'academico/programas-publico/');
       if (!mounted) return;
-      setState(() => _programas = List<Map<String, dynamic>>.from(r.data));
-    } catch (_) {}
+      setState(() { _programas = lista; _cargandoProgramas = false; });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorProgramas = mensajeErrorCarga(e, 'los programas');
+        _cargandoProgramas = false;
+      });
+    }
   }
 
   @override
@@ -73,23 +96,31 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
   Future<void> _continuar() async {
     setState(() => _idValidado = true);
     if (!(_idFormKey.currentState?.validate() ?? false)) return;
-    setState(() => _cargando = true);
+    setState(() { _cargando = true; _errorInsumos = null; });
     try {
-      final r = await _dio.get('inventario/lista/');
+      // Catálogo público mínimo (sin login): `inventario/lista/` exige
+      // permiso desde DEF-024 y respondía 401, así que "Continuar" no
+      // hacía nada.
+      final lista = await obtenerTodas(_dio, 'inventario/lista-publica/');
       if (!mounted) return;
-      final d = r.data;
       setState(() {
-        _insumos      = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _insumos      = lista;
         _identificado = true;
         _cargando     = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _cargando = false);
+      setState(() {
+        _errorInsumos = mensajeErrorCarga(e, 'la lista de materiales');
+        _cargando     = false;
+      });
     }
   }
 
   Future<void> _enviar() async {
+    // Guarda temprana: evita un segundo POST si llega otro tap antes de
+    // que el botón se redibuje deshabilitado.
+    if (_enviando || _enviado) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _enviando = true);
     try {
@@ -101,12 +132,14 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
         'programa':            _programaId,
         'asignatura_texto':    _asgCtrl.text.trim(),
         'observaciones':       _obsCtrl.text.trim(),
+        'client_request_id':   _clientRequestId,
         'detalles': _items.map((i) => {
           'insumo':            i.insumoId,
+          if (i.presentacionId != null) 'presentacion': i.presentacionId,
           'cantidad_prestada': double.tryParse(i.cantCtrl.text) ?? 1,
         }).toList(),
       });
-      setState(() => _enviado = true);
+      if (mounted) setState(() => _enviado = true);
     } on DioException catch (e) {
       final String msg;
       if (e.response?.statusCode == 429) {
@@ -348,15 +381,24 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
             fCel,
           ],
           const SizedBox(height: 12),
-          _programas.isEmpty
-              ? const Center(child: SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary)))
-              : fProg,
+          if (_cargandoProgramas)
+            const Center(child: SizedBox(width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary)))
+          else if (_errorProgramas != null)
+            ErrorCargaReintentar(mensaje: _errorProgramas!, onReintentar: _cargarProgramas)
+          else
+            fProg,
+          if (_errorInsumos != null) ...[
+            const SizedBox(height: 12),
+            ErrorCargaReintentar(mensaje: _errorInsumos!, onReintentar: _continuar),
+          ],
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _cargando ? null : _continuar,
+              onPressed: (_cargando || _cargandoProgramas || _errorProgramas != null)
+                  ? null
+                  : _continuar,
               style: ElevatedButton.styleFrom(
                 backgroundColor: kPrimary, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -542,8 +584,8 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
           if (_cargando)
             const Center(child: CircularProgressIndicator(color: kPrimary))
           else if (_insumos.isEmpty)
-            const Text('No se pudieron cargar los materiales.',
-                style: TextStyle(color: kDanger))
+            const Text('No hay materiales disponibles para préstamo.',
+                style: TextStyle(color: kTextMuted))
           else
             ...List.generate(_items.length, (i) => _buildItemRow(i)),
           TextButton.icon(
@@ -583,12 +625,16 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
 
   Widget _buildItemRow(int i) {
     final item = _items[i];
-    final nombre = item.insumoId == null ? null
-        : _insumos.where((x) => x['id']?.toString() == item.insumoId)
-            .map((x) => x['nombre_insumo']?.toString() ?? '').firstOrNull;
+    final insumo = item.insumoId == null ? null
+        : _insumos.where((x) => x['id']?.toString() == item.insumoId).firstOrNull;
+    final nombre = insumo?['nombre_insumo']?.toString();
+    final presentaciones = presentacionesActivas(insumo?['presentaciones'] as List?);
+    final presSel = presentaciones
+        .where((p) => p['id']?.toString() == item.presentacionId).firstOrNull;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         Expanded(
           flex: 3,
           child: FormField<String>(
@@ -601,7 +647,12 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
                   builder: (_) => _DialogMaterial(insumos: _insumos),
                 );
                 if (sel != null) {
-                  setState(() => item.insumoId = sel['id']?.toString());
+                  setState(() {
+                    item.insumoId = sel['id']?.toString();
+                    item.presentacionId = presentacionPorDefecto(
+                            sel['presentaciones'] as List?)?['id']
+                        ?.toString();
+                  });
                   state.didChange(item.insumoId);
                 }
               },
@@ -646,6 +697,59 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
             onPressed: () => setState(() { _items[i].dispose(); _items.removeAt(i); }),
           ),
       ]),
+      if (insumo != null && presentaciones.length > 1) ...[
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          key: ValueKey('pres_${item.insumoId}'),
+          initialValue: item.presentacionId,
+          isExpanded: true,
+          decoration: _deco('Presentación *', Icons.science_outlined),
+          items: presentaciones.map((p) => DropdownMenuItem(
+            value: p['id']?.toString(),
+            child: Text(_etiquetaPresentacion(p),
+                style: const TextStyle(fontSize: 13),
+                overflow: TextOverflow.ellipsis),
+          )).toList(),
+          onChanged: (v) => setState(() => item.presentacionId = v),
+          validator: (v) => v == null ? 'Elige la presentación' : null,
+        ),
+      ],
+      if (presSel != null) _avisoDisponibilidad(presSel, presentaciones.length),
+      ]),
+    );
+  }
+
+  static String _etiquetaPresentacion(Map p) {
+    final unidad = p['unidad_nombre']?.toString() ?? '';
+    return switch (presentacionDisponible(p)) {
+      true  => '$unidad — disponible',
+      false => '$unidad — agotado',
+      null  => unidad,
+    };
+  }
+
+  /// Disponible / agotado de la presentación elegida. Si está agotada se
+  /// deja enviar igual (el laboratorio decide al aprobar), con un aviso.
+  Widget _avisoDisponibilidad(Map p, int nPresentaciones) {
+    final disp = presentacionDisponible(p);
+    if (disp == null) return const SizedBox.shrink();
+    final unidad = p['unidad_nombre']?.toString() ?? '';
+    final prefijo = nPresentaciones == 1 && unidad.isNotEmpty ? '$unidad · ' : '';
+    final color = disp ? kSuccess : const Color(0xFFE65100);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(disp ? Icons.check_circle_outline : Icons.warning_amber_rounded,
+            size: 15, color: color),
+        const SizedBox(width: 6),
+        Expanded(child: Text(
+          disp
+              ? '${prefijo}Disponible'
+              : '${prefijo}Agotado por ahora. Puedes enviar la solicitud; '
+                'el laboratorio confirmará si puede prestarlo.',
+          style: TextStyle(fontSize: 12, color: color),
+        )),
+      ]),
     );
   }
 }
@@ -688,13 +792,24 @@ class _DialogMaterialState extends State<_DialogMaterial> {
             ? const Center(child: Text('Sin resultados', style: TextStyle(color: kTextMuted)))
             : ListView.builder(
                 itemCount: filtrados.length,
-                itemBuilder: (_, i) => ListTile(
-                  dense: true,
-                  leading: const Icon(Icons.inventory_2_outlined, color: kPrimary, size: 20),
-                  title: Text(filtrados[i]['nombre_insumo']?.toString() ?? '',
-                      style: const TextStyle(fontSize: 13)),
-                  onTap: () => Navigator.pop(context, filtrados[i]),
-                ),
+                itemBuilder: (_, i) {
+                  final disp = insumoDisponible(filtrados[i]['presentaciones'] as List?);
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.inventory_2_outlined, color: kPrimary, size: 20),
+                    title: Text(filtrados[i]['nombre_insumo']?.toString() ?? '',
+                        style: const TextStyle(fontSize: 13)),
+                    trailing: disp == null ? null : Text(
+                      disp ? 'Disponible' : 'Agotado',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: disp ? kSuccess : const Color(0xFFE65100),
+                      ),
+                    ),
+                    onTap: () => Navigator.pop(context, filtrados[i]),
+                  );
+                },
               )),
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar'))],

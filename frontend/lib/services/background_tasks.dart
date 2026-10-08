@@ -5,6 +5,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 import 'dart:ui';
+import '../core/api/token_utils.dart';
+
+import '../core/api/paginacion.dart';
 
 // URL del servidor compilada en el APK (--dart-define=SERVER_URL=...)
 const _kServerUrl = String.fromEnvironment(
@@ -26,14 +29,16 @@ void backgroundDispatcher() {
       DartPluginRegistrant.ensureInitialized();
 
       const storage = FlutterSecureStorage();
-      final token = await storage.read(key: 'token');
+      // El access dura 2 h: sin refrescar, la tarea solo funcionaba si la app
+      // se había abierto hacía poco (después, 401 silencioso).
+      final token = await _tokenVigente(storage);
       final username = await storage.read(key: 'username') ?? '';
       // hace_turnos_monitor (no rol=='MONITOR'/'LAB'): un ADMIN/LAB que
       // también cubre turnos debe recibir el mismo recordatorio.
       final haceTurnosMonitor =
           (await storage.read(key: 'hace_turnos_monitor')) == 'true';
 
-      if (token == null) return true; // Sin sesión → no hacer nada
+      if (token == null) return true; // Sin sesión (o no renovable) → no hacer nada
 
       switch (taskName) {
         case kTaskStock:
@@ -41,12 +46,76 @@ void backgroundDispatcher() {
         case kTaskSchedule:
           await _checkSchedule(token, haceTurnosMonitor, username);
       }
-    } catch (_) {
-      // Las notificaciones son no-críticas; ignoramos cualquier error
+    } catch (e) {
+      // Las notificaciones son no-críticas: no reintentar, pero dejar rastro.
+      debugPrint('[Workmanager] Tarea $taskName falló: $e');
     }
     return true;
   });
 }
+
+// ── Token en el isolate de fondo ──────────────────────────────────────────────
+
+/// Devuelve un access token utilizable para la tarea, refrescándolo si ya
+/// caducó (o caduca en < 2 min). `null` si no hay sesión o no se pudo renovar.
+///
+/// Convivencia con el isolate principal (ROTATE_REFRESH_TOKENS +
+/// BLACKLIST_AFTER_ROTATION): ambos pueden rotar el refresh token guardado.
+/// - Solo se refresca si el access está caducado, no en cada ejecución.
+/// - Lo rotado se persiste (primero el refresh) y solo si el storage aún tiene
+///   el refresh que se usó: si entretanto hubo logout o la app lo rotó, no se
+///   pisa nada.
+/// - Si el servidor rechaza el refresh se relee el storage: si la app lo rotó a
+///   la vez, se usan sus tokens. Nunca se borra la sesión desde aquí: si de
+///   verdad expiró, la app lo detecta al abrirse.
+/// El isolate principal hace lo simétrico (ApiClient adopta tokens rotados
+/// por este isolate antes de dar la sesión por perdida).
+Future<String?> _tokenVigente(FlutterSecureStorage storage) async {
+  final access = await storage.read(key: 'token');
+  if (access == null) return null;
+  if (!jwtExpiraPronto(access)) return access;
+
+  final refresh = await storage.read(key: 'refresh_token');
+  if (refresh == null) return null;
+
+  try {
+    final resp = await _dioBase().post('token/refresh/', data: {'refresh': refresh});
+    final nuevoAccess  = resp.data['access']  as String;
+    final nuevoRefresh = resp.data['refresh'] as String?;
+    if (await storage.read(key: 'refresh_token') != refresh) {
+      // Logout o rotación desde la app mientras tanto: no pisar su estado.
+      debugPrint('[Workmanager] La sesión cambió durante el refresco; se descarta.');
+      return null;
+    }
+    if (nuevoRefresh != null) {
+      await storage.write(key: 'refresh_token', value: nuevoRefresh);
+    }
+    await storage.write(key: 'token', value: nuevoAccess);
+    return nuevoAccess;
+  } on DioException catch (e) {
+    final status = e.response?.statusCode;
+    if (esRechazoDeRefresh(status, e.response?.data)) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      final guardado = await storage.read(key: 'refresh_token');
+      if (guardado != null && guardado != refresh) {
+        final accessGuardado = await storage.read(key: 'token');
+        if (accessGuardado != null && !jwtExpiraPronto(accessGuardado)) {
+          return accessGuardado;
+        }
+      }
+      debugPrint('[Workmanager] Refresh rechazado (HTTP $status); se omite la tarea.');
+    } else {
+      debugPrint('[Workmanager] Refresh falló (${e.type.name} ${status ?? ''}); se omite la tarea.');
+    }
+    return null;
+  }
+}
+
+Dio _dioBase() => Dio(BaseOptions(
+  baseUrl: '${_kServerUrl.endsWith('/') ? _kServerUrl.substring(0, _kServerUrl.length - 1) : _kServerUrl}/api/',
+  connectTimeout: const Duration(seconds: 15),
+  receiveTimeout: const Duration(seconds: 15),
+));
 
 // ── Registro de tareas periódicas ─────────────────────────────────────────────
 
@@ -175,8 +244,9 @@ Future<void> _checkSchedule(String token, bool haceTurnosMonitor, String usernam
 
 Future<List> _getHorarioEncargado(String token) async {
   try {
-    final r = await _dio(token).get('academico/horario-encargado/');
-    return r.data is List ? r.data as List : [];
+    // La respuesta puede venir paginada ({results: [...]}): antes se
+    // descartaba por no ser List y los recordatorios nunca se disparaban.
+    return await obtenerTodas(_dio(token), 'academico/horario-encargado/');
   } catch (_) {
     return [];
   }
@@ -184,8 +254,9 @@ Future<List> _getHorarioEncargado(String token) async {
 
 Future<List> _getHorarioAsignatura(String token) async {
   try {
-    final r = await _dio(token).get('academico/horario-asignatura/');
-    return r.data is List ? r.data as List : [];
+    // La respuesta puede venir paginada ({results: [...]}): antes se
+    // descartaba por no ser List y los recordatorios nunca se disparaban.
+    return await obtenerTodas(_dio(token), 'academico/horario-asignatura/');
   } catch (_) {
     return [];
   }

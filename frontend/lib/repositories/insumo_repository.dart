@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/database/local_db.dart';
 import '../models/insumo_model.dart';
 
@@ -14,10 +15,8 @@ class InsumoRepository {
   Future<List<Insumo>> fetchInsumos(String? token) async {
     try {
       final dio  = ApiClient.instance.authenticatedDio(token);
-      final resp = await dio.get('inventario/lista/');
-      final raw  = resp.data;
-      final data = raw is List ? raw : ((raw as Map)['results'] as List? ?? []);
-      final insumos = data.map((j) => Insumo.fromJson(j as Map<String, dynamic>)).toList();
+      final data = await obtenerTodas(dio, 'inventario/lista/');
+      final insumos = data.map(Insumo.fromJson).toList();
       if (!kIsWeb) {
         try {
           await _cache(insumos);

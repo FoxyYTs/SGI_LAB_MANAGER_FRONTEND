@@ -2,8 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/download_helper.dart';
 import '../core/permissions.dart';
 import '../core/theme/colors.dart';
@@ -50,11 +50,10 @@ class _InformesContentState extends State<InformesContent> {
     final auth = context.read<AuthProvider>();
     try {
       final dio = ApiClient.instance.authenticatedDio(auth.token!);
-      final r = await dio.get('academico/informes-subidos/');
+      final subidos = await obtenerTodas(dio, 'academico/informes-subidos/');
       if (!mounted) return;
-      final d = r.data;
       setState(() {
-        _informesSubidos = List<dynamic>.from(d is List ? d : (d['results'] ?? []));
+        _informesSubidos = subidos;
         _cargandoSubidos = false;
       });
     } catch (_) {
@@ -593,12 +592,28 @@ class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
     }
   }
 
+  /// `url_archivo` apunta a la descarga AUTENTICADA del backend
+  /// (`informes-subidos/{id}/descargar/`): ya no es un enlace público de
+  /// /media/, así que no se puede abrir con launchUrl (no llevaría el JWT).
+  /// Se descarga con Dio + JWT y se abre/guarda con el mismo helper que los
+  /// informes generados.
   Future<void> _abrirPdf(Map<String, dynamic> informe) async {
     final urlStr = informe['url_archivo'] as String?;
     if (urlStr == null) return;
-    final uri = Uri.tryParse(urlStr);
-    if (uri == null) return;
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    final auth = context.read<AuthProvider>();
+    try {
+      final dio = ApiClient.instance.authenticatedDio(auth.token!);
+      final response = await dio.get<List<int>>(
+        urlStr,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final titulo = (informe['titulo'] as String? ?? 'informe')
+          .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_');
+      final msg = await saveAndOpenFile(response.data!, '$titulo.pdf');
+      if (msg != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

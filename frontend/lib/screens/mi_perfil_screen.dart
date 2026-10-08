@@ -5,6 +5,17 @@ import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/cerrar_sesion.dart';
+
+/// Mensaje legible de un error del backend ({'error': ...} / {'foto': ...} /
+/// {'email': ...}) en vez del texto crudo de DioException.
+String mensajeErrorApi(Object e, String porDefecto) {
+  if (e is DioException) {
+    final data = e.response?.data;
+    if (data is Map && data.isNotEmpty) return data.values.first.toString();
+  }
+  return porDefecto;
+}
 
 class MiPerfilScreen extends StatefulWidget {
   const MiPerfilScreen({super.key});
@@ -140,7 +151,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al guardar: $e'),
+            content: Text(mensajeErrorApi(e, 'Error al guardar.')),
             backgroundColor: kDanger,
           ),
         );
@@ -193,7 +204,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al subir foto: $e'),
+            content: Text(mensajeErrorApi(e, 'Error al subir foto.')),
             backgroundColor: kDanger,
           ),
         );
@@ -231,11 +242,18 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     final auth = context.read<AuthProvider>();
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
-      await dio.post('usuarios/cambiar-password/', data: {
+      final resp = await dio.post('usuarios/cambiar-password/', data: {
         'password_actual': actual,
         'nueva_password':  nueva,
         'nueva_password2': nueva2,
       });
+      // El backend cierra las demás sesiones y entrega tokens nuevos para
+      // este dispositivo.
+      final data = resp.data;
+      if (data is Map && data['access'] is String && data['refresh'] is String && mounted) {
+        await context.read<AuthProvider>()
+            .reemplazarTokens(data['access'] as String, data['refresh'] as String);
+      }
       _passActualCtrl.clear();
       _passNuevaCtrl.clear();
       _passNueva2Ctrl.clear();
@@ -414,10 +432,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () async {
-              final auth = context.read<AuthProvider>();
-              await auth.logout();
-            },
+            onPressed: () => cerrarSesionVoluntaria(context),
             icon: const Icon(Icons.logout, size: 16, color: kDanger),
             label: const Text('Cerrar sesión',
                 style: TextStyle(color: kDanger, fontSize: 13)),
@@ -775,9 +790,10 @@ class _EditarPerfilUsuarioDialogState
     final data = <String, dynamic>{
       'first_name': _firstCtrl.text.trim(),
       'last_name':  _lastCtrl.text.trim(),
-      'email':      _emailCtrl.text.trim(),
       'telefono':   _telCtrl.text.trim(),
     };
+    final emailNuevo = _emailCtrl.text.trim();
+    if (emailNuevo != (widget.usuario['email'] ?? '')) data['email'] = emailNuevo;
     if (_programaSeleccionado != null) data['programa'] = _programaSeleccionado;
     final semText = _semCtrl.text.trim();
     if (semText.isNotEmpty) data['semestre'] = int.tryParse(semText);
@@ -797,7 +813,7 @@ class _EditarPerfilUsuarioDialogState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al guardar: $e'),
+            content: Text(mensajeErrorApi(e, 'Error al guardar.')),
             backgroundColor: kDanger,
           ),
         );
@@ -887,6 +903,10 @@ class _EditarPerfilUsuarioDialogState
                       TextFormField(
                         controller: _emailCtrl,
                         keyboardType: TextInputType.emailAddress,
+                        // Solo ADMIN puede cambiar el correo de otra cuenta
+                        // (el backend responde 403 a los demás: el correo es
+                        // la llave de "olvidé mi contraseña").
+                        readOnly: context.read<AuthProvider>().rol != 'ADMIN',
                         decoration:
                             _inputDec('Correo', Icons.email_outlined),
                         validator: (v) {

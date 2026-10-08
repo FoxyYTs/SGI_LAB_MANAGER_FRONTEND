@@ -16,7 +16,10 @@ String quitarTildes(String texto) {
   return buffer.toString();
 }
 
-/// Normaliza [texto] para comparar en una búsqueda: minúsculas y sin tildes.
-/// Úsalo en ambos lados de un `.contains()` para que la búsqueda sea
-/// insensible a mayúsculas/minúsculas y a acentos.
-String normalizarBusqueda(String texto) => quitarTildes(texto.toLowerCase());
+/// Normaliza [texto] para comparar en una búsqueda: sin espacios en los
+/// extremos, minúsculas y sin tildes. Úsalo en ambos lados de un
+/// `.contains()` para que la búsqueda sea insensible a mayúsculas/
+/// minúsculas, a acentos y a espacios sobrantes ("h2so4 " encuentra H2SO4,
+/// algo habitual con el autocompletado del teclado móvil).
+String normalizarBusqueda(String texto) =>
+    quitarTildes(texto.trim().toLowerCase());

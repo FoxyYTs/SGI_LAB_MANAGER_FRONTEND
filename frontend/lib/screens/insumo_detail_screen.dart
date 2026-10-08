@@ -1,8 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
+import '../core/presentaciones.dart';
 import '../providers/auth_provider.dart';
 import 'insumo_form_screen.dart';
 import 'sga_screen.dart';
@@ -38,13 +41,14 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     try {
       final results = await Future.wait([
         dio.get('inventario/lista/${widget.insumoId}/'),
-        dio.get('operaciones/bitacora/?insumo=${widget.insumoId}&limit=8'),
+        // `limit` no existe en el backend (PageNumberPagination, 50/pág,
+        // más reciente primero): se pide la 1.ª página y se toman 8.
+        dio.get('operaciones/bitacora/',
+            queryParameters: {'insumo': widget.insumoId}),
       ]);
-      final bData = results[1].data;
       setState(() {
         _insumo = Map<String, dynamic>.from(results[0].data);
-        _movimientos = List<Map<String, dynamic>>.from(
-          bData is List ? bData : (bData['results'] ?? []));
+        _movimientos = listaDeRespuesta(results[1].data).take(8).toList();
         _cargando = false;
       });
     } catch (_) {
@@ -52,7 +56,33 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     }
   }
 
-  Future<void> _reportarRotura(String nombre, String unidad) async {
+  /// Registra una ROTURA en la bitácora. El backend exige `presentacion`
+  /// (FK obligatoria de BitacoraMovimientos) — antes se enviaba `insumo`
+  /// y fallaba siempre. Con una sola presentación se usa directamente;
+  /// con varias, el diálogo deja elegir de cuál se descuenta. Solo se
+  /// ofrecen las presentaciones activas.
+  Future<void> _reportarRotura(String nombre) async {
+    final presentaciones =
+        presentacionesActivas(_insumo?['presentaciones'] as List?);
+    if (presentaciones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Este insumo no tiene presentaciones activas: '
+              'agrega o reactiva una antes de reportar una rotura.'),
+          backgroundColor: kDanger));
+      return;
+    }
+    String presId = presentaciones.first['id'].toString();
+    String unidadDe(String id) => presentaciones
+            .firstWhere((p) => p['id'].toString() == id,
+                orElse: () => const {})['unidad_nombre']
+            ?.toString() ??
+        '';
+    String etiquetaPres(Map<String, dynamic> p) {
+      final stock = double.tryParse(p['stock_actual']?.toString() ?? '');
+      final u = p['unidad_nombre']?.toString() ?? '';
+      return stock == null ? u : '$u — stock ${_fmtNum(stock)}';
+    }
+
     final cantCtrl = TextEditingController();
     final estudCtrl = TextEditingController();
     final nitCtrl   = TextEditingController();
@@ -60,7 +90,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => StatefulBuilder(builder: (ctx, setD) => AlertDialog(
         title: Row(children: [
           const Icon(Icons.warning_amber_outlined, color: kDanger, size: 20),
           const SizedBox(width: 8),
@@ -76,13 +106,37 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 12),
+              if (presentaciones.length > 1) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: presId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Presentación *',
+                    prefixIcon: Icon(Icons.inventory_2_outlined,
+                        color: kDanger, size: 18),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: presentaciones
+                      .map((p) => DropdownMenuItem(
+                            value: p['id'].toString(),
+                            child: Text(etiquetaPres(p),
+                                overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setD(() => presId = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: cantCtrl,
                 autofocus: true,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: 'Cantidad ($unidad) *',
+                  labelText: 'Cantidad (${unidadDe(presId)}) *',
                   prefixIcon: const Icon(Icons.numbers, color: kDanger, size: 18),
                   border: const OutlineInputBorder(),
                   isDense: true,
@@ -137,7 +191,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             child: const Text('Registrar rotura'),
           ),
         ],
-      ),
+      )),
     );
 
     final cantidad = double.tryParse(cantCtrl.text.trim()) ?? 0;
@@ -170,7 +224,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       await dio.post('operaciones/bitacora/', data: {
-        'insumo':           widget.insumoId,
+        'presentacion':     presId,
         'tipo_movimiento':  'ROTURA',
         'cantidad':         cantidad,
         'observaciones':    partes.join(' | '),
@@ -181,12 +235,87 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             backgroundColor: kSuccess));
         _cargar();
       }
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('No se pudo registrar la rotura: ${_mensajeError(e)}'),
+            backgroundColor: kDanger));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Error: $e'), backgroundColor: kDanger));
       }
     }
+  }
+
+  /// Desactiva o reactiva una presentación. Desactivar es la alternativa a
+  /// borrar una presentación con historial (el backend responde 409): deja
+  /// de ofrecerse para préstamos y su stock no cuenta en el total, pero se
+  /// conserva con sus movimientos.
+  Future<void> _cambiarEstadoPresentacion(
+      Map<String, dynamic> pres, bool activar) async {
+    final unidad = pres['unidad_nombre']?.toString() ?? '';
+    if (!activar) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Desactivar presentación'),
+          content: Text(
+              'La presentación "$unidad" dejará de aparecer para nuevos '
+              'préstamos y roturas, y su stock no contará en el total del '
+              'insumo. Su historial se conserva y puedes reactivarla cuando '
+              'quieras.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancelar')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Desactivar',
+                    style: TextStyle(color: kDanger))),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio = ApiClient.instance.authenticatedDio(auth.token);
+      await dio.post('inventario/lista/${widget.insumoId}/presentaciones/'
+          '${pres['id']}/${activar ? 'activar' : 'desactivar'}/');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(activar
+              ? 'Presentación "$unidad" reactivada.'
+              : 'Presentación "$unidad" desactivada.'),
+          backgroundColor: kSuccess));
+      _cargar();
+    } on DioException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo cambiar la presentación: ${_mensajeError(e)}'),
+          backgroundColor: kDanger));
+    }
+  }
+
+  static String _fmtNum(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+
+  /// Primer mensaje legible de una respuesta de error de DRF.
+  static String _mensajeError(DioException e) {
+    dynamic d = e.response?.data;
+    while (true) {
+      if (d is Map && d.isNotEmpty) {
+        d = d['error'] ?? d['detail'] ?? d.values.first;
+      } else if (d is List && d.isNotEmpty) {
+        d = d.first;
+      } else {
+        break;
+      }
+    }
+    final txt = d?.toString() ?? '';
+    return txt.isNotEmpty ? txt : (e.message ?? 'error de red');
   }
 
   @override
@@ -243,9 +372,14 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
   Widget _buildBody() {
     final d = _insumo!;
     final tipo = d['tipo_nombre']?.toString() ?? '';
-    final stock = double.tryParse(d['stock_actual']?.toString() ?? '0') ?? 0;
+    // stock_total = suma de presentaciones; stock_actual queda como fallback legacy
+    final stock = double.tryParse(
+            (d['stock_total'] ?? d['stock_actual'])?.toString() ?? '0') ?? 0;
     final stockMin = double.tryParse(d['stock_minimo']?.toString() ?? '0') ?? 0;
-    final unidad = d['unidad_abreviatura']?.toString() ?? '';
+    final presentaciones = d['presentaciones'] as List? ?? const [];
+    final unidad = presentaciones.isNotEmpty
+        ? (presentaciones.first as Map)['unidad_nombre']?.toString() ?? ''
+        : d['unidad_abreviatura']?.toString() ?? '';
 
     Color semaforoColor;
     String semaforoLabel;
@@ -383,6 +517,8 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             _buildPresentaciones(
               List<Map<String, dynamic>>.from(d['presentaciones'] as List),
               stockMin,
+              puedeGestionar:
+                  context.read<AuthProvider>().can(Perm.inventarioGestionar),
             ),
           ],
 
@@ -400,8 +536,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                     horizontal: 14, vertical: 10),
               ),
               onPressed: () => _reportarRotura(
-                  d['nombre_insumo']?.toString() ?? widget.insumoNombre,
-                  unidad),
+                  d['nombre_insumo']?.toString() ?? widget.insumoNombre),
             ),
           ],
 
@@ -560,7 +695,8 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     );
   }
 
-  Widget _buildPresentaciones(List<Map<String, dynamic>> presentaciones, double stockMin) {
+  Widget _buildPresentaciones(List<Map<String, dynamic>> presentaciones, double stockMin,
+      {bool puedeGestionar = false}) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(10),
@@ -577,7 +713,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             child: const Row(children: [
               Icon(Icons.inventory_2_outlined, color: Colors.white, size: 18),
               SizedBox(width: 8),
-              Text('Presentaciones disponibles',
+              Text('Presentaciones',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
             ]),
           ),
@@ -587,8 +723,11 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             final p     = e.value;
             final stock = double.tryParse(p['stock_actual']?.toString() ?? '0') ?? 0;
             final unidad = p['unidad_nombre']?.toString() ?? '';
+            final activa = presentacionActiva(p);
 
-            final (chipLabel, chipColor, chipBg) = stock <= 0
+            final (chipLabel, chipColor, chipBg) = !activa
+                ? ('INACTIVA', kTextMuted,         const Color(0xFFE9ECEF))
+                : stock <= 0
                 ? ('SIN STOCK', kDanger,           const Color(0xFFFFEBEE))
                 : stock <= stockMin
                     ? ('CRÍTICO',  kSemaforoRojo,    const Color(0xFFFFEBEE))
@@ -616,8 +755,14 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                 // Nombre presentación
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('$unidad', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    Text('${stock.toStringAsFixed(stock.truncateToDouble() == stock ? 0 : 2)} $unidad disponibles',
+                    Text(unidad, style: TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13,
+                        color: activa ? null : kTextMuted,
+                        decoration: activa ? null : TextDecoration.lineThrough)),
+                    Text(
+                        activa
+                            ? '${stock.toStringAsFixed(stock.truncateToDouble() == stock ? 0 : 2)} $unidad disponibles'
+                            : '${stock.toStringAsFixed(stock.truncateToDouble() == stock ? 0 : 2)} $unidad · no se presta ni cuenta en el total',
                         style: const TextStyle(fontSize: 11, color: kTextMuted)),
                   ]),
                 ),
@@ -628,6 +773,29 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                   child: Text(chipLabel,
                       style: TextStyle(color: chipColor, fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
+                if (puedeGestionar)
+                  PopupMenuButton<bool>(
+                    tooltip: 'Opciones de la presentación',
+                    icon: const Icon(Icons.more_vert, size: 18, color: kTextMuted),
+                    onSelected: (activar) => _cambiarEstadoPresentacion(p, activar),
+                    itemBuilder: (_) => [
+                      activa
+                          ? const PopupMenuItem(
+                              value: false,
+                              child: ListTile(
+                                dense: true,
+                                leading: Icon(Icons.block, color: kDanger, size: 18),
+                                title: Text('Desactivar'),
+                              ))
+                          : const PopupMenuItem(
+                              value: true,
+                              child: ListTile(
+                                dense: true,
+                                leading: Icon(Icons.restore, color: kSuccess, size: 18),
+                                title: Text('Reactivar'),
+                              )),
+                    ],
+                  ),
               ]),
             );
           }),

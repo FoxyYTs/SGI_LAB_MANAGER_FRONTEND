@@ -1,6 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
 
@@ -11,8 +13,17 @@ class _PresentacionRow {
   final TextEditingController stockCtrl;
   final TextEditingController fotoCtrl;
   String? unidadId;
+  /// Stock que tenía la presentación en el servidor cuando se cargó (o tras
+  /// el último guardado). El backend ya no acepta `stock_actual` "a ciegas":
+  /// para cambiarlo hay que mandar también este valor (`stock_anterior`) y
+  /// el servidor registra la diferencia como AJUSTE en la bitácora, o
+  /// responde 409 si alguien movió el stock mientras se editaba.
+  String? stockServidor;
+  /// false = desactivada en el servidor (no se presta ni cuenta en el total).
+  bool activa;
 
-  _PresentacionRow({this.id, String stock = '0', String foto = '', this.unidadId})
+  _PresentacionRow({this.id, String stock = '0', String foto = '', this.unidadId,
+      this.stockServidor, this.activa = true})
       : stockCtrl = TextEditingController(text: stock),
         fotoCtrl  = TextEditingController(text: foto);
 
@@ -63,9 +74,21 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
   // Presentaciones dinámicas
   final List<_PresentacionRow> _presentaciones = [];
   final List<String> _presentacionesEliminar   = []; // ids a borrar en edición
+  // Unidad de cada presentación marcada para borrar (para el aviso si el
+  // backend no deja borrarla por tener historial).
+  final Map<String, String> _unidadEliminada = {};
+  // Presentación cuyo estado activa/inactiva se está cambiando.
+  String? _cambiandoEstado;
 
   bool _loading   = true;
   bool _guardando = false;
+  // id del insumo ya creado en un intento anterior de "Guardar" que falló
+  // a mitad (p. ej. en las presentaciones): los reintentos hacen PATCH sobre
+  // él en vez de crear otro insumo duplicado.
+  String? _insumoIdGuardado;
+
+  static double? _numero(String? texto) =>
+      double.tryParse((texto ?? '').trim().replaceAll(',', '.'));
 
   bool get _esQuimico  => _tipoNombre == 'Químico';
   bool get _esMaterial => _tipoNombre == 'Implemento' || _tipoNombre == 'Vidriería';
@@ -92,17 +115,15 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
     final dio  = ApiClient.instance.authenticatedDio(auth.token);
     try {
       final results = await Future.wait([
-        dio.get('inventario/tipos/'),
-        dio.get('inventario/ubicaciones/'),
-        dio.get('inventario/unidades/'),
+        obtenerTodas(dio, 'inventario/tipos/'),
+        obtenerTodas(dio, 'inventario/ubicaciones/'),
+        obtenerTodas(dio, 'inventario/unidades/'),
       ]);
-      List<Map<String, dynamic>> parse(dynamic d) =>
-          List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
       if (!mounted) return;
       setState(() {
-        _tipos       = parse(results[0].data);
-        _ubicaciones = parse(results[1].data);
-        _unidades    = parse(results[2].data);
+        _tipos       = results[0];
+        _ubicaciones = results[1];
+        _unidades    = results[2];
         _loading     = false;
       });
       _precargarEdicion();
@@ -133,6 +154,8 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
         stock:    p['stock_actual']?.toString() ?? '0',
         foto:     p['foto'] as String? ?? '',
         unidadId: p['unidad_medida']?.toString(),
+        stockServidor: p['stock_actual']?.toString(),
+        activa:   p['activa'] != false,
       ));
     }
     if (_presentaciones.isEmpty) {
@@ -147,12 +170,85 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
   void _eliminarPresentacion(int index) {
     final row = _presentaciones[index];
-    if (row.id != null) _presentacionesEliminar.add(row.id!);
+    if (row.id != null) {
+      _presentacionesEliminar.add(row.id!);
+      _unidadEliminada[row.id!] = _nombreUnidad(row.unidadId);
+    }
     row.dispose();
     setState(() => _presentaciones.removeAt(index));
   }
 
+  String _nombreUnidad(String? unidadId) => _unidades
+          .firstWhere((u) => u['id'].toString() == unidadId,
+              orElse: () => const {})['nombre_unidad']
+          ?.toString() ??
+      '';
+
+  String get _insumoId =>
+      (widget.insumo?['id']?.toString() ?? _insumoIdGuardado)!;
+
+  /// Desactiva / reactiva YA (no espera a "Guardar") una presentación
+  /// existente. Es la alternativa a borrarla cuando tiene historial.
+  Future<void> _cambiarEstado(_PresentacionRow p, bool activar) async {
+    if (p.id == null || _cambiandoEstado != null) return;
+    setState(() => _cambiandoEstado = p.id);
+    try {
+      final dio = ApiClient.instance
+          .authenticatedDio(context.read<AuthProvider>().token);
+      await dio.post('inventario/lista/$_insumoId/presentaciones/${p.id}/'
+          '${activar ? 'activar' : 'desactivar'}/');
+      if (!mounted) return;
+      setState(() => p.activa = activar);
+      _snack(activar ? 'Presentación reactivada.' : 'Presentación desactivada.',
+          kSuccess);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      _snack('No se pudo cambiar la presentación: '
+          '${data is Map ? (data['error'] ?? data['detail'] ?? data.values.first) : e.message}',
+          kDanger);
+    } finally {
+      if (mounted) setState(() => _cambiandoEstado = null);
+    }
+  }
+
+  /// Borra una presentación marcada para eliminar. Si el backend responde
+  /// 409 (tiene préstamos o movimientos) ofrece desactivarla en su lugar.
+  /// Devuelve normalmente en ambos casos; otros errores se propagan.
+  Future<void> _borrarPresentacion(Dio dio, String insumoId, String presId) async {
+    try {
+      await dio.delete('inventario/lista/$insumoId/presentaciones/$presId/');
+    } on DioException catch (e) {
+      if (e.response?.statusCode != 409 || !mounted) rethrow;
+      final unidad = _unidadEliminada[presId] ?? '';
+      final desactivar = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('No se puede eliminar'),
+          content: Text(
+              'La presentación${unidad.isEmpty ? '' : ' "$unidad"'} tiene '
+              'préstamos o movimientos registrados y no se puede borrar.\n\n'
+              '¿Quieres desactivarla? Dejará de ofrecerse para préstamos y su '
+              'stock no contará en el total, pero conservará su historial.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Mantenerla activa')),
+            TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Desactivar',
+                    style: TextStyle(color: kDanger))),
+          ],
+        ),
+      );
+      if (desactivar == true) {
+        await dio.post('inventario/lista/$insumoId/presentaciones/$presId/desactivar/');
+      }
+    }
+  }
+
   Future<void> _guardar() async {
+    if (_guardando) return; // doble tap antes de que se deshabilite
     if (!_formKey.currentState!.validate()) return;
     if (_presentaciones.isEmpty) {
       _snack('Agrega al menos una presentación.', kDanger);
@@ -173,33 +269,49 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
 
     try {
       Map<String, dynamic> insumo;
-      if (widget.insumo != null) {
-        final id = widget.insumo!['id'];
-        final r  = await dio.patch('inventario/lista/$id/', data: body);
+      final idExistente = widget.insumo?['id']?.toString() ?? _insumoIdGuardado;
+      if (idExistente != null) {
+        final r  = await dio.patch('inventario/lista/$idExistente/', data: body);
         insumo   = Map<String, dynamic>.from(r.data);
       } else {
         final r = await dio.post('inventario/lista/', data: body);
         insumo  = Map<String, dynamic>.from(r.data);
+        _insumoIdGuardado = insumo['id']?.toString();
       }
 
       final id = insumo['id'];
 
-      // Eliminar presentaciones borradas
-      for (final presId in _presentacionesEliminar) {
-        await dio.delete('inventario/lista/$id/presentaciones/$presId/');
+      // Eliminar presentaciones borradas (se van quitando de la lista para
+      // que un reintento no las vuelva a borrar)
+      for (final presId in List<String>.from(_presentacionesEliminar)) {
+        await _borrarPresentacion(dio, id.toString(), presId);
+        _presentacionesEliminar.remove(presId);
       }
 
       // Guardar presentaciones
       for (final p in _presentaciones) {
-        final presBody = {
-          'stock_actual':  double.tryParse(p.stockCtrl.text) ?? 0,
+        final presBody = <String, dynamic>{
           'unidad_medida': p.unidadId,
           'foto':          p.fotoCtrl.text.trim().isEmpty ? null : p.fotoCtrl.text.trim(),
         };
+        final stock = _numero(p.stockCtrl.text) ?? 0;
         if (p.id != null) {
-          await dio.patch('inventario/lista/$id/presentaciones/${p.id}/', data: presBody);
+          // Solo se manda el stock si el usuario lo cambió, junto con el
+          // valor que vio (stock_anterior): el backend lo registra como
+          // AJUSTE o responde 409 si cambió mientras tanto.
+          if (p.stockServidor != null && _numero(p.stockServidor) != stock) {
+            presBody['stock_actual']   = stock;
+            presBody['stock_anterior'] = p.stockServidor;
+          }
+          final r = await dio.patch('inventario/lista/$id/presentaciones/${p.id}/', data: presBody);
+          p.stockServidor = r.data['stock_actual']?.toString() ?? p.stockServidor;
         } else {
-          await dio.post('inventario/lista/$id/presentaciones/', data: presBody);
+          presBody['stock_actual'] = stock;
+          final r = await dio.post('inventario/lista/$id/presentaciones/', data: presBody);
+          // Recordar el id: si algo posterior falla, el reintento hace PATCH
+          // en vez de crear la presentación (y su stock inicial) otra vez.
+          p.id = r.data['id']?.toString();
+          p.stockServidor = r.data['stock_actual']?.toString();
         }
       }
 
@@ -430,7 +542,38 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: kPrimary, fontSize: 13)),
+              if (!p.activa) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE9ECEF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text('INACTIVA',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.bold,
+                          color: kTextMuted)),
+                ),
+              ],
               const Spacer(),
+              if (p.id != null)
+                _cambiandoEstado == p.id
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: SizedBox(width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: kPrimary)))
+                    : TextButton.icon(
+                        onPressed: () => _cambiarEstado(p, !p.activa),
+                        icon: Icon(p.activa ? Icons.block : Icons.restore,
+                            size: 16,
+                            color: p.activa ? kTextMuted : kSuccess),
+                        label: Text(p.activa ? 'Desactivar' : 'Reactivar',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: p.activa ? kTextMuted : kSuccess)),
+                      ),
               if (_presentaciones.length > 1)
                 IconButton(
                   icon: const Icon(Icons.delete_outline, color: kDanger, size: 20),
@@ -450,8 +593,13 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: _deco('Stock actual *', Icons.numbers),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Requerido' : null,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Requerido';
+                  final n = _numero(v);
+                  if (n == null) return 'Número inválido';
+                  if (n < 0) return 'No puede ser negativo';
+                  return null;
+                },
               ),
             ),
             const SizedBox(width: 12),

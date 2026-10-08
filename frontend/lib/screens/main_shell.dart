@@ -15,6 +15,7 @@ import 'bitacora_screen.dart';
 import 'horario_screen.dart';
 import 'configuracion_screen.dart';
 import 'informes_screen.dart';
+import '../widgets/cerrar_sesion.dart';
 
 class _TabDef {
   final IconData icon;
@@ -336,7 +337,7 @@ class _MainShellState extends State<MainShell> {
         borderRadius: BorderRadius.circular(8),
         onTap: () async {
           final nav = Navigator.of(context);
-          await auth.logout();
+          if (!await cerrarSesionVoluntaria(context)) return;
           if (!mounted) return;
           nav.pushReplacementNamed('/');
         },
@@ -583,7 +584,7 @@ class _MainShellState extends State<MainShell> {
                   onTap: () async {
                     final nav = Navigator.of(context);
                     Navigator.pop(context);
-                    await auth.logout();
+                    if (!await cerrarSesionVoluntaria(context)) return;
                     if (!mounted) return;
                     nav.pushReplacementNamed('/');
                   },

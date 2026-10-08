@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
@@ -135,11 +136,10 @@ class _CrudListState extends State<_CrudList> {
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final resp = await dio.get(widget.endpoint);
+      final items = await obtenerTodas(dio, widget.endpoint);
       if (!mounted) return;
       setState(() {
-        final d  = resp.data;
-        _items   = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _items   = items;
         _loading = false;
       });
     } catch (e) {
@@ -457,15 +457,13 @@ class _DocentesTabState extends State<_DocentesTab> {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       final results = await Future.wait([
-        dio.get('academico/programas/'),
-        dio.get('academico/asignaturas/'),
+        obtenerTodas(dio, 'academico/programas/'),
+        obtenerTodas(dio, 'academico/asignaturas/'),
       ]);
       if (mounted) {
-        final dp = results[0].data;
-        final da = results[1].data;
         setState(() {
-          _programas   = List<Map<String, dynamic>>.from(dp is List ? dp : (dp['results'] ?? []));
-          _asignaturas = List<Map<String, dynamic>>.from(da is List ? da : (da['results'] ?? []));
+          _programas   = results[0];
+          _asignaturas = results[1];
         });
       }
     } catch (_) {}
@@ -679,15 +677,13 @@ class _GuiasTabState extends State<_GuiasTab> {
       final auth    = context.read<AuthProvider>();
       final dio     = ApiClient.instance.authenticatedDio(auth.token);
       final results = await Future.wait([
-        dio.get('academico/asignaturas/'),
-        dio.get('inventario/lista/'),
+        obtenerTodas(dio, 'academico/asignaturas/'),
+        obtenerTodas(dio, 'inventario/lista/'),
       ]);
       if (mounted) {
-        final da = results[0].data;
-        final di = results[1].data;
         setState(() {
-          _asignaturas = List<Map<String, dynamic>>.from(da is List ? da : (da['results'] ?? []));
-          _insumos     = List<Map<String, dynamic>>.from(di is List ? di : (di['results'] ?? []));
+          _asignaturas = results[0];
+          _insumos     = results[1];
         });
       }
     } catch (_) {}
@@ -700,11 +696,10 @@ class _GuiasTabState extends State<_GuiasTab> {
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final resp = await dio.get('academico/guias/');
+      final guias = await obtenerTodas(dio, 'academico/guias/');
       if (!mounted) return;
-      final d = resp.data;
       setState(() {
-        _guias = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+        _guias = guias;
         _loadingGuias = false;
       });
     } catch (_) {
@@ -845,9 +840,8 @@ class _GuiasTabState extends State<_GuiasTab> {
     List<Map<String, dynamic>> items = [];
     String? loadError;
     try {
-      final resp = await dio.get('academico/insumos-guia/', queryParameters: {'guia': guiaId});
-      final d = resp.data;
-      items = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
+      items = await obtenerTodas(dio, 'academico/insumos-guia/',
+          queryParameters: {'guia': guiaId});
     } catch (_) {
       loadError = 'No se pudieron cargar los insumos requeridos';
     }
@@ -1191,15 +1185,8 @@ class _GuiasTabState extends State<_GuiasTab> {
             Expanded(
               child: LayoutBuilder(builder: (ctx, constraints) {
                 final cols = constraints.maxWidth > 600 ? 2 : 1;
-                return GridView.builder(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: cols,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    mainAxisExtent: 76,
-                  ),
-                  itemCount: filtradas.length,
-                  itemBuilder: (ctx, i) {
+                final movil = cols == 1;
+                Widget tarjeta(BuildContext ctx, int i) {
                     final item          = filtradas[i];
                     final guiaId        = item['id'].toString();
                     final nombre        = item['nombre_guia'] ?? '';
@@ -1219,8 +1206,11 @@ class _GuiasTabState extends State<_GuiasTab> {
                       icon: Icons.menu_book_outlined,
                       title: nombre,
                       subtitle: '$subtitleBase · $insumoLabel',
+                      accionesAbajo: movil,
                       trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisSize: movil ? MainAxisSize.max : MainAxisSize.min,
+                        mainAxisAlignment:
+                            movil ? MainAxisAlignment.spaceEvenly : MainAxisAlignment.start,
                         children: [
                           if (url.isNotEmpty)
                             IconButton(
@@ -1249,7 +1239,25 @@ class _GuiasTabState extends State<_GuiasTab> {
                         ],
                       ),
                     );
-                  },
+                }
+                // Móvil: lista con alto natural (título en 2 líneas y
+                // acciones abajo); escritorio: grilla de tarjetas compactas.
+                if (movil) {
+                  return ListView.separated(
+                    itemCount: filtradas.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: tarjeta,
+                  );
+                }
+                return GridView.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    mainAxisExtent: 76,
+                  ),
+                  itemCount: filtradas.length,
+                  itemBuilder: tarjeta,
                 );
               }),
             ),
@@ -1378,12 +1386,9 @@ class _AsignaturasTabState extends State<_AsignaturasTab> {
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final resp = await dio.get('academico/areas/');
+      final areas = await obtenerTodas(dio, 'academico/areas/');
       if (mounted) {
-        final d = resp.data;
-        setState(() {
-          _areas = List<Map<String, dynamic>>.from(d is List ? d : (d['results'] ?? []));
-        });
+        setState(() => _areas = areas);
       }
     } catch (_) {}
   }
@@ -1499,6 +1504,9 @@ class _ItemCard extends StatelessWidget {
   final Color?   subtitleColor;
   final Widget   trailing;
   final Widget?  extra;
+  /// Móvil: el título ocupa todo el ancho (hasta 2 líneas) y [trailing]
+  /// pasa a una fila de acciones debajo, en vez de comerse el ancho.
+  final bool     accionesAbajo;
 
   const _ItemCard({
     required this.icon,
@@ -1507,10 +1515,12 @@ class _ItemCard extends StatelessWidget {
     this.subtitleColor,
     required this.trailing,
     this.extra,
+    this.accionesAbajo = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (accionesAbajo) return _buildAccionesAbajo();
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1557,6 +1567,44 @@ class _ItemCard extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on _ItemCard {
+  Widget _buildAccionesAbajo() => Card(
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: const Color(0x1A007BFF),
+                child: Icon(icon, color: kPrimary, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle,
+                        style: TextStyle(fontSize: 12, color: subtitleColor ?? kTextMuted),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                  ],
+                ]),
+              ),
+            ]),
+            const Divider(height: 16),
+            trailing,
+          ]),
+        ),
+      );
 }
 
 // ─────────────────────────────────────────

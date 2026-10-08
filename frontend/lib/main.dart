@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:workmanager/workmanager.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -21,6 +22,7 @@ import 'screens/insumo_form_screen.dart';
 import 'screens/mi_perfil_screen.dart';
 import 'screens/actualizacion_requerida_screen.dart';
 import 'screens/politica_privacidad_screen.dart';
+import 'core/api/api_client.dart';
 import 'core/theme/colors.dart';
 import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
@@ -34,12 +36,19 @@ import 'services/update_service.dart' show initAppVersion, kAppVersion;
 /// Debe ser top-level y decorado con @pragma — requisito de Flutter/Dart.
 @pragma('vm:entry-point')
 Future<void> _fcmBackgroundHandler(RemoteMessage message) async {
+  // Si el mensaje trae `notification`, Android ya la muestra solo en la
+  // bandeja cuando la app está en segundo plano/cerrada: mostrarla aquí
+  // también la duplicaba. Solo se pinta a mano un mensaje data-only.
+  if (message.notification != null) return;
+  final title = message.data['title'] as String?;
+  final body  = message.data['body']  as String?;
+  if (title == null && body == null) return;
   await Firebase.initializeApp();
   await NotificationService.init();
   await NotificationService.show(
     id: message.hashCode,
-    title: message.notification?.title ?? 'SGI LAB MANAGER',
-    body:  message.notification?.body  ?? '',
+    title: title ?? 'SGI LAB MANAGER',
+    body:  body  ?? '',
   );
 }
 
@@ -96,12 +105,9 @@ void main() async {
     await SyncService.instance.init(null);
   }
 
-  // Notificaciones y tareas de fondo solo en Android
-  if (!kIsWeb && auth.isAuthenticated && Platform.isAndroid) {
-    await NotificationService.init();
-    await NotificationService.requestPermission();
-    await registerBackgroundTasks();
-  }
+  // Notificaciones, tareas de fondo y token FCM (solo Android; best-effort).
+  // El FCM se registra también al restaurar sesión, no solo tras login.
+  await auth.iniciarServiciosDispositivo();
 
   LogService.log('Iniciando UI...');
   runApp(
@@ -125,6 +131,15 @@ class MyApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'SGI LAB MANAGER',
       debugShowCheckedModeBanner: false,
+      // Español (Colombia) para los textos internos de Material: selectores
+      // de fecha/hora, rangos de fechas, tooltips, etc.
+      locale: const Locale('es', 'CO'),
+      supportedLocales: const [Locale('es', 'CO'), Locale('es')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: kPrimary),
         primaryColor: kPrimary,
@@ -180,9 +195,18 @@ class _AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    if (auth.isAuthenticated) return const MainShell();
-    return const LoginScreen();
+    // Un 426 (versión mínima) puede llegar antes de runApp — p. ej. en el
+    // refresco de cargarSesion — cuando aún no hay navigator al que empujar la
+    // ruta: ApiClient solo levanta la bandera y aquí se muestra la pantalla.
+    return ValueListenableBuilder<bool>(
+      valueListenable: ApiClient.instance.requiereActualizacion,
+      builder: (context, requiere, _) {
+        if (requiere) return const ActualizacionRequeridaScreen();
+        final auth = context.watch<AuthProvider>();
+        if (auth.isAuthenticated) return const MainShell();
+        return const LoginScreen();
+      },
+    );
   }
 }
 

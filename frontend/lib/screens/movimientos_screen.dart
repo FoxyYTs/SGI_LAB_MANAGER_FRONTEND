@@ -3,11 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
+import '../core/presentaciones.dart';
+import '../core/rango_fechas.dart';
+import '../widgets/filtro_rango_fechas.dart';
+import '../core/uuid_v4.dart';
 import '../core/cache/cache_service.dart';
 import '../core/sync/sync_service.dart';
+import '../core/sync/sync_errores.dart';
 import '../providers/auth_provider.dart';
 import '../providers/inventario_provider.dart';
 import '../models/insumo_model.dart';
@@ -20,14 +26,53 @@ class MovimientosContent extends StatefulWidget {
 }
 
 class _MovimientosContentState extends State<MovimientosContent> {
-  static const _cacheKey = 'prestamos';
+  String get _cacheKey => 'prestamos_$_filtroEstado';
+
+  /// Estados "activos": siempre se cargan COMPLETOS (todas las páginas),
+  /// porque son los que el personal tiene que gestionar y no pueden quedar
+  /// ocultos detrás de la primera página.
+  static const _estadosActivos   = 'PENDIENTE,ACTIVO';
+  /// Historial: crece sin límite, se carga por páginas ("Cargar más").
+  static const _estadosHistorial = 'DEVUELTO,RECHAZADO';
 
   List<Map<String, dynamic>> _prestamos   = [];
   bool      _cargando    = true;
+  // Paginación del historial (DEVUELTO/RECHAZADO) — ver _fetchPrestamos.
+  int       _paginaHistorial = 1;
+  bool      _historialHayMas = false;
+  bool      _cargandoMas     = false;
   bool      _mostrarForm = false;
   bool      _desdeCache  = false;
   DateTime? _cachedAt;
   String    _filtroEstado = 'Todos';
+  // Rango de fechas de solicitud (?desde/?hasta). Solo aplica en las vistas
+  // de historial (Todos / DEVUELTO / RECHAZADO); en PENDIENTE/ACTIVO se
+  // ignora para no esconder solicitudes que hay que gestionar.
+  DateTimeRange? _rango;
+  // Se incrementa en cada carga para descartar respuestas de un filtro viejo.
+  int       _version = 0;
+
+  Map<String, String> get _paramsRango =>
+      _historialDelFiltro == null ? const {} : paramsRango(_rango);
+
+  // Préstamos con una acción (aprobar/rechazar/agregar ítems) en curso: un
+  // doble tap en "Aprobar" mandaba dos POST; el segundo respondía error o,
+  // si se encolaba offline, quedaba duplicado en la cola de sync.
+  final Set<String> _enCurso = {};
+
+  /// Marca `id` como ocupado mientras corre `accion`. Si ya estaba ocupado
+  /// no hace nada (devuelve sin ejecutar).
+  Future<void> _conGuarda(String id, Future<void> Function() accion) async {
+    if (_enCurso.contains(id)) return;
+    setState(() => _enCurso.add(id));
+    try {
+      await accion();
+    } finally {
+      if (mounted) {
+        setState(() => _enCurso.remove(id));
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -41,33 +86,134 @@ class _MovimientosContentState extends State<MovimientosContent> {
     });
   }
 
+  /// Estados del historial que corresponden al filtro actual (o null si el
+  /// filtro es un estado activo y no hay historial que paginar).
+  String? get _historialDelFiltro => switch (_filtroEstado) {
+    'Todos'                  => _estadosHistorial,
+    'DEVUELTO' || 'RECHAZADO' => _filtroEstado,
+    _                        => null,
+  };
+
+  /// Carga los préstamos filtrando por estado EN EL SERVIDOR (`?estado=`).
+  /// El listado está paginado (50 por página): antes se leía solo la
+  /// primera página y se filtraba en el cliente, así que los PENDIENTE/
+  /// ACTIVO antiguos quedaban invisibles.
+  ///  - PENDIENTE / ACTIVO: todas las páginas.
+  ///  - DEVUELTO / RECHAZADO: primera página + botón "Cargar más".
+  ///  - Todos: activos completos + primera página del historial.
   Future<void> _fetchPrestamos() async {
+    final version = ++_version;
     setState(() => _cargando = true);
+    final filtro = _filtroEstado;
+    final rango  = _paramsRango;
     try {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
-      final r    = await dio.get('operaciones/prestamos/');
-      final data = r.data;
-      final lista = List<Map<String, dynamic>>.from(
-          data is List ? data : (data['results'] ?? []));
-      await CacheService.instance.set(_cacheKey, lista);
-      if (mounted) setState(() { _prestamos = lista; _desdeCache = false; _cachedAt = null; _cargando = false; });
+      final activos = switch (filtro) {
+        'Todos'                => _estadosActivos,
+        'PENDIENTE' || 'ACTIVO' => filtro,
+        _                      => null,
+      };
+      final historial = _historialDelFiltro;
+      final resultados = await Future.wait([
+        if (activos != null)
+          obtenerTodas(dio, 'operaciones/prestamos/',
+              queryParameters: {'estado': activos, ...rango})
+              .then((l) => PaginaResultado(l, hayMas: false)),
+        if (historial != null)
+          obtenerPagina(dio, 'operaciones/prestamos/',
+              queryParameters: {'estado': historial, ...rango}),
+      ]);
+      final lista = _ordenar([for (final r in resultados) ...r.items]);
+      final hayMas = historial != null && resultados.last.hayMas;
+      // La caché offline guarda solo las vistas sin rango de fechas.
+      if (rango.isEmpty) await CacheService.instance.set(_cacheKey, lista);
+      if (mounted && version == _version) {
+        setState(() {
+          _prestamos       = lista;
+          _paginaHistorial = 1;
+          _historialHayMas = hayMas;
+          _desdeCache      = false;
+          _cachedAt        = null;
+          _cargando        = false;
+        });
+      }
     } catch (_) {
+      if (rango.isNotEmpty) {
+        // Sin red no se puede filtrar por fechas: no mostrar la caché sin
+        // filtrar como si fuera el resultado del rango.
+        if (mounted && version == _version) {
+          setState(() {
+            _prestamos       = [];
+            _historialHayMas = false;
+            _desdeCache      = false;
+            _cargando        = false;
+          });
+          _showError('No se pudo filtrar por fechas: revisa la conexión.');
+        }
+        return;
+      }
       final cached = await CacheService.instance.get(_cacheKey);
-      if (mounted) setState(() {
-        _prestamos  = cached != null
-            ? List<Map<String, dynamic>>.from(cached.data as List)
-            : [];
-        _desdeCache = cached != null;
-        _cachedAt   = cached?.cachedAt;
-        _cargando   = false;
-      });
+      if (mounted && version == _version) {
+        setState(() {
+          _prestamos  = cached != null
+              ? List<Map<String, dynamic>>.from(cached.data as List)
+              : [];
+          _historialHayMas = false;
+          _desdeCache = cached != null;
+          _cachedAt   = cached?.cachedAt;
+          _cargando   = false;
+        });
+      }
     }
+  }
+
+  /// Trae la siguiente página del historial y la añade a la lista.
+  Future<void> _cargarMasHistorial() async {
+    final historial = _historialDelFiltro;
+    if (historial == null || _cargandoMas) return;
+    final version = _version;
+    setState(() => _cargandoMas = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final pag  = await obtenerPagina(dio, 'operaciones/prestamos/',
+          queryParameters: {'estado': historial, ..._paramsRango},
+          pagina: _paginaHistorial + 1);
+      if (!mounted || version != _version) return;
+      final vistos = {for (final p in _prestamos) p['id']};
+      setState(() {
+        _prestamos = _ordenar([
+          ..._prestamos,
+          ...pag.items.where((p) => !vistos.contains(p['id'])),
+        ]);
+        _paginaHistorial++;
+        _historialHayMas = pag.hayMas;
+      });
+    } on DioException catch (e) {
+      _showError('No se pudieron cargar más préstamos: ${_mensajeDio(e)}');
+    } finally {
+      if (mounted) setState(() => _cargandoMas = false);
+    }
+  }
+
+  /// Más reciente primero (mismo orden que el servidor, `-fecha_solicitud`).
+  static List<Map<String, dynamic>> _ordenar(List<Map<String, dynamic>> l) {
+    final ordenada = [...l];
+    ordenada.sort((a, b) {
+      final fa = DateTime.tryParse(a['fecha_solicitud']?.toString() ?? '');
+      final fb = DateTime.tryParse(b['fecha_solicitud']?.toString() ?? '');
+      if (fa == null || fb == null) return 0;
+      return fb.compareTo(fa);
+    });
+    return ordenada;
   }
 
   bool get _estaOnline => kIsWeb || SyncService.instance.online;
 
-  Future<void> _aprobar(String id) async {
+  Future<void> _aprobar(String id) => _conGuarda(id, () => _aprobarSinGuarda(id));
+
+  Future<void> _aprobarSinGuarda(String id) async {
     if (!_estaOnline) {
       await SyncService.instance.encolar('APROBAR_PRESTAMO', {'prestamo_id': id});
       _showInfo('Sin conexión — la aprobación se enviará cuando vuelva la red.');
@@ -79,6 +225,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
       await dio.post('operaciones/prestamos/$id/aprobar/');
       _fetchPrestamos();
     } on DioException catch (e) {
+      if (!kIsWeb && esFalloDeRed(e)) {
+        await SyncService.instance.encolar('APROBAR_PRESTAMO', {'prestamo_id': id});
+        _showInfo('Sin conexión — la aprobación se enviará cuando vuelva la red.');
+        return;
+      }
       _showError('Error al aprobar: ${_mensajeDio(e)}');
     } catch (e) {
       _showError('Error al aprobar: $e');
@@ -86,41 +237,52 @@ class _MovimientosContentState extends State<MovimientosContent> {
   }
 
   /// Abre el diálogo de selección de insumo(s) y, si el usuario confirma,
-  /// los agrega al préstamo `id` vía `POST .../agregar-item/` (uno por
-  /// ítem — el endpoint solo acepta una línea a la vez). Existe para
+  /// los agrega al préstamo `id` con UN solo `POST .../agregar-item/`
+  /// (`{"items": [...]}`): el backend los crea todos o ninguno en una
+  /// transacción. Antes se mandaba un POST por ítem y, si fallaba a mitad,
+  /// al reintentar se duplicaban los que sí habían entrado. Existe para
   /// completar préstamos que llegaron del formulario público de Google
   /// Form sin ítems estructurados (solo texto libre en observaciones).
   Future<void> _agregarItem(String id) async {
+    if (_enCurso.contains(id)) return;
     final insumos = context.read<InventarioProvider>().insumos;
-    final items = await showDialog<List<Map<String, String?>>>(
+    final items = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       builder: (_) => _AgregarItemDialog(insumos: insumos),
     );
     if (items == null || items.isEmpty || !mounted) return;
 
-    try {
-      final auth = context.read<AuthProvider>();
-      final dio = ApiClient.instance.authenticatedDio(auth.token);
-      for (final it in items) {
+    await _conGuarda(id, () async {
+      try {
+        final auth = context.read<AuthProvider>();
+        final dio = ApiClient.instance.authenticatedDio(auth.token);
         await dio.post('operaciones/prestamos/$id/agregar-item/', data: {
-          'insumo': it['insumoId'],
-          'cantidad_prestada': double.tryParse(it['cantidad'] ?? '') ?? 1,
+          'items': [
+            for (final it in items)
+              {
+                'insumo': it['insumoId'],
+                if (it['presentacionId'] != null) 'presentacion': it['presentacionId'],
+                'cantidad_prestada': it['cantidad'],
+              },
+          ],
         });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Ítem(s) agregado(s) al préstamo.'),
+              backgroundColor: kSuccess));
+          _fetchPrestamos();
+        }
+      } on DioException catch (e) {
+        _showError('Error al agregar ítem: ${_mensajeDio(e)}');
+      } catch (e) {
+        _showError('Error al agregar ítem: $e');
       }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Ítem(s) agregado(s) al préstamo.'),
-            backgroundColor: kSuccess));
-        _fetchPrestamos();
-      }
-    } on DioException catch (e) {
-      _showError('Error al agregar ítem: ${_mensajeDio(e)}');
-    } catch (e) {
-      _showError('Error al agregar ítem: $e');
-    }
+    });
   }
 
-  Future<void> _rechazar(String id) async {
+  Future<void> _rechazar(String id) => _conGuarda(id, () => _rechazarSinGuarda(id));
+
+  Future<void> _rechazarSinGuarda(String id) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -150,6 +312,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
       await dio.post('operaciones/prestamos/$id/rechazar/');
       _fetchPrestamos();
     } on DioException catch (e) {
+      if (!kIsWeb && esFalloDeRed(e)) {
+        await SyncService.instance.encolar('RECHAZAR_PRESTAMO', {'prestamo_id': id});
+        _showInfo('Sin conexión — el rechazo se enviará cuando vuelva la red.');
+        return;
+      }
       _showError('Error al rechazar: ${_mensajeDio(e)}');
     } catch (e) {
       _showError('Error al rechazar: $e');
@@ -165,6 +332,7 @@ class _MovimientosContentState extends State<MovimientosContent> {
   String _mensajeDio(DioException e) {
     final data = e.response?.data;
     if (data is Map && data['error'] != null) return data['error'].toString();
+    if (esFalloDeRed(e)) return 'No se pudo conectar con el servidor. Revisa tu conexión.';
     return e.message ?? e.toString();
   }
 
@@ -260,9 +428,19 @@ class _MovimientosContentState extends State<MovimientosContent> {
             scrollDirection: Axis.horizontal,
             child: Row(children: [
               ..._buildFiltroChips(),
+              if (_historialDelFiltro != null) ...[
+                const SizedBox(width: 4),
+                FiltroRangoFechas(
+                  rango: _rango,
+                  onChanged: (r) {
+                    setState(() => _rango = r);
+                    _fetchPrestamos();
+                  },
+                ),
+              ],
               const SizedBox(width: 16),
               Text(
-                '${filtrados.length} préstamos',
+                '${filtrados.length}${_historialHayMas ? '+' : ''} préstamos',
                 style: const TextStyle(fontSize: 12, color: kTextMuted),
               ),
             ]),
@@ -287,10 +465,13 @@ class _MovimientosContentState extends State<MovimientosContent> {
                 : filtrados.isEmpty
                     ? _buildEmpty()
                     : ListView.separated(
-                        itemCount: filtrados.length,
+                        itemCount: filtrados.length + (_historialHayMas ? 1 : 0),
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (ctx, i) => _PrestamoCard(
+                        itemBuilder: (ctx, i) => i >= filtrados.length
+                            ? _buildCargarMas()
+                            : _PrestamoCard(
                           prestamo: filtrados[i],
+                          ocupado: _enCurso.contains(filtrados[i]['id']?.toString() ?? ''),
                           puedeGestionar: auth.can(Perm.prestamosGestionar),
                           onAprobar: _aprobar,
                           onRechazar: _rechazar,
@@ -333,7 +514,11 @@ class _MovimientosContentState extends State<MovimientosContent> {
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: GestureDetector(
-          onTap: () => setState(() => _filtroEstado = estado),
+          onTap: () {
+            if (_filtroEstado == estado) return;
+            setState(() => _filtroEstado = estado);
+            _fetchPrestamos();
+          },
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
@@ -355,13 +540,30 @@ class _MovimientosContentState extends State<MovimientosContent> {
     }).toList();
   }
 
+  Widget _buildCargarMas() => Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: _cargandoMas
+              ? const SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary))
+              : OutlinedButton.icon(
+                  onPressed: _cargarMasHistorial,
+                  icon: const Icon(Icons.expand_more, size: 18),
+                  label: const Text('Cargar más del historial'),
+                ),
+        ),
+      );
+
   Widget _buildEmpty() => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Icon(Icons.swap_horiz_outlined,
               size: 64, color: kTextMuted),
           const SizedBox(height: 12),
-          const Text('Sin préstamos registrados',
-              style: TextStyle(color: kTextMuted, fontSize: 16)),
+          Text(
+              _rango != null && _historialDelFiltro != null
+                  ? 'Sin préstamos en ${etiquetaRango(_rango!)}'
+                  : 'Sin préstamos registrados',
+              style: const TextStyle(color: kTextMuted, fontSize: 16)),
           const SizedBox(height: 8),
           ElevatedButton.icon(
             icon: const Icon(Icons.add),
@@ -396,6 +598,12 @@ class _PrestamoFormState extends State<_PrestamoForm> {
   final List<_ItemPrestamo> _items = [_ItemPrestamo()];
   bool _guardando = false;
 
+  // Clave de idempotencia del préstamo que se está llenando: se reutiliza
+  // en cada reintento (el cliente corta a los 15 s y, si el servidor ya lo
+  // había creado, reenviar duplicaba el préstamo). Se renueva solo tras un
+  // registro exitoso.
+  String _clientRequestId = uuidV4();
+
   @override
   void dispose() {
     _nitCtrl.dispose();
@@ -407,6 +615,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
   }
 
   Future<void> _registrar() async {
+    if (_guardando) return; // doble tap antes de que el botón se deshabilite
     if (!_formKey.currentState!.validate()) return;
     if (_items.any((i) => i.insumoId == null)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -424,15 +633,18 @@ class _PrestamoFormState extends State<_PrestamoForm> {
         'nombre_estudiante': _nombreCtrl.text.trim(),
         'correo_estudiante': _correoCtrl.text.trim(),
         'observaciones':     _obsCtrl.text.trim(),
+        'client_request_id': _clientRequestId,
         'detalles': _items
             .where((i) => i.insumoId != null)
             .map((i) => {
                   'insumo': i.insumoId,
+                  if (i.presentacionId != null) 'presentacion': i.presentacionId,
                   'cantidad_prestada':
                       double.tryParse(i.cantCtrl.text) ?? 1,
                 })
             .toList(),
       });
+      _clientRequestId = uuidV4();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Préstamo registrado correctamente.'),
@@ -565,13 +777,14 @@ class _PrestamoFormState extends State<_PrestamoForm> {
     final item = _items[i];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         Expanded(
           flex: 3,
           child: _InsumoSelectorButton(
             insumos: insumos,
             selectedId: item.insumoId,
-            onSelected: (id) => setState(() => item.insumoId = id),
+            onSelected: (ins) => setState(() => item.elegir(ins)),
           ),
         ),
         const SizedBox(width: 8),
@@ -597,6 +810,12 @@ class _PrestamoFormState extends State<_PrestamoForm> {
             }),
           ),
       ]),
+      _SelectorPresentacion(
+        item: item,
+        insumos: insumos,
+        onChanged: (v) => setState(() => item.presentacionId = v),
+      ),
+      ]),
     );
   }
 
@@ -614,8 +833,74 @@ class _PrestamoFormState extends State<_PrestamoForm> {
 
 class _ItemPrestamo {
   String? insumoId;
+  /// null = el backend usa la primera presentación activa (p. ej. si el
+  /// insumo viene de la caché offline y no se conocen sus presentaciones).
+  String? presentacionId;
   final cantCtrl = TextEditingController(text: '1');
+
+  void elegir(Insumo? ins) {
+    insumoId = ins?.id;
+    presentacionId =
+        presentacionPorDefecto(ins?.presentaciones)?['id']?.toString();
+  }
+
   void dispose() => cantCtrl.dispose();
+}
+
+// ── Selector de presentación (solo si el insumo tiene varias activas) ────────
+
+class _SelectorPresentacion extends StatelessWidget {
+  final _ItemPrestamo item;
+  final List<Insumo> insumos;
+  final ValueChanged<String?> onChanged;
+
+  const _SelectorPresentacion({
+    required this.item,
+    required this.insumos,
+    required this.onChanged,
+  });
+
+  static String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  @override
+  Widget build(BuildContext context) {
+    if (item.insumoId == null) return const SizedBox.shrink();
+    final ins = insumos.where((i) => i.id == item.insumoId).firstOrNull;
+    final activas = presentacionesActivas(ins?.presentaciones);
+    if (activas.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('pres_${item.insumoId}'),
+        initialValue: item.presentacionId,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Presentación *',
+          prefixIcon: Icon(Icons.science_outlined, color: kPrimary, size: 18),
+          border: OutlineInputBorder(),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        ),
+        items: activas.map((p) {
+          final stock = double.tryParse(p['stock_actual']?.toString() ?? '');
+          final unidad = p['unidad_nombre']?.toString() ?? '';
+          return DropdownMenuItem(
+            value: p['id']?.toString(),
+            child: Text(
+              stock == null ? unidad : '$unidad — stock ${_fmt(stock)}',
+              style: TextStyle(
+                  fontSize: 13,
+                  color: (stock ?? 1) <= 0 ? kDanger : null),
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }).toList(),
+        onChanged: onChanged,
+        validator: (v) => v == null ? 'Elige la presentación' : null,
+      ),
+    );
+  }
 }
 
 // ── Botón de selección de insumo con búsqueda ─────────────────────────────────
@@ -623,7 +908,7 @@ class _ItemPrestamo {
 class _InsumoSelectorButton extends StatelessWidget {
   final List<Insumo> insumos;
   final String? selectedId;
-  final ValueChanged<String?> onSelected;
+  final ValueChanged<Insumo?> onSelected;
 
   const _InsumoSelectorButton({
     required this.insumos,
@@ -648,7 +933,7 @@ class _InsumoSelectorButton extends StatelessWidget {
           context: context,
           builder: (_) => _SelectorInsumoDialog(insumos: insumos),
         );
-        if (sel != null) onSelected(sel.id);
+        if (sel != null) onSelected(sel);
       },
       borderRadius: BorderRadius.circular(4),
       child: Container(
@@ -699,6 +984,11 @@ class _SelectorInsumoDialogState extends State<_SelectorInsumoDialog> {
   Widget build(BuildContext context) {
     final query = normalizarBusqueda(_query);
     final filtrados = widget.insumos
+        // Sin presentaciones activas no hay nada que prestar (si no se
+        // conocen — caché offline — se muestra y decide el backend).
+        .where((i) =>
+            i.presentaciones == null ||
+            presentacionesActivas(i.presentaciones).isNotEmpty)
         .where((i) =>
             normalizarBusqueda(i.nombre).contains(query) ||
             normalizarBusqueda(i.tipo).contains(query))
@@ -773,6 +1063,9 @@ class _SelectorInsumoDialogState extends State<_SelectorInsumoDialog> {
 class _PrestamoCard extends StatelessWidget {
   final Map<String, dynamic> prestamo;
   final bool puedeGestionar;
+  /// true mientras hay una acción en curso sobre este préstamo: deshabilita
+  /// los botones para evitar dobles envíos.
+  final bool ocupado;
   final void Function(String) onAprobar;
   final void Function(String) onRechazar;
   final VoidCallback onDevuelto;
@@ -781,11 +1074,19 @@ class _PrestamoCard extends StatelessWidget {
   const _PrestamoCard({
     required this.prestamo,
     required this.puedeGestionar,
+    this.ocupado = false,
     required this.onAprobar,
     required this.onRechazar,
     required this.onDevuelto,
     required this.onAgregarItem,
   });
+
+  /// true si la línea ya tuvo alguna devolución (pendiente ≠ prestado).
+  static bool _tieneDevolucionParcial(Map d) {
+    final pend  = double.tryParse(d['pendiente_devolucion']?.toString() ?? '');
+    final prest = double.tryParse(d['cantidad_prestada']?.toString() ?? '');
+    return pend != null && prest != null && pend != prest;
+  }
 
   static const _estadoColors = {
     'PENDIENTE': kWarning,
@@ -886,9 +1187,9 @@ class _PrestamoCard extends StatelessWidget {
                         style: const TextStyle(fontSize: 13))),
                     Text('×${d['cantidad_prestada']}',
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                    if ((d['pendiente_devolucion'] != null &&
-                        double.tryParse(d['pendiente_devolucion'].toString()) !=
-                            d['cantidad_prestada']))
+                    // DRF envía los Decimal como texto ("2.00"): hay que
+                    // comparar ambos como double, no double contra String.
+                    if (_tieneDevolucionParcial(d))
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
                         child: Text('(pend. ${d['pendiente_devolucion']})',
@@ -915,7 +1216,7 @@ class _PrestamoCard extends StatelessWidget {
                     icon: const Icon(Icons.add_circle_outline, size: 16),
                     label: const Text('Agregar ítem', style: TextStyle(fontSize: 13)),
                     style: TextButton.styleFrom(foregroundColor: kPrimary),
-                    onPressed: () => onAgregarItem(id),
+                    onPressed: ocupado ? null : () => onAgregarItem(id),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -928,7 +1229,7 @@ class _PrestamoCard extends StatelessWidget {
                           foregroundColor: kDanger,
                           side: const BorderSide(color: kDanger),
                           padding: const EdgeInsets.symmetric(vertical: 8)),
-                      onPressed: () => onRechazar(id),
+                      onPressed: ocupado ? null : () => onRechazar(id),
                       child: const Text('Rechazar', style: TextStyle(fontSize: 13)),
                     ),
                   ),
@@ -939,7 +1240,7 @@ class _PrestamoCard extends StatelessWidget {
                           backgroundColor: kPrimary, foregroundColor: Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 8)),
-                      onPressed: () => onAprobar(id),
+                      onPressed: ocupado ? null : () => onAprobar(id),
                       child: const Text('Aprobar', style: TextStyle(fontSize: 13)),
                     ),
                   ),
@@ -1060,6 +1361,10 @@ class _PrestamoCard extends StatelessWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Error: $e'), backgroundColor: kDanger));
+        // Se manda un POST por línea: si falló a mitad, las primeras ya
+        // quedaron registradas. Recargar para que un reintento parta de los
+        // pendientes reales y no vuelva a devolver lo ya devuelto.
+        onDevuelto();
       }
     }
   }
@@ -1076,7 +1381,28 @@ class _AgregarItemDialog extends StatefulWidget {
 }
 
 class _AgregarItemDialogState extends State<_AgregarItemDialog> {
+  final _formKey = GlobalKey<FormState>();
   final List<_ItemPrestamo> _items = [_ItemPrestamo()];
+
+  /// Cantidad válida (> 0) o null. Acepta coma decimal ("1,5").
+  static double? _cantidadValida(String? texto) {
+    final v = double.tryParse((texto ?? '').trim().replaceAll(',', '.'));
+    return (v != null && v > 0) ? v : null;
+  }
+
+  void _confirmar() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.pop(
+        context,
+        _items
+            .where((i) => i.insumoId != null)
+            .map((i) => <String, dynamic>{
+                  'insumoId': i.insumoId,
+                  'presentacionId': i.presentacionId,
+                  'cantidad': _cantidadValida(i.cantCtrl.text),
+                })
+            .toList());
+  }
 
   @override
   void dispose() {
@@ -1091,7 +1417,9 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
           style: TextStyle(color: kPrimary, fontSize: 16)),
       content: SizedBox(
         width: 420,
-        child: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1103,6 +1431,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
               ),
             ],
           ),
+          ),
         ),
       ),
       actions: [
@@ -1113,17 +1442,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
         ElevatedButton(
           style: ElevatedButton.styleFrom(
               backgroundColor: kPrimary, foregroundColor: Colors.white),
-          onPressed: _items.any((i) => i.insumoId != null)
-              ? () => Navigator.pop(
-                  context,
-                  _items
-                      .where((i) => i.insumoId != null)
-                      .map((i) => {
-                            'insumoId': i.insumoId,
-                            'cantidad': i.cantCtrl.text,
-                          })
-                      .toList())
-              : null,
+          onPressed: _items.any((i) => i.insumoId != null) ? _confirmar : null,
           child: const Text('Agregar'),
         ),
       ],
@@ -1134,18 +1453,19 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
     final item = _items[i];
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
         Expanded(
           flex: 3,
           child: _InsumoSelectorButton(
             insumos: widget.insumos,
             selectedId: item.insumoId,
-            onSelected: (id) => setState(() => item.insumoId = id),
+            onSelected: (ins) => setState(() => item.elegir(ins)),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: TextField(
+          child: TextFormField(
             controller: item.cantCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
@@ -1154,6 +1474,10 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
               isDense: true,
               contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             ),
+            // Solo valida las filas con insumo elegido (las vacías se ignoran)
+            validator: (v) => item.insumoId != null && _cantidadValida(v) == null
+                ? '>0'
+                : null,
           ),
         ),
         if (_items.length > 1)
@@ -1164,6 +1488,12 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
               _items.removeAt(i);
             }),
           ),
+      ]),
+      _SelectorPresentacion(
+        item: item,
+        insumos: widget.insumos,
+        onChanged: (v) => setState(() => item.presentacionId = v),
+      ),
       ]),
     );
   }

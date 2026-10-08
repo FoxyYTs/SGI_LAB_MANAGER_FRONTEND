@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
+import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/cache/cache_service.dart';
+import '../core/rango_fechas.dart';
+import '../widgets/filtro_rango_fechas.dart';
 import '../providers/auth_provider.dart';
 
 class BitacoraContent extends StatefulWidget {
@@ -18,6 +22,17 @@ class _BitacoraContentState extends State<BitacoraContent> {
   bool      _desdeCache = false;
   DateTime? _cachedAt;
   String    _filtroTipo = 'Todos';
+  // La bitácora crece sin límite y el servidor la pagina (50 por página):
+  // se muestra la primera página y se ofrece "Cargar más".
+  int       _pagina      = 1;
+  bool      _hayMas      = false;
+  int?      _total;
+  bool      _cargandoMas = false;
+  // Filtro opcional por rango de fechas (?desde/?hasta en el servidor).
+  DateTimeRange? _rango;
+  // Se incrementa en cada carga: una respuesta vieja (filtro anterior) no
+  // pisa la de la carga más reciente.
+  int       _version     = 0;
 
   static const _tipos = [
     'Todos', 'ENTRADA', 'SALIDA', 'AJUSTE', 'ROTURA', 'CONSUMO_PRACTICA',
@@ -39,33 +54,93 @@ class _BitacoraContentState extends State<BitacoraContent> {
 
   String get _cacheKey => 'bitacora_$_filtroTipo';
 
+  Map<String, dynamic> get _query => {
+        if (_filtroTipo != 'Todos') 'tipo': _filtroTipo,
+        ...paramsRango(_rango),
+      };
+
   Future<void> _cargar() async {
+    final version = ++_version;
+    final conRango = _rango != null;
     setState(() => _cargando = true);
     try {
       final auth   = context.read<AuthProvider>();
       final dio    = ApiClient.instance.authenticatedDio(auth.token);
-      final params = _filtroTipo == 'Todos' ? '' : '?tipo=$_filtroTipo';
-      final r      = await dio.get('operaciones/bitacora/$params');
-      final data   = r.data;
-      final lista  = List<Map<String, dynamic>>.from(
-          data is List ? data : (data['results'] ?? []));
-      await CacheService.instance.set(_cacheKey, lista);
-      if (mounted) setState(() {
+      final pag    = await obtenerPagina(dio, 'operaciones/bitacora/',
+          queryParameters: _query);
+      final lista  = pag.items;
+      // La caché offline guarda solo la vista sin rango de fechas.
+      if (!conRango) await CacheService.instance.set(_cacheKey, lista);
+      if (!mounted || version != _version) return;
+      setState(() {
         _movimientos = lista;
+        _pagina      = 1;
+        _hayMas      = pag.hayMas;
+        _total       = pag.total;
         _desdeCache  = false;
         _cachedAt    = null;
         _cargando    = false;
       });
     } catch (_) {
+      if (version != _version) return;
+      if (conRango) {
+        // Sin red no se puede filtrar por fechas: no mostrar la caché sin
+        // filtrar como si fuera el resultado del rango.
+        if (mounted) {
+          setState(() {
+            _movimientos = [];
+            _hayMas      = false;
+            _total       = null;
+            _desdeCache  = false;
+            _cargando    = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('No se pudo filtrar por fechas: revisa la conexión.'),
+              backgroundColor: kDanger));
+        }
+        return;
+      }
       final cached = await CacheService.instance.get(_cacheKey);
       if (mounted) setState(() {
         _movimientos = cached != null
             ? List<Map<String, dynamic>>.from(cached.data as List)
             : [];
+        _hayMas      = false;
+        _total       = null;
         _desdeCache  = cached != null;
         _cachedAt    = cached?.cachedAt;
         _cargando    = false;
       });
+    }
+  }
+
+  Future<void> _cargarMas() async {
+    if (_cargandoMas || !_hayMas) return;
+    final version = _version;
+    setState(() => _cargandoMas = true);
+    try {
+      final auth = context.read<AuthProvider>();
+      final dio  = ApiClient.instance.authenticatedDio(auth.token);
+      final pag  = await obtenerPagina(dio, 'operaciones/bitacora/',
+          queryParameters: _query, pagina: _pagina + 1);
+      if (!mounted || version != _version) return;
+      final vistos = {for (final m in _movimientos) m['id']};
+      setState(() {
+        _movimientos = [
+          ..._movimientos,
+          ...pag.items.where((m) => !vistos.contains(m['id'])),
+        ];
+        _pagina++;
+        _hayMas = pag.hayMas;
+      });
+    } on DioException catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No se pudieron cargar más movimientos.'),
+            backgroundColor: kDanger));
+      }
+    } finally {
+      if (mounted) setState(() => _cargandoMas = false);
     }
   }
 
@@ -167,7 +242,17 @@ class _BitacoraContentState extends State<BitacoraContent> {
                     ),
                   ),
                 );
-              }).toList(),
+              }).toList()
+                ..add(Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: FiltroRangoFechas(
+                    rango: _rango,
+                    onChanged: (r) {
+                      setState(() => _rango = r);
+                      _cargar();
+                    },
+                  ),
+                )),
             ),
           ),
           const SizedBox(height: 12),
@@ -182,7 +267,9 @@ class _BitacoraContentState extends State<BitacoraContent> {
                           const Icon(Icons.history, size: 64, color: kTextMuted),
                           const SizedBox(height: 12),
                           Text(
-                            _filtroTipo == 'Todos'
+                            _rango != null
+                                ? 'Sin movimientos en ${etiquetaRango(_rango!)}'
+                                : _filtroTipo == 'Todos'
                                 ? 'No hay movimientos registrados'
                                 : 'Sin movimientos de tipo "${_labels[_filtroTipo] ?? _filtroTipo}"',
                             style: const TextStyle(color: kTextMuted),
@@ -214,13 +301,24 @@ class _BitacoraContentState extends State<BitacoraContent> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Text(
-                            'Mostrando ${_movimientos.length} movimiento${_movimientos.length != 1 ? "s" : ""}',
+                        Row(children: [
+                          if (_hayMas)
+                            _cargandoMas
+                                ? const SizedBox(width: 18, height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: kPrimary))
+                                : TextButton.icon(
+                                    onPressed: _cargarMas,
+                                    icon: const Icon(Icons.expand_more, size: 18),
+                                    label: const Text('Cargar más'),
+                                  ),
+                          const Spacer(),
+                          Text(
+                            'Mostrando ${_movimientos.length}'
+                            '${_total != null && _total! > _movimientos.length ? ' de $_total' : ''}'
+                            ' movimiento${_movimientos.length != 1 ? "s" : ""}',
                             style: const TextStyle(fontSize: 12, color: kTextMuted),
                           ),
-                        ),
+                        ]),
                       ]),
           ),
         ],
