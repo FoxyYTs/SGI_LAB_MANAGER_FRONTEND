@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
@@ -54,7 +55,32 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     }
   }
 
-  Future<void> _reportarRotura(String nombre, String unidad) async {
+  /// Registra una ROTURA en la bitácora. El backend exige `presentacion`
+  /// (FK obligatoria de BitacoraMovimientos) — antes se enviaba `insumo`
+  /// y fallaba siempre. Con una sola presentación se usa directamente;
+  /// con varias, el diálogo deja elegir de cuál se descuenta.
+  Future<void> _reportarRotura(String nombre) async {
+    final presentaciones = List<Map<String, dynamic>>.from(
+        (_insumo?['presentaciones'] as List?) ?? const []);
+    if (presentaciones.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Este insumo no tiene presentaciones registradas: '
+              'agrega una antes de reportar una rotura.'),
+          backgroundColor: kDanger));
+      return;
+    }
+    String presId = presentaciones.first['id'].toString();
+    String unidadDe(String id) => presentaciones
+            .firstWhere((p) => p['id'].toString() == id,
+                orElse: () => const {})['unidad_nombre']
+            ?.toString() ??
+        '';
+    String etiquetaPres(Map<String, dynamic> p) {
+      final stock = double.tryParse(p['stock_actual']?.toString() ?? '');
+      final u = p['unidad_nombre']?.toString() ?? '';
+      return stock == null ? u : '$u — stock ${_fmtNum(stock)}';
+    }
+
     final cantCtrl = TextEditingController();
     final estudCtrl = TextEditingController();
     final nitCtrl   = TextEditingController();
@@ -62,7 +88,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
 
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (_) => StatefulBuilder(builder: (ctx, setD) => AlertDialog(
         title: Row(children: [
           const Icon(Icons.warning_amber_outlined, color: kDanger, size: 20),
           const SizedBox(width: 8),
@@ -78,13 +104,37 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 12),
+              if (presentaciones.length > 1) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: presId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Presentación *',
+                    prefixIcon: Icon(Icons.inventory_2_outlined,
+                        color: kDanger, size: 18),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: presentaciones
+                      .map((p) => DropdownMenuItem(
+                            value: p['id'].toString(),
+                            child: Text(etiquetaPres(p),
+                                overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setD(() => presId = v);
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
               TextField(
                 controller: cantCtrl,
                 autofocus: true,
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
-                  labelText: 'Cantidad ($unidad) *',
+                  labelText: 'Cantidad (${unidadDe(presId)}) *',
                   prefixIcon: const Icon(Icons.numbers, color: kDanger, size: 18),
                   border: const OutlineInputBorder(),
                   isDense: true,
@@ -139,7 +189,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             child: const Text('Registrar rotura'),
           ),
         ],
-      ),
+      )),
     );
 
     final cantidad = double.tryParse(cantCtrl.text.trim()) ?? 0;
@@ -172,7 +222,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
       final auth = context.read<AuthProvider>();
       final dio  = ApiClient.instance.authenticatedDio(auth.token);
       await dio.post('operaciones/bitacora/', data: {
-        'insumo':           widget.insumoId,
+        'presentacion':     presId,
         'tipo_movimiento':  'ROTURA',
         'cantidad':         cantidad,
         'observaciones':    partes.join(' | '),
@@ -183,12 +233,37 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             backgroundColor: kSuccess));
         _cargar();
       }
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('No se pudo registrar la rotura: ${_mensajeError(e)}'),
+            backgroundColor: kDanger));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Error: $e'), backgroundColor: kDanger));
       }
     }
+  }
+
+  static String _fmtNum(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
+
+  /// Primer mensaje legible de una respuesta de error de DRF.
+  static String _mensajeError(DioException e) {
+    dynamic d = e.response?.data;
+    while (true) {
+      if (d is Map && d.isNotEmpty) {
+        d = d['error'] ?? d['detail'] ?? d.values.first;
+      } else if (d is List && d.isNotEmpty) {
+        d = d.first;
+      } else {
+        break;
+      }
+    }
+    final txt = d?.toString() ?? '';
+    return txt.isNotEmpty ? txt : (e.message ?? 'error de red');
   }
 
   @override
@@ -402,8 +477,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                     horizontal: 14, vertical: 10),
               ),
               onPressed: () => _reportarRotura(
-                  d['nombre_insumo']?.toString() ?? widget.insumoNombre,
-                  unidad),
+                  d['nombre_insumo']?.toString() ?? widget.insumoNombre),
             ),
           ],
 
