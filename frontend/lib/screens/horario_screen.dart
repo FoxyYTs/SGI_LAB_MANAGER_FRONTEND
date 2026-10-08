@@ -145,6 +145,9 @@ class _HorarioScreenState extends State<HorarioScreen>
             color: Colors.white,
             child: TabBar(
               controller: _tab,
+              // Desplazable: en móvil las 5 pestañas no caben y se encimaban.
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               labelColor: kPrimary,
               unselectedLabelColor: kTextMuted,
               indicatorColor: kPrimary,
