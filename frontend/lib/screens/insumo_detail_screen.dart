@@ -10,6 +10,7 @@ import '../core/presentaciones.dart';
 import '../providers/auth_provider.dart';
 import 'insumo_form_screen.dart';
 import 'sga_screen.dart';
+import '../widgets/registrar_movimiento_dialog.dart';
 
 class InsumoDetailScreen extends StatefulWidget {
   final String insumoId;
@@ -250,6 +251,15 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
     }
   }
 
+  /// Registra una ENTRADA o SALIDA (para residuos: residuo generado /
+  /// entregado al gestor) y recarga el detalle y los últimos movimientos.
+  Future<void> _registrarMovimiento(MovimientoStock tipo) async {
+    final insumo = _insumo;
+    if (insumo == null) return;
+    final ok = await registrarMovimientoStock(context, insumo: insumo, tipo: tipo);
+    if (ok && mounted) _cargar();
+  }
+
   /// Desactiva o reactiva una presentación. Desactivar es la alternativa a
   /// borrar una presentación con historial (el backend responde 409): deja
   /// de ofrecerse para préstamos y su stock no cuenta en el total, pero se
@@ -480,7 +490,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
           Row(children: [
             Expanded(
               child: _stockCard(esResiduo ? 'Cantidad acumulada' : 'Stock actual',
-                  '${stock.toStringAsFixed(0)} $unidad', semaforoColor),
+                  '${fmtCantidad(stock)} $unidad', semaforoColor),
             ),
             if (!esResiduo) ...[
               const SizedBox(width: 12),
@@ -532,22 +542,40 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             ),
           ],
 
-          // ── Reportar rotura ─────────────────────────────────────────────
+          // ── Registrar entrada / salida / rotura ─────────────────────────
+          // POST operaciones/bitacora/ exige 'bitacora.gestionar'. A un
+          // residuo no se le reporta rotura: su salida es la entrega al gestor.
           if (context.read<AuthProvider>().can(Perm.bitacoraGestionar)) ...[
             const SizedBox(height: 16),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.warning_amber_outlined,
-                  color: kDanger, size: 18),
-              label: const Text('Reportar rotura / pérdida',
-                  style: TextStyle(color: kDanger)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: kDanger),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
-              ),
-              onPressed: () => _reportarRotura(
-                  d['nombre_insumo']?.toString() ?? widget.insumoNombre),
-            ),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final tipoMov in MovimientoStock.values)
+                OutlinedButton.icon(
+                  key: ValueKey('accion-${tipoMov.codigo}'),
+                  icon: Icon(tipoMov.icono, color: tipoMov.color, size: 18),
+                  label: Text(tipoMov.etiqueta(esResiduo: esResiduo),
+                      style: TextStyle(color: tipoMov.color)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: tipoMov.color),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                  ),
+                  onPressed: () => _registrarMovimiento(tipoMov),
+                ),
+              if (!esResiduo)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.warning_amber_outlined,
+                      color: kDanger, size: 18),
+                  label: const Text('Reportar rotura / pérdida',
+                      style: TextStyle(color: kDanger)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: kDanger),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                  ),
+                  onPressed: () => _reportarRotura(
+                      d['nombre_insumo']?.toString() ?? widget.insumoNombre),
+                ),
+            ]),
           ],
 
           // ── Últimos movimientos ──────────────────────────────────────────
@@ -675,12 +703,15 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
 
   Widget _buildMovRow(Map<String, dynamic> m) {
     final tipo = m['tipo_movimiento']?.toString() ?? '';
-    final esEntrada = tipo == 'ENTRADA';
-    final color = esEntrada ? kSuccess : kDanger;
-    final icon = esEntrada ? Icons.arrow_downward : Icons.arrow_upward;
+    final cant = double.tryParse(m['cantidad']?.toString() ?? '') ?? 0;
+    // ENTRADA suma; AJUSTE lleva su propio signo; el resto resta.
+    final suma = tipo == 'ENTRADA' || (tipo == 'AJUSTE' && cant >= 0);
+    final color = suma ? kSuccess : kDanger;
+    final icon = suma ? Icons.arrow_downward : Icons.arrow_upward;
     final fecha = (m['fecha_hora']?.toString() ?? '')
         .replaceFirst('T', ' ')
         .substring(0, (m['fecha_hora']?.toString().length ?? 16).clamp(0, 16));
+    final obs = m['observaciones']?.toString().trim() ?? '';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
@@ -688,13 +719,20 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
         Icon(icon, color: color, size: 16),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            '${m['username'] ?? '?'}  ·  $fecha',
-            style: const TextStyle(fontSize: 12, color: kTextMuted),
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              '${m['username'] ?? '?'}  ·  $fecha',
+              style: const TextStyle(fontSize: 12, color: kTextMuted),
+            ),
+            if (obs.isNotEmpty)
+              Text(obs,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, color: kTextMuted)),
+          ]),
         ),
         Text(
-          '${esEntrada ? '+' : '-'}${m['cantidad']}',
+          '${suma ? '+' : '-'}${fmtCantidad(cant.abs())}',
           style: TextStyle(
             color: color,
             fontWeight: FontWeight.bold,
