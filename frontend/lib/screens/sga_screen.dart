@@ -172,9 +172,12 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     final tipo = widget.esResiduo ? 'residuo' : 'fds';
 
     // Ambos tipos de etiqueta (FDS y residuo) usan los mismos 4 tamaños
-    // (FORMATOS_ETIQUETA en el backend).
-    final formato = await _elegirFormato();
-    if (formato == null || !mounted) return;
+    // (FORMATOS_ETIQUETA en el backend). En el mismo diálogo se elige si se
+    // descarga en PDF o en Word (.docx) editable (?salida=docx).
+    final eleccion = await _elegirFormato();
+    if (eleccion == null || !mounted) return;
+    final (formato, salida) = eleccion;
+    final esWord = salida == 'docx';
 
     setState(() => _descargandoPdf = true);
     try {
@@ -183,12 +186,16 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
         queryParameters: {
           'tipo_etiqueta': tipo,
           'formato': formato,
+          if (esWord) 'salida': 'docx',
         },
         options: Options(responseType: ResponseType.bytes),
       );
       final sufijo = tipo == 'residuo' ? 'residuo_$formato' : formato;
-      final nombre = 'etiqueta_${sufijo}_${widget.insumoId}.pdf';
-      final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
+      final nombre = 'etiqueta_${sufijo}_${widget.insumoId}.${esWord ? 'docx' : 'pdf'}';
+      final msg = await saveAndOpenFile(
+        List<int>.from(resp.data as List), nombre,
+        mimeType: esWord ? kMimeDocx : kMimePdf,
+      );
       if (msg != null && mounted) _snack(msg, kTextMuted);
     } on DioException catch (e) {
       if (mounted) _snack(detalleDeError(e.response?.data, 'Error al descargar la etiqueta.'), kDanger);
@@ -197,35 +204,13 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
     }
   }
 
-  Future<String?> _elegirFormato() {
-    final formatos = [
-      {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 56 mm'},
-      {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 80 mm'},
-      {'value': '500l',    'label': 'Máx. 500 L',  'sub': '105 × 113 mm'},
-      {'value': 'grande',  'label': 'Más de 500 L', 'sub': '148 × 160 mm'},
-    ];
+  /// Formato elegido la última vez en esta pantalla ('pdf' o 'docx').
+  String _salidaEtiqueta = 'pdf';
 
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Seleccionar tamaño de etiqueta',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: formatos.map((f) => ListTile(
-            dense: true,
-            leading: const Icon(Icons.label_outline, color: Color(0xFF1E73BE)),
-            title: Text(f['label']!, style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(f['sub']!),
-            onTap: () => Navigator.pop(ctx, f['value']),
-          )).toList(),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-        ],
-      ),
-    );
+  Future<(String, String)?> _elegirFormato() async {
+    final r = await mostrarDialogoEtiqueta(context, salidaInicial: _salidaEtiqueta);
+    if (r != null) _salidaEtiqueta = r.$2;
+    return r;
   }
 
   void _snack(String msg, Color color) {
@@ -1417,4 +1402,58 @@ String detalleDeError(Object? data, String porDefecto) {
     if (json is Map && json['detail'] != null) return json['detail'].toString();
   } catch (_) {/* cuerpo no JSON: mensaje genérico */}
   return porDefecto;
+}
+
+/// Diálogo de la etiqueta: arriba el formato del archivo (PDF o Word .docx
+/// editable) y debajo el tamaño; tocar un tamaño confirma. Devuelve
+/// (formato, salida) — p. ej. ('500l', 'docx') — o null si se cancela.
+Future<(String, String)?> mostrarDialogoEtiqueta(BuildContext context,
+    {String salidaInicial = 'pdf'}) {
+  const formatos = [
+    {'value': 'pequena', 'label': 'Pequeña',     'sub': '52 × 56 mm'},
+    {'value': '50l',     'label': 'Máx. 50 L',   'sub': '74 × 80 mm'},
+    {'value': '500l',    'label': 'Máx. 500 L',  'sub': '105 × 113 mm'},
+    {'value': 'grande',  'label': 'Más de 500 L', 'sub': '148 × 160 mm'},
+  ];
+  var salida = salidaInicial;
+
+  return showDialog<(String, String)>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setDlg) => AlertDialog(
+        title: const Text('Seleccionar tamaño de etiqueta',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: SegmentedButton<String>(
+                key: const Key('etiqueta_salida'),
+                segments: const [
+                  ButtonSegment(value: 'pdf', label: Text('PDF'),
+                      icon: Icon(Icons.picture_as_pdf_outlined)),
+                  ButtonSegment(value: 'docx', label: Text('Word (editable)'),
+                      icon: Icon(Icons.description_outlined)),
+                ],
+                selected: {salida},
+                onSelectionChanged: (s) => setDlg(() => salida = s.first),
+              ),
+            ),
+            ...formatos.map((f) => ListTile(
+              dense: true,
+              leading: const Icon(Icons.label_outline, color: Color(0xFF1E73BE)),
+              title: Text(f['label']!, style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text(f['sub']!),
+              onTap: () => Navigator.pop(ctx, (f['value']!, salida)),
+            )),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+        ],
+      ),
+    ),
+  );
 }
