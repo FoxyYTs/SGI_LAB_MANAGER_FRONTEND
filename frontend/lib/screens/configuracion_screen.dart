@@ -6,6 +6,7 @@ import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
+import '../models/insumo_model.dart' show kTipoResiduo;
 import '../providers/auth_provider.dart';
 
 // ─────────────────────────────────────────
@@ -865,6 +866,8 @@ class _GuiasTabState extends State<_GuiasTab> {
               ? <Map<String, dynamic>>[]
               : _insumos
                   .where((ins) => !yaAsignados.contains(ins['id'].toString()))
+                  // Un residuo no es insumo de una práctica (el backend da 400).
+                  .where((ins) => ins['tipo_nombre'] != kTipoResiduo)
                   .where((ins) => normalizarBusqueda(ins['nombre_insumo'] ?? '')
                       .contains(normalizarBusqueda(busqueda)))
                   .toList();
@@ -1829,6 +1832,20 @@ class _LabConfigTabState extends State<_LabConfigTab> {
     }
   }
 
+  /// Cambia el orden de los contactos (el primero va a la ficha Colmena).
+  void _moverContacto(int desde, int hasta) => setState(() {
+        _contactos.insert(hasta, _contactos.removeAt(desde));
+      });
+
+  Widget _flechaOrden(IconData icon, String tooltip, VoidCallback? onPressed) => IconButton(
+        icon: Icon(icon, size: 20),
+        tooltip: tooltip,
+        color: kPrimary,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 28, height: 24),
+        onPressed: onPressed,
+      );
+
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
     final auth = context.read<AuthProvider>();
@@ -1979,7 +1996,21 @@ class _LabConfigTabState extends State<_LabConfigTab> {
                 children: [
                   for (var i = 0; i < _contactos.length; i++) ...[
                     if (i > 0) const SizedBox(height: 10),
-                    Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    // El primero es el que va a la ficha Colmena ARL: se marca
+                    // y se puede cambiar el orden con las flechas.
+                    if (i == 0)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 6),
+                        child: Row(children: [
+                          Icon(Icons.star_rounded, size: 16, color: kPrimary),
+                          SizedBox(width: 4),
+                          Flexible(child: Text('Principal · va a la ficha Colmena ARL',
+                              style: TextStyle(fontSize: 12, color: kPrimary,
+                                  fontWeight: FontWeight.w600))),
+                        ]),
+                      ),
+                    Row(key: ObjectKey(_contactos[i]),
+                        crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Expanded(
                         flex: 3,
                         child: TextFormField(
@@ -1999,7 +2030,14 @@ class _LabConfigTabState extends State<_LabConfigTab> {
                           keyboardType: TextInputType.phone,
                         ),
                       ),
-                      if (puedeEditar)
+                      if (puedeEditar) ...[
+                        if (_contactos.length > 1)
+                          Column(mainAxisSize: MainAxisSize.min, children: [
+                            _flechaOrden(Icons.keyboard_arrow_up, 'Subir',
+                                i > 0 ? () => _moverContacto(i, i - 1) : null),
+                            _flechaOrden(Icons.keyboard_arrow_down, 'Bajar',
+                                i < _contactos.length - 1 ? () => _moverContacto(i, i + 1) : null),
+                          ]),
                         IconButton(
                           icon: const Icon(Icons.delete_outline, color: kDanger, size: 20),
                           tooltip: 'Quitar contacto',
@@ -2008,6 +2046,7 @@ class _LabConfigTabState extends State<_LabConfigTab> {
                             _contactos.removeAt(i);
                           }),
                         ),
+                      ],
                     ]),
                   ],
                   if (puedeEditar) ...[

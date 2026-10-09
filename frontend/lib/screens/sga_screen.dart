@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -49,7 +51,8 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
+    // Un residuo no tiene ficha Colmena ARL (es de la etiqueta FDS): 2 pestañas.
+    _tabs = TabController(length: widget.esResiduo ? 2 : 3, vsync: this);
     _cargar();
   }
 
@@ -187,8 +190,8 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
       final nombre = 'etiqueta_${sufijo}_${widget.insumoId}.pdf';
       final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
       if (msg != null && mounted) _snack(msg, kTextMuted);
-    } on DioException {
-      if (mounted) _snack('Error al descargar la etiqueta.', kDanger);
+    } on DioException catch (e) {
+      if (mounted) _snack(detalleDeError(e.response?.data, 'Error al descargar la etiqueta.'), kDanger);
     } finally {
       if (mounted) setState(() => _descargandoPdf = false);
     }
@@ -253,7 +256,10 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
           ],
         ),
         actions: [
-          if (_extrayendo)
+          // La extracción desde FDS es para químicos: un residuo se llena a mano.
+          if (widget.esResiduo)
+            const SizedBox.shrink()
+          else if (_extrayendo)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: Center(child: SizedBox(width: 20, height: 20,
@@ -275,7 +281,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
             )
           else
             IconButton(
-              tooltip: 'Generar etiqueta GHS',
+              tooltip: widget.esResiduo ? 'Etiqueta de residuo' : 'Generar etiqueta GHS',
               icon: const Icon(Icons.label_outline, color: kSuccess),
               onPressed: _datos == null || _datos!.isEmpty ? null : _abrirEtiquetaUrl,
             ),
@@ -286,11 +292,12 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
           labelColor: kPrimary,
           unselectedLabelColor: kTextMuted,
           indicatorColor: kPrimary,
-          onTap: (i) { if (i == 2) _cargarColmena(); },
-          tabs: const [
-            Tab(icon: Icon(Icons.science_outlined),  text: 'Datos SGA'),
-            Tab(icon: Icon(Icons.edit_note_outlined), text: 'Editar'),
-            Tab(icon: Icon(Icons.assignment_outlined), text: 'Colmena ARL'),
+          onTap: (i) { if (!widget.esResiduo && i == 2) _cargarColmena(); },
+          tabs: [
+            const Tab(icon: Icon(Icons.science_outlined),  text: 'Datos SGA'),
+            const Tab(icon: Icon(Icons.edit_note_outlined), text: 'Editar'),
+            if (!widget.esResiduo)
+              const Tab(icon: Icon(Icons.assignment_outlined), text: 'Colmena ARL'),
           ],
         ),
       ),
@@ -301,14 +308,15 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
               : TabBarView(
                   controller: _tabs,
                   children: [
-                    _DatosSgaTab(datos: _datos ?? {}, insumoNombre: widget.insumoNombre),
+                    _DatosSgaTab(datos: _datos ?? {}, insumoNombre: widget.insumoNombre,
+                        esResiduo: widget.esResiduo),
                     _EditarSgaTab(
                       insumoId: widget.insumoId,
                       datos: _datos ?? {},
                       onGuardado: (d) => setState(() { _datos = d; _colmena = null; }),
                       esResiduo: widget.esResiduo,
                     ),
-                    _ColmenaTab(colmena: _colmena),
+                    if (!widget.esResiduo) _ColmenaTab(colmena: _colmena),
                   ],
                 ),
     );
@@ -333,7 +341,9 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
 class _DatosSgaTab extends StatelessWidget {
   final Map<String, dynamic> datos;
   final String insumoNombre;
-  const _DatosSgaTab({required this.datos, required this.insumoNombre});
+  final bool esResiduo;
+  const _DatosSgaTab({required this.datos, required this.insumoNombre,
+      this.esResiduo = false});
 
   @override
   Widget build(BuildContext context) {
@@ -453,17 +463,21 @@ class _DatosSgaTab extends StatelessWidget {
       const Text('Sin datos SGA cargados',
           style: TextStyle(fontSize: 16, color: kTextMuted)),
       const SizedBox(height: 8),
-      const Text('Sube la FDS (PDF) para extraer datos automáticamente',
-          style: TextStyle(color: kTextMuted, fontSize: 13), textAlign: TextAlign.center),
-      const SizedBox(height: 16),
-      ElevatedButton.icon(
-        icon: const Icon(Icons.upload_file),
-        label: const Text('Subir FDS'),
-        style: ElevatedButton.styleFrom(
-            backgroundColor: kPrimary, foregroundColor: Colors.white),
-        onPressed: () =>
-            (context.findAncestorStateOfType<_SgaScreenState>())?._extraerFDS(),
-      ),
+      Text(esResiduo
+              ? 'Completa los datos del residuo en la pestaña Editar'
+              : 'Sube la FDS (PDF) para extraer datos automáticamente',
+          style: const TextStyle(color: kTextMuted, fontSize: 13), textAlign: TextAlign.center),
+      if (!esResiduo) ...[
+        const SizedBox(height: 16),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.upload_file),
+          label: const Text('Subir FDS'),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: kPrimary, foregroundColor: Colors.white),
+          onPressed: () =>
+              (context.findAncestorStateOfType<_SgaScreenState>())?._extraerFDS(),
+        ),
+      ],
     ]),
   );
 
@@ -1389,4 +1403,18 @@ class _DialogConfirmacionFDS extends StatelessWidget {
     final s = valor.toString();
     return s.length > 80 ? '${s.substring(0, 80)}…' : s;
   }
+}
+
+// ── Mensaje de error del backend ──────────────────────────────────────────────
+
+/// `detail` de una respuesta de error del backend (p. ej. el 400 de la
+/// etiqueta) o `porDefecto` si no lo hay. Con responseType bytes (descargas)
+/// el cuerpo llega como bytes y hay que decodificarlo.
+@visibleForTesting
+String detalleDeError(Object? data, String porDefecto) {
+  try {
+    final Object? json = data is List<int> ? jsonDecode(utf8.decode(data)) : data;
+    if (json is Map && json['detail'] != null) return json['detail'].toString();
+  } catch (_) {/* cuerpo no JSON: mensaje genérico */}
+  return porDefecto;
 }

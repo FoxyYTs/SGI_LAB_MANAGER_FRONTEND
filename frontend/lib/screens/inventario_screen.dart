@@ -81,6 +81,9 @@ class _InventarioContentState extends State<InventarioContent> {
 
   /// Color neutro de los residuos (no tienen semáforo de stock).
   static const _kResiduo = Color(0xFF6D4C41);
+  // Columna "Estado": cabe el chip más ancho ("RESIDUO"/"CRÍTICO") en una
+  // línea; con 58 px "RESIDUO" se partía en dos.
+  static const _kAnchoEstado = 80.0;
 
   List<Insumo> _applySort(List<Insumo> list) {
     final sorted = [...list];
@@ -137,9 +140,14 @@ class _InventarioContentState extends State<InventarioContent> {
         }
 
         final query = normalizarBusqueda(_searchQuery);
+        final buscando = query.trim().isNotEmpty;
         final filtrados = _applySort(provider.insumos.where((i) {
-          // Los residuos tienen su propia sección: no se mezclan en "Todos".
-          final matchTipo   = _filtroTipo == 'Todos' ? !i.esResiduo : i.tipo == _filtroTipo;
+          // Los residuos tienen su propia sección: no se mezclan en "Todos"
+          // al navegar, pero sí al buscar (si no, buscar un residuo desde
+          // "Todos" nunca daba resultados). En la tabla se ven como RESIDUO.
+          final matchTipo   = _filtroTipo == 'Todos'
+              ? (!i.esResiduo || buscando)
+              : i.tipo == _filtroTipo;
           final matchSearch = normalizarBusqueda(i.nombre).contains(query) ||
                               normalizarBusqueda(i.tipo).contains(query) ||
                               normalizarBusqueda(i.formulaQuimica).contains(query);
@@ -148,6 +156,9 @@ class _InventarioContentState extends State<InventarioContent> {
 
         final esQuimico = _filtroTipo == 'Químico';
         final esResiduo = _filtroTipo == kTipoResiduo;
+        // Los chips de resumen cuentan la sección que se está viendo: en
+        // Residuos solo los residuos; en las demás, todo menos los residuos.
+        final seccion = provider.insumos.where((i) => i.esResiduo == esResiduo).toList();
         final conSga    = esQuimico || esResiduo;
         final titulo    = esQuimico
             ? 'Inventario de Químicos'
@@ -262,14 +273,17 @@ class _InventarioContentState extends State<InventarioContent> {
                   Row(children: [
                     // Chips informativos
                     _resumenChip(Icons.inventory_2_outlined,
-                        'Total: ${provider.insumos.length}',
+                        'Total: ${seccion.length}',
                         const Color(0xFF6C757D), const Color(0xFFF0F0F0)),
-                    const SizedBox(width: 8),
-                    _resumenChip(Icons.circle, 'Críticos: ${provider.insumos.where((i) => i.semaforo == "ROJO").length}',
-                        kSemaforoRojo, const Color(0xFFFFEBEE)),
-                    const SizedBox(width: 8),
-                    _resumenChip(Icons.circle, 'Bajos: ${provider.insumos.where((i) => i.semaforo == "AMARILLO").length}',
-                        const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+                    // Los residuos no tienen semáforo: sin críticos ni bajos.
+                    if (!esResiduo) ...[
+                      const SizedBox(width: 8),
+                      _resumenChip(Icons.circle, 'Críticos: ${seccion.where((i) => i.semaforo == "ROJO").length}',
+                          kSemaforoRojo, const Color(0xFFFFEBEE)),
+                      const SizedBox(width: 8),
+                      _resumenChip(Icons.circle, 'Bajos: ${seccion.where((i) => i.semaforo == "AMARILLO").length}',
+                          const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+                    ],
                     const Spacer(),
                   ]),
                 if (!isMobile) const SizedBox(height: 10),
@@ -338,25 +352,19 @@ class _InventarioContentState extends State<InventarioContent> {
                 // ── Leyenda ───────────────────────────────────────────────────
                 if (filtrados.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Row(children: [
+                  // Wrap y no Row: con la leyenda de residuos (texto largo + SGA)
+                  // la fila desbordaba en móvil (~276 px a 360 px de ancho).
+                  Wrap(spacing: 16, runSpacing: 4, children: [
                     if (!esResiduo) ...[
                       _leyenda(kSemaforoVerde,   'En stock'),
-                      const SizedBox(width: 16),
                       _leyenda(kSemaforoAmarillo, 'Stock bajo'),
-                      const SizedBox(width: 16),
                       _leyenda(kSemaforoRojo,    'Crítico'),
                     ] else
                       const Text('Cantidad acumulada · entra con ENTRADA, sale al entregarlo al gestor',
                           style: TextStyle(fontSize: 12, color: kTextMuted)),
                     if (conSga) ...[
-                      const SizedBox(width: 24),
-                      const Icon(Icons.check_circle, size: 12, color: kSuccess),
-                      const SizedBox(width: 4),
-                      const Text('SGA cargado', style: TextStyle(fontSize: 12, color: kTextMuted)),
-                      const SizedBox(width: 12),
-                      const Icon(Icons.radio_button_unchecked, size: 12, color: kTextMuted),
-                      const SizedBox(width: 4),
-                      const Text('Sin datos SGA', style: TextStyle(fontSize: 12, color: kTextMuted)),
+                      _leyendaIcono(Icons.check_circle, kSuccess, 'SGA cargado'),
+                      _leyendaIcono(Icons.radio_button_unchecked, kTextMuted, 'Sin datos SGA'),
                     ],
                   ]),
                 ],
@@ -468,7 +476,7 @@ class _InventarioContentState extends State<InventarioContent> {
         2: const FlexColumnWidth(1.4),
         3: const FlexColumnWidth(0.9),
         4: const FlexColumnWidth(0.9),
-        5: const FixedColumnWidth(58),
+        5: const FixedColumnWidth(_kAnchoEstado),
         if (showSga) 6: const FixedColumnWidth(48),
       },
       border: const TableBorder(
@@ -497,7 +505,9 @@ class _InventarioContentState extends State<InventarioContent> {
               _cell(insumo.tipo),
               _cell(insumo.ubicacion),
               _cell('${insumo.stockActual.toStringAsFixed(0)} ${insumo.unidad}'),
-              _cell('${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
+              _cell(insumo.esResiduo
+                  ? '—'   // un residuo no tiene stock mínimo
+                  : '${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
               _semaforo(insumo.estado),
               if (showSga)
                 Padding(
@@ -522,7 +532,7 @@ class _InventarioContentState extends State<InventarioContent> {
         1: FlexColumnWidth(1.4),
         2: FlexColumnWidth(0.9),
         3: FlexColumnWidth(0.9),
-        4: FixedColumnWidth(58),
+        4: FixedColumnWidth(_kAnchoEstado),
         5: FixedColumnWidth(48),
         6: FixedColumnWidth(48),
       },
@@ -587,11 +597,13 @@ class _InventarioContentState extends State<InventarioContent> {
         final child    = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(cols[i],
+            // Flexible: en columnas angostas (tabla a ~700 px) el título se
+            // corta con "…" en vez de desbordar la celda.
+            Flexible(child: Text(cols[i],
                 softWrap: false,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12))),
             if (isActive) ...[
               const SizedBox(width: 2),
               Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
@@ -644,6 +656,7 @@ class _InventarioContentState extends State<InventarioContent> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
           child: Text(label,
+              softWrap: false, maxLines: 1,
               style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
         ),
       ),
@@ -697,12 +710,19 @@ class _InventarioContentState extends State<InventarioContent> {
     ]),
   );
 
-  Widget _leyenda(Color color, String label) => Row(children: [
+  Widget _leyenda(Color color, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
     Container(width: 12, height: 12,
         decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
     const SizedBox(width: 4),
     Text(label, style: const TextStyle(fontSize: 12, color: kTextMuted)),
   ]);
+
+  Widget _leyendaIcono(IconData icon, Color color, String label) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: const TextStyle(fontSize: 12, color: kTextMuted)),
+      ]);
 
   Widget _resumenChip(IconData icon, String label, Color color, Color bg) =>
       Container(
