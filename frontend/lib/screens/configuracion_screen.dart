@@ -6,6 +6,7 @@ import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
+import '../models/insumo_model.dart' show kTipoResiduo;
 import '../providers/auth_provider.dart';
 
 // ─────────────────────────────────────────
@@ -865,6 +866,8 @@ class _GuiasTabState extends State<_GuiasTab> {
               ? <Map<String, dynamic>>[]
               : _insumos
                   .where((ins) => !yaAsignados.contains(ins['id'].toString()))
+                  // Un residuo no es insumo de una práctica (el backend da 400).
+                  .where((ins) => ins['tipo_nombre'] != kTipoResiduo)
                   .where((ins) => normalizarBusqueda(ins['nombre_insumo'] ?? '')
                       .contains(normalizarBusqueda(busqueda)))
                   .toList();
