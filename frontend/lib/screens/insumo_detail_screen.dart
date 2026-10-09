@@ -343,6 +343,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                   builder: (_) => SgaScreen(
                     insumoId: widget.insumoId,
                     insumoNombre: widget.insumoNombre,
+                    esResiduo: _insumo!['tipo_nombre'] == kTipoResiduo,
                   ),
                 ),
               ),

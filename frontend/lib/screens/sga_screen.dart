@@ -27,7 +27,11 @@ const _ghsInfo = {
 class SgaScreen extends StatefulWidget {
   final String insumoId;
   final String insumoNombre;
-  const SgaScreen({super.key, required this.insumoId, required this.insumoNombre});
+  /// Un residuo solo tiene etiqueta de residuo; cualquier otro insumo
+  /// (químico) solo la etiqueta SGA/FDS Colmena. El backend lo valida igual.
+  final bool esResiduo;
+  const SgaScreen({super.key, required this.insumoId, required this.insumoNombre,
+      this.esResiduo = false});
 
   @override
   State<SgaScreen> createState() => _SgaScreenState();
@@ -160,44 +164,12 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _abrirEtiquetaUrl() async {
-    final tipo = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Tipo de etiqueta',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.label_outline, color: Color(0xFF1E73BE)),
-              title: const Text('Etiqueta FDS (Colmena Seguros)',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('Ficha completa S1-S14 · 4 tamaños'),
-              onTap: () => Navigator.pop(ctx, 'fds'),
-            ),
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.delete_outline, color: Color(0xFF1E73BE)),
-              title: const Text('Etiqueta de residuo',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: const Text('CÓDIGO/VERSIÓN/RESPONSABLE · 4 tamaños'),
-              onTap: () => Navigator.pop(ctx, 'residuo'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-        ],
-      ),
-    );
-
-    if (tipo == null || !mounted) return;
+    // La etiqueta depende del tipo de insumo: residuo → etiqueta de residuo,
+    // químico → etiqueta SGA/FDS (Colmena). Ya no se pregunta.
+    final tipo = widget.esResiduo ? 'residuo' : 'fds';
 
     // Ambos tipos de etiqueta (FDS y residuo) usan los mismos 4 tamaños
-    // (FORMATOS_ETIQUETA en el backend) — se pregunta siempre, no solo
-    // para 'fds'; antes 'residuo' se mandaba fijo en '500l' sin preguntar.
+    // (FORMATOS_ETIQUETA en el backend).
     final formato = await _elegirFormato();
     if (formato == null || !mounted) return;
 
@@ -334,6 +306,7 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
                       insumoId: widget.insumoId,
                       datos: _datos ?? {},
                       onGuardado: (d) => setState(() { _datos = d; _colmena = null; }),
+                      esResiduo: widget.esResiduo,
                     ),
                     _ColmenaTab(colmena: _colmena),
                   ],
@@ -629,7 +602,10 @@ class _EditarSgaTab extends StatefulWidget {
   final String insumoId;
   final Map<String, dynamic> datos;
   final void Function(Map<String, dynamic>) onGuardado;
-  const _EditarSgaTab({required this.insumoId, required this.datos, required this.onGuardado});
+  /// Los campos propios de la etiqueta de residuo solo se muestran a residuos.
+  final bool esResiduo;
+  const _EditarSgaTab({required this.insumoId, required this.datos, required this.onGuardado,
+      this.esResiduo = false});
 
   @override
   State<_EditarSgaTab> createState() => _EditarSgaTabState();
@@ -875,13 +851,15 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
                   child: Column(children: [
                     TextFormField(controller: _c['numero_un'],
                         decoration: _deco('Número UN')),
-                    const SizedBox(height: 14),
-                    TextFormField(controller: _c['residuo_clase_transporte'],
-                        decoration: _deco('Clase de transporte (para el rombo de la etiqueta de residuo, ej: 3, 8, 2.1)')),
-                    const SizedBox(height: 14),
-                    TextFormField(controller: _c['residuo_contiene_descripcion'],
-                        decoration: _deco('Descripción de "Contiene" (etiqueta de residuo)'),
-                        maxLines: 2),
+                    if (widget.esResiduo) ...[
+                      const SizedBox(height: 14),
+                      TextFormField(controller: _c['residuo_clase_transporte'],
+                          decoration: _deco('Clase de transporte (para el rombo de la etiqueta de residuo, ej: 3, 8, 2.1)')),
+                      const SizedBox(height: 14),
+                      TextFormField(controller: _c['residuo_contiene_descripcion'],
+                          decoration: _deco('Descripción de "Contiene" (etiqueta de residuo)'),
+                          maxLines: 2),
+                    ],
                     const SizedBox(height: 14),
                     Row(children: [
                       Expanded(child: _nfpaDropdown('Salud', _nfpaSalud,

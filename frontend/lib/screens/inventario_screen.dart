@@ -442,7 +442,8 @@ class _InventarioContentState extends State<InventarioContent> {
                         color: insumo.tieneSga ? kPrimary : kTextMuted),
                     onPressed: () => Navigator.push(ctx,
                         MaterialPageRoute(builder: (_) => SgaScreen(
-                            insumoId: insumo.id, insumoNombre: insumo.nombre))),
+                            insumoId: insumo.id, insumoNombre: insumo.nombre,
+                            esResiduo: insumo.esResiduo))),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                   ),
@@ -660,7 +661,8 @@ class _InventarioContentState extends State<InventarioContent> {
       onPressed: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => SgaScreen(
-            insumoId: insumo.id, insumoNombre: insumo.nombre)),
+            insumoId: insumo.id, insumoNombre: insumo.nombre,
+            esResiduo: insumo.esResiduo)),
       ),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
