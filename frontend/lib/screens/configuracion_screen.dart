@@ -1776,14 +1776,13 @@ class _LabConfigTabState extends State<_LabConfigTab> {
   final _c = <String, TextEditingController>{
     'nombre_laboratorio':          TextEditingController(),
     'direccion_laboratorio':       TextEditingController(),
-    'telefono_emergencia':         TextEditingController(),
     'nombre_proveedor_defecto':    TextEditingController(),
     'direccion_proveedor_defecto': TextEditingController(),
   };
 
-  // Contactos de emergencia de la etiqueta de residuo (Brigada, Bomberos,
-  // ARL, etc.) — lista de largo variable, a diferencia de los campos fijos
-  // de arriba.
+  // Contactos de emergencia del laboratorio (Emergencias, Brigada, Bomberos,
+  // ARL...) — única fuente para todas las etiquetas; el primero va a la ficha
+  // Colmena. Lista de largo variable, a diferencia de los campos fijos.
   final List<_ContactoCtrl> _contactos = [];
 
   @override
@@ -1944,15 +1943,6 @@ class _LabConfigTabState extends State<_LabConfigTab> {
                     decoration: _deco('Dirección'),
                     maxLines: 2,
                   ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _c['telefono_emergencia'],
-                    enabled: puedeEditar,
-                    decoration: _deco('Teléfono de emergencias',
-                        hint: 'Ej: 119 — Bomberos Rionegro',
-                        icon: Icons.phone_outlined),
-                    keyboardType: TextInputType.phone,
-                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -1979,13 +1969,13 @@ class _LabConfigTabState extends State<_LabConfigTab> {
               ),
               const SizedBox(height: 16),
 
-              // ── Sección 3: Contactos de emergencia (etiqueta de residuo) ─
+              // ── Sección 3: Contactos de emergencia (todas las etiquetas) ──
               _LabSection(
                 icon: Icons.support_agent_outlined,
-                titulo: 'Contactos de emergencia (etiqueta de residuo)',
-                subtitulo: 'Aparecen en "INFORMACIÓN DE PREVENCIÓN Y EMERGENCIA" de la '
-                    'etiqueta de residuo — Brigada del Politécnico, Bomberos Rionegro, '
-                    'ARL (Colmena), etc.',
+                titulo: 'Contactos de emergencia',
+                subtitulo: 'Se usan en todas las etiquetas (SGA y de residuo): Emergencias, '
+                    'Brigada, Bomberos, ARL… El primero es el teléfono de la ficha '
+                    'Colmena ARL.',
                 children: [
                   for (var i = 0; i < _contactos.length; i++) ...[
                     if (i > 0) const SizedBox(height: 10),
