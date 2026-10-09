@@ -6,7 +6,10 @@ import '../core/cache/cache_service.dart';
 import '../providers/auth_provider.dart';
 import '../core/sync/sync_service.dart';
 import '../core/horario_utils.dart';
+import '../core/permissions.dart';
+import '../core/secciones.dart';
 import '../widgets/qr_generator_dialog.dart';
+import '../widgets/registrar_movimiento_dialog.dart';
 import 'mi_semana_screen.dart';
 
 String _horaAmPm(int hora) {
@@ -15,8 +18,50 @@ String _horaAmPm(int hora) {
   return '$hora AM';
 }
 
+/// Botones de la grilla de "Acciones rápidas" del inicio.
+enum AccionRapida {
+  registrarEntrada,
+  registrarSalida,
+  nuevoPrestamo,
+  aprobarPrestamos,
+  registrarDevolucion,
+  buscarInsumo,
+  verBitacora,
+}
+
+/// Acciones rápidas que ve un usuario con los permisos de [can]: cada una
+/// exige lo mismo que el backend para la acción a la que lleva, y que la
+/// pestaña de destino exista para él.
+List<AccionRapida> accionesRapidasPara(bool Function(String permiso) can) {
+  final inventario = can(Perm.inventarioVer);
+  final prestamos  = can(Perm.prestamosVer);
+  return [
+    // POST operaciones/bitacora/ → bitacora.gestionar; el buscador lee el
+    // inventario → inventario.ver.
+    if (inventario && can(Perm.bitacoraGestionar)) ...[
+      AccionRapida.registrarEntrada,
+      AccionRapida.registrarSalida,
+    ],
+    // Crear un préstamo es público en el backend; el formulario vive en la
+    // pestaña Movimientos (prestamos.ver).
+    if (prestamos) AccionRapida.nuevoPrestamo,
+    // Aprobar y registrar devoluciones → prestamos.gestionar.
+    if (prestamos && can(Perm.prestamosGestionar)) ...[
+      AccionRapida.aprobarPrestamos,
+      AccionRapida.registrarDevolucion,
+    ],
+    if (inventario) AccionRapida.buscarInsumo,
+    if (can(Perm.bitacoraVer)) AccionRapida.verBitacora,
+  ];
+}
+
+/// Navega a otra pestaña de la pantalla principal por identidad (no por
+/// índice: la posición de cada pestaña depende de los permisos).
+typedef NavegarASeccion = void Function(Seccion seccion,
+    {DestinoPrestamos? prestamos});
+
 class DashboardContent extends StatefulWidget {
-  final void Function(int tabIndex)? onNavigateTo;
+  final NavegarASeccion? onNavigateTo;
   const DashboardContent({super.key, this.onNavigateTo});
   @override State<DashboardContent> createState() => _DashboardContentState();
 }
@@ -287,11 +332,12 @@ class _DashboardContentState extends State<DashboardContent> {
                   child: Text('Horario Semanal',
                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                 ),
-                TextButton(
-                  onPressed: () => widget.onNavigateTo?.call(4),
-                  child: const Text('Ver completo →',
-                      style: TextStyle(color: Colors.white70, fontSize: 12)),
-                ),
+                if (_puedeVer(Seccion.horario))
+                  TextButton(
+                    onPressed: () => widget.onNavigateTo?.call(Seccion.horario),
+                    child: const Text('Ver completo →',
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ),
               ]),
             ),
 
@@ -516,7 +562,43 @@ class _DashboardContentState extends State<DashboardContent> {
 
   // ── Acciones rápidas ──────────────────────────────────────────────────────
 
-  Widget _buildAccionesRapidas() => Container(
+  /// ¿El usuario tiene la pestaña [s]? (la misma regla que usa MainShell).
+  bool _puedeVer(Seccion s) => s.visiblePara(context.read<AuthProvider>().can);
+
+  Future<void> _registrarMovimiento(MovimientoStock tipo) async {
+    final ok = await buscarInsumoYRegistrarMovimiento(context, tipo: tipo);
+    if (ok && mounted) _cargar(); // los contadores de stock pueden cambiar
+  }
+
+  /// Botones de la grilla que el usuario puede usar (ver [accionesRapidasPara]).
+  List<Widget> _accionesVisibles() {
+    final auth = context.watch<AuthProvider>();
+    final ir = widget.onNavigateTo;
+    return accionesRapidasPara(auth.can).map((a) => switch (a) {
+      AccionRapida.registrarEntrada => _accionBtn(Icons.add_box_outlined,
+          'Registrar entrada', () => _registrarMovimiento(MovimientoStock.entrada)),
+      AccionRapida.registrarSalida => _accionBtn(Icons.outbox_outlined,
+          'Registrar salida', () => _registrarMovimiento(MovimientoStock.salida)),
+      AccionRapida.nuevoPrestamo => _accionBtn(Icons.post_add_outlined,
+          'Nuevo préstamo', () => ir?.call(Seccion.movimientos,
+              prestamos: const DestinoPrestamos(nuevoPrestamo: true))),
+      AccionRapida.aprobarPrestamos => _accionBtn(Icons.check_circle_outlined,
+          'Aprobar préstamos', () => ir?.call(Seccion.movimientos,
+              prestamos: const DestinoPrestamos(estado: 'PENDIENTE')),
+          badge: '${_data?['prestamos_pendientes'] ?? 0}'),
+      AccionRapida.registrarDevolucion => _accionBtn(Icons.assignment_return_outlined,
+          'Registrar devolución', () => ir?.call(Seccion.movimientos,
+              prestamos: const DestinoPrestamos(estado: 'ACTIVO'))),
+      AccionRapida.buscarInsumo => _accionBtn(Icons.search,
+          'Buscar insumo', () => ir?.call(Seccion.inventario)),
+      AccionRapida.verBitacora => _accionBtn(Icons.history_outlined,
+          'Ver bitácora', () => ir?.call(Seccion.bitacora)),
+    }).toList();
+  }
+
+  Widget _buildAccionesRapidas() {
+    final acciones = _accionesVisibles();
+    return Container(
     decoration: BoxDecoration(
       color: Colors.white, borderRadius: BorderRadius.circular(10),
       boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
@@ -539,7 +621,7 @@ class _DashboardContentState extends State<DashboardContent> {
         Padding(
           padding: const EdgeInsets.all(12),
           child: Column(children: [
-            // Botón QR prominente
+            // Botón QR prominente (formularios públicos: no requiere permiso)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -556,37 +638,22 @@ class _DashboardContentState extends State<DashboardContent> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
-            // Grid 2×3 de acciones secundarias
-            GridView.count(
-              crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
-              childAspectRatio: 1.3, shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _accionBtn(Icons.add_box_outlined,          'Registrar entrada',    () => widget.onNavigateTo?.call(2)),
-                _accionBtn(Icons.outbox_outlined,            'Registrar salida',     () => widget.onNavigateTo?.call(2)),
-                _accionBtn(Icons.inventory_2_outlined,       'Escanear ítem',        () => widget.onNavigateTo?.call(1)),
-                _accionBtn(Icons.check_circle_outlined,      'Aprobar préstamos',    () => widget.onNavigateTo?.call(2),
-                    badge: '${_data?['prestamos_pendientes'] ?? 0}'),
-                _accionBtn(Icons.history_outlined,           'Ver bitácora',         () => widget.onNavigateTo?.call(3)),
-                _accionBtn(Icons.assignment_return_outlined, 'Registrar devolución', () => widget.onNavigateTo?.call(2)),
-              ],
-            ),
-            // Link personalizar
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: null,
-                child: Text('✏ Personalizar bandeja',
-                    style: TextStyle(fontSize: 11, color: kTextMuted)),
+            if (acciones.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              // Grilla de acciones secundarias (según permisos)
+              GridView.count(
+                crossAxisCount: 2, crossAxisSpacing: 8, mainAxisSpacing: 8,
+                childAspectRatio: 1.3, shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: acciones,
               ),
-            ),
+            ],
           ]),
         ),
       ]),
     ),
   );
+  }
 
   Widget _accionBtn(IconData icon, String label, VoidCallback? onTap,
       {String? badge}) =>
@@ -660,13 +727,14 @@ class _DashboardContentState extends State<DashboardContent> {
                         fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => widget.onNavigateTo?.call(1),
-                style: TextButton.styleFrom(padding: EdgeInsets.zero,
-                    minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                child: const Text('Ver todos →',
-                    style: TextStyle(color: kPrimary, fontSize: 12)),
-              ),
+              if (_puedeVer(Seccion.inventario))
+                TextButton(
+                  onPressed: () => widget.onNavigateTo?.call(Seccion.inventario),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
+                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  child: const Text('Ver todos →',
+                      style: TextStyle(color: kPrimary, fontSize: 12)),
+                ),
             ]),
           ),
           // Tabla

@@ -9,6 +9,7 @@ import '../core/permissions.dart';
 import '../core/text_utils.dart';
 import '../core/presentaciones.dart';
 import '../core/rango_fechas.dart';
+import '../core/secciones.dart';
 import '../widgets/filtro_rango_fechas.dart';
 import '../core/uuid_v4.dart';
 import '../core/cache/cache_service.dart';
@@ -22,10 +23,10 @@ class MovimientosContent extends StatefulWidget {
   const MovimientosContent({super.key});
 
   @override
-  State<MovimientosContent> createState() => _MovimientosContentState();
+  State<MovimientosContent> createState() => MovimientosContentState();
 }
 
-class _MovimientosContentState extends State<MovimientosContent> {
+class MovimientosContentState extends State<MovimientosContent> {
   String get _cacheKey => 'prestamos_$_filtroEstado';
 
   /// Estados "activos": siempre se cargan COMPLETOS (todas las páginas),
@@ -72,6 +73,22 @@ class _MovimientosContentState extends State<MovimientosContent> {
         setState(() => _enCurso.remove(id));
       }
     }
+  }
+
+  /// Llamado desde las acciones rápidas del inicio: aplica el filtro de
+  /// estado pedido (p. ej. PENDIENTE para aprobar, ACTIVO para registrar
+  /// una devolución) y/o abre el formulario de nuevo préstamo.
+  void abrir(DestinoPrestamos destino) {
+    if (!mounted) return;
+    final estado = destino.estado;
+    final cambiaFiltro = estado != null &&
+        _estadoFiltros.contains(estado) &&
+        estado != _filtroEstado;
+    setState(() {
+      if (destino.nuevoPrestamo) _mostrarForm = true;
+      if (cambiaFiltro) _filtroEstado = estado;
+    });
+    if (cambiaFiltro) _fetchPrestamos();
   }
 
   @override

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../core/theme/colors.dart';
-import '../core/permissions.dart';
+import '../core/secciones.dart';
 import '../core/sync/sync_service.dart';
 import '../services/monitor_reminder_service.dart';
 import '../services/update_service.dart';
@@ -18,10 +18,11 @@ import 'informes_screen.dart';
 import '../widgets/cerrar_sesion.dart';
 
 class _TabDef {
+  final Seccion  seccion;
   final IconData icon;
   final String   label;
   final Widget   content;
-  const _TabDef(this.icon, this.label, this.content);
+  const _TabDef(this.seccion, this.icon, this.label, this.content);
 }
 
 class MainShell extends StatefulWidget {
@@ -33,6 +34,7 @@ class _MainShellState extends State<MainShell> {
   int _idx = 0;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _configKey   = GlobalKey<ConfiguracionScreenState>();
+  final _movKey      = GlobalKey<MovimientosContentState>();
   bool _reminderIniciado = false;
   bool _updateChecked = false;
 
@@ -80,21 +82,30 @@ class _MainShellState extends State<MainShell> {
     super.dispose();
   }
 
+  /// Pestañas visibles para el usuario. Cuáles aparecen depende de sus
+  /// permisos (ver [SeccionPermiso.permiso]), así que la posición de cada
+  /// una varía: se navega por [Seccion], nunca por índice fijo.
   List<_TabDef> _tabs(AuthProvider auth) => [
-    _TabDef(Icons.home_outlined,            'Inicio',        DashboardContent(onNavigateTo: (i) => setState(() => _idx = i))),
-    if (auth.can(Perm.inventarioVer))
-      const _TabDef(Icons.inventory_2_outlined,   'Inventario',    InventarioContent()),
-    if (auth.can(Perm.prestamosVer))
-      const _TabDef(Icons.swap_horiz_outlined,    'Movimientos',   MovimientosContent()),
-    if (auth.can(Perm.bitacoraVer))
-      const _TabDef(Icons.history_outlined,       'Bitácora',      BitacoraContent()),
-    if (auth.can(Perm.academicoVer))
-      const _TabDef(Icons.calendar_month_outlined,'Horario',       HorarioScreen()),
-    if (auth.can(Perm.informesVer))
-      const _TabDef(Icons.picture_as_pdf_outlined,'Informes',      InformesContent()),
-    if (auth.can(Perm.configuracionGestion))
-      _TabDef(Icons.settings_outlined, 'Configuración', ConfiguracionScreen(key: _configKey)),
-  ];
+    _TabDef(Seccion.inicio,        Icons.home_outlined,             'Inicio',        DashboardContent(onNavigateTo: _irA)),
+    _TabDef(Seccion.inventario,    Icons.inventory_2_outlined,      'Inventario',    const InventarioContent()),
+    _TabDef(Seccion.movimientos,   Icons.swap_horiz_outlined,       'Movimientos',   MovimientosContent(key: _movKey)),
+    _TabDef(Seccion.bitacora,      Icons.history_outlined,          'Bitácora',      const BitacoraContent()),
+    _TabDef(Seccion.horario,       Icons.calendar_month_outlined,   'Horario',       const HorarioScreen()),
+    _TabDef(Seccion.informes,      Icons.picture_as_pdf_outlined,   'Informes',      const InformesContent()),
+    _TabDef(Seccion.configuracion, Icons.settings_outlined,         'Configuración', ConfiguracionScreen(key: _configKey)),
+  ].where((t) => t.seccion.visiblePara(auth.can)).toList();
+
+  /// Cambia a la pestaña [seccion] (si el usuario la tiene) y, para la de
+  /// préstamos, aplica el filtro / abre el formulario de [prestamos].
+  void _irA(Seccion seccion, {DestinoPrestamos? prestamos}) {
+    final i = _tabs(context.read<AuthProvider>())
+        .indexWhere((t) => t.seccion == seccion);
+    if (i < 0) return;
+    setState(() => _idx = i);
+    if (prestamos != null && seccion == Seccion.movimientos) {
+      _movKey.currentState?.abrir(prestamos);
+    }
+  }
 
   Widget _syncIndicator(SyncService sync) {
     if (!sync.online) {
@@ -217,7 +228,7 @@ class _MainShellState extends State<MainShell> {
             padding: const EdgeInsets.symmetric(vertical: 4),
             children: tabs.asMap().entries.map((e) {
               final isActive = idx == e.key;
-              if (e.value.label == 'Configuración') {
+              if (e.value.seccion == Seccion.configuracion) {
                 return _buildSidebarConfig(context, e.key, idx, isActive);
               }
               return _buildSidebarItem(e.value.icon, e.value.label, e.key, isActive);
@@ -540,7 +551,7 @@ class _MainShellState extends State<MainShell> {
               padding: EdgeInsets.zero,
               children: [
                 ...tabs.asMap().entries.map((e) {
-                  if (e.value.label == 'Configuración') {
+                  if (e.value.seccion == Seccion.configuracion) {
                     return _buildConfigExpansionTile(context, e.key, idx);
                   }
                   return ListTile(
