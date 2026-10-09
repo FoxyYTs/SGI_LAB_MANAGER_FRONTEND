@@ -65,4 +65,21 @@ void main() {
       });
     }
   }
+
+  testWidgets('el chip Total cuenta la sección mostrada', (t) async {
+    await _montar(t, 1280);
+    expect(find.text('Total: 3'), findsOneWidget);       // sin los 2 residuos
+    await _elegir(t, kTipoResiduo);
+    expect(find.text('Total: 2'), findsOneWidget);
+    expect(find.textContaining('Críticos'), findsNothing);
+  });
+
+  testWidgets('"Todos" oculta los residuos, pero la búsqueda sí los encuentra', (t) async {
+    await _montar(t, 1280);
+    expect(find.text('Halogenados'), findsNothing);
+    await t.enterText(find.byType(TextField), 'halogen');
+    await t.pump(const Duration(milliseconds: 350));      // debounce
+    expect(find.text('Halogenados'), findsOneWidget);
+    expect(find.text('RESIDUO'), findsOneWidget);
+  });
 }

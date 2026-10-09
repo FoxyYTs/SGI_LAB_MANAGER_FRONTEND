@@ -140,9 +140,14 @@ class _InventarioContentState extends State<InventarioContent> {
         }
 
         final query = normalizarBusqueda(_searchQuery);
+        final buscando = query.trim().isNotEmpty;
         final filtrados = _applySort(provider.insumos.where((i) {
-          // Los residuos tienen su propia sección: no se mezclan en "Todos".
-          final matchTipo   = _filtroTipo == 'Todos' ? !i.esResiduo : i.tipo == _filtroTipo;
+          // Los residuos tienen su propia sección: no se mezclan en "Todos"
+          // al navegar, pero sí al buscar (si no, buscar un residuo desde
+          // "Todos" nunca daba resultados). En la tabla se ven como RESIDUO.
+          final matchTipo   = _filtroTipo == 'Todos'
+              ? (!i.esResiduo || buscando)
+              : i.tipo == _filtroTipo;
           final matchSearch = normalizarBusqueda(i.nombre).contains(query) ||
                               normalizarBusqueda(i.tipo).contains(query) ||
                               normalizarBusqueda(i.formulaQuimica).contains(query);
@@ -151,6 +156,9 @@ class _InventarioContentState extends State<InventarioContent> {
 
         final esQuimico = _filtroTipo == 'Químico';
         final esResiduo = _filtroTipo == kTipoResiduo;
+        // Los chips de resumen cuentan la sección que se está viendo: en
+        // Residuos solo los residuos; en las demás, todo menos los residuos.
+        final seccion = provider.insumos.where((i) => i.esResiduo == esResiduo).toList();
         final conSga    = esQuimico || esResiduo;
         final titulo    = esQuimico
             ? 'Inventario de Químicos'
@@ -265,14 +273,17 @@ class _InventarioContentState extends State<InventarioContent> {
                   Row(children: [
                     // Chips informativos
                     _resumenChip(Icons.inventory_2_outlined,
-                        'Total: ${provider.insumos.length}',
+                        'Total: ${seccion.length}',
                         const Color(0xFF6C757D), const Color(0xFFF0F0F0)),
-                    const SizedBox(width: 8),
-                    _resumenChip(Icons.circle, 'Críticos: ${provider.insumos.where((i) => i.semaforo == "ROJO").length}',
-                        kSemaforoRojo, const Color(0xFFFFEBEE)),
-                    const SizedBox(width: 8),
-                    _resumenChip(Icons.circle, 'Bajos: ${provider.insumos.where((i) => i.semaforo == "AMARILLO").length}',
-                        const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+                    // Los residuos no tienen semáforo: sin críticos ni bajos.
+                    if (!esResiduo) ...[
+                      const SizedBox(width: 8),
+                      _resumenChip(Icons.circle, 'Críticos: ${seccion.where((i) => i.semaforo == "ROJO").length}',
+                          kSemaforoRojo, const Color(0xFFFFEBEE)),
+                      const SizedBox(width: 8),
+                      _resumenChip(Icons.circle, 'Bajos: ${seccion.where((i) => i.semaforo == "AMARILLO").length}',
+                          const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+                    ],
                     const Spacer(),
                   ]),
                 if (!isMobile) const SizedBox(height: 10),
@@ -494,7 +505,9 @@ class _InventarioContentState extends State<InventarioContent> {
               _cell(insumo.tipo),
               _cell(insumo.ubicacion),
               _cell('${insumo.stockActual.toStringAsFixed(0)} ${insumo.unidad}'),
-              _cell('${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
+              _cell(insumo.esResiduo
+                  ? '—'   // un residuo no tiene stock mínimo
+                  : '${insumo.stockMinimo.toStringAsFixed(0)} ${insumo.unidad}'),
               _semaforo(insumo.estado),
               if (showSga)
                 Padding(
