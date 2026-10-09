@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -187,8 +189,8 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
       final nombre = 'etiqueta_${sufijo}_${widget.insumoId}.pdf';
       final msg = await saveAndOpenFile(List<int>.from(resp.data as List), nombre);
       if (msg != null && mounted) _snack(msg, kTextMuted);
-    } on DioException {
-      if (mounted) _snack('Error al descargar la etiqueta.', kDanger);
+    } on DioException catch (e) {
+      if (mounted) _snack(detalleDeError(e.response?.data, 'Error al descargar la etiqueta.'), kDanger);
     } finally {
       if (mounted) setState(() => _descargandoPdf = false);
     }
@@ -1389,4 +1391,18 @@ class _DialogConfirmacionFDS extends StatelessWidget {
     final s = valor.toString();
     return s.length > 80 ? '${s.substring(0, 80)}…' : s;
   }
+}
+
+// ── Mensaje de error del backend ──────────────────────────────────────────────
+
+/// `detail` de una respuesta de error del backend (p. ej. el 400 de la
+/// etiqueta) o `porDefecto` si no lo hay. Con responseType bytes (descargas)
+/// el cuerpo llega como bytes y hay que decodificarlo.
+@visibleForTesting
+String detalleDeError(Object? data, String porDefecto) {
+  try {
+    final Object? json = data is List<int> ? jsonDecode(utf8.decode(data)) : data;
+    if (json is Map && json['detail'] != null) return json['detail'].toString();
+  } catch (_) {/* cuerpo no JSON: mensaje genérico */}
+  return porDefecto;
 }
