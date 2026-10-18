@@ -361,9 +361,8 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
     final esEdicion = widget.insumo != null;
 
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: Text(esEdicion ? 'Editar insumo' : 'Nuevo insumo',
             style: const TextStyle(color: kPrimary, fontWeight: FontWeight.bold)),
         elevation: 1,
@@ -534,9 +533,9 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFDEE2E6)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
       ),
       child: Column(
@@ -553,7 +552,7 @@ class _InsumoFormScreenState extends State<InsumoFormScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE9ECEF),
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Text('INACTIVA',

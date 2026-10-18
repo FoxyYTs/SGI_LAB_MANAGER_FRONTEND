@@ -5,6 +5,7 @@ import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
 import '../models/insumo_model.dart' show kTipoResiduo;
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/permissions.dart';
 import '../core/presentaciones.dart';
 import '../providers/auth_provider.dart';
@@ -333,9 +334,8 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         elevation: 1,
         title: Text(
           widget.insumoNombre,
@@ -430,11 +430,11 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                 height: 200,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                loadingBuilder: (_, child, progress) => progress == null
+                loadingBuilder: (ctx, child, progress) => progress == null
                     ? child
                     : Container(
                         height: 200,
-                        color: Colors.grey[100],
+                        color: Theme.of(ctx).colorScheme.surfaceContainerHigh,
                         child: const Center(
                             child: CircularProgressIndicator(color: kPrimary)),
                       ),
@@ -747,7 +747,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
       {bool puedeGestionar = false}) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(10),
+        color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: ClipRRect(
@@ -757,7 +757,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            color: kPrimary,
+            color: context.sgi.brandBar,
             child: const Row(children: [
               Icon(Icons.inventory_2_outlined, color: Colors.white, size: 18),
               SizedBox(width: 8),
@@ -773,20 +773,20 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
             final unidad = p['unidad_nombre']?.toString() ?? '';
             final activa = presentacionActiva(p);
 
-            final (chipLabel, chipColor, chipBg) = !activa
-                ? ('INACTIVA', kTextMuted,         const Color(0xFFE9ECEF))
+            final (chipLabel, chipColor) = !activa
+                ? ('INACTIVA', kTextMuted)
                 : stock <= 0
-                ? ('SIN STOCK', kDanger,           const Color(0xFFFFEBEE))
+                ? ('SIN STOCK', kDanger)
                 : stock <= stockMin
-                    ? ('CRÍTICO',  kSemaforoRojo,    const Color(0xFFFFEBEE))
+                    ? ('CRÍTICO',  kSemaforoRojo)
                     : stock <= stockMin * 1.5
-                        ? ('BAJO',     const Color(0xFFE65100), const Color(0xFFFFF8E1))
-                        : ('OK',       kSemaforoVerde, const Color(0xFFE8F5E9));
+                        ? ('BAJO',     const Color(0xFFE65100))
+                        : ('OK',       kSemaforoVerde);
 
             return Container(
               decoration: BoxDecoration(
-                color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
-                border: const Border(bottom: BorderSide(color: Color(0xFFDEE2E6))),
+                color: idx.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface,
+                border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
               ),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(children: [
@@ -794,7 +794,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                 Container(
                   width: 36, height: 36,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE9ECEF),
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Icon(Icons.science_outlined, size: 18, color: kTextMuted),
@@ -817,7 +817,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                 // Chip estado
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: chipBg, borderRadius: BorderRadius.circular(20)),
+                  decoration: BoxDecoration(color: chipColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
                   child: Text(chipLabel,
                       style: TextStyle(color: chipColor, fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
@@ -855,7 +855,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
   Widget _stockCard(String label, String value, Color color) => Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
           border: Border(left: BorderSide(color: color, width: 3)),
           boxShadow: const [

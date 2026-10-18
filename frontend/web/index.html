@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -31,6 +31,13 @@
 
   <title>SGI LAB MANAGER</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Fondo neutro oscuro: cubre el flash de carga y cualquier zona que la
+       vista de Flutter no alcance a repintar (evita franjas blancas/azules). -->
+  <style>
+    html, body { margin: 0; height: 100%; background-color: #0E1620; }
+    flutter-view, flt-glass-pane { background-color: #0E1620; }
+  </style>
 
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-VJHJ8STXEG"></script>

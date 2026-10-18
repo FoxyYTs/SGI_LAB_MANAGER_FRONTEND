@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
 import '../providers/auth_provider.dart';
@@ -34,9 +35,8 @@ class _PermisosScreenState extends State<PermisosScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Gestión de permisos',
             style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold)),
         elevation: 1,
@@ -182,7 +182,7 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
               children: [
                 // Cabecera
                 TableRow(
-                  decoration: const BoxDecoration(color: kPrimary),
+                  decoration: BoxDecoration(color: context.sgi.brandBar),
                   children: [
                     const Padding(
                       padding: EdgeInsets.all(10),
@@ -202,8 +202,8 @@ class _PermisosPorRolState extends State<_PermisosPorRol> {
                 ...Perm.todos.map((codigo) => TableRow(
                   decoration: BoxDecoration(
                     color: Perm.todos.indexOf(codigo).isEven
-                        ? Colors.white
-                        : const Color(0xFFF8F9FA),
+                        ? Theme.of(context).colorScheme.surface
+                        : Theme.of(context).colorScheme.surfaceContainer,
                   ),
                   children: [
                     Padding(
@@ -544,8 +544,8 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
           children: [
             // Barra de regreso al listado
             Container(
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Color(0xFFDEE2E6))),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
               ),
               child: ListTile(
                 leading: const Icon(Icons.arrow_back, color: kPrimary),
@@ -568,8 +568,8 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
         // Panel izquierdo: lista de usuarios
         Container(
           width: 220,
-          decoration: const BoxDecoration(
-            border: Border(right: BorderSide(color: Color(0xFFDEE2E6))),
+          decoration: BoxDecoration(
+            border: Border(right: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
           ),
           child: Column(
             children: [
@@ -592,11 +592,11 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+                      borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+                      borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -783,14 +783,14 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
         // ── Card usuario ──────────────────────────────────────────────────
         Container(
           decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(10),
+            color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
           ),
           padding: const EdgeInsets.all(16),
           child: Row(children: [
             // Avatar
             CircleAvatar(
-              radius: 24, backgroundColor: kPrimary.withValues(alpha: 0.15),
+              radius: 24, backgroundColor: context.sgi.accent.withValues(alpha: 0.15),
               child: Text(iniciales, style: const TextStyle(
                   color: kPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
             ),
@@ -822,13 +822,13 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFDEE2E6)),
+                      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
                       borderRadius: BorderRadius.circular(8)),
                   child: DropdownButton<String>(
                     value: rol.isEmpty ? null : rol,
                     underline: const SizedBox.shrink(),
                     isDense: true,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF223542)),
+                    style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface),
                     items: _rolesDisponibles.map((r) => DropdownMenuItem(
                       value: r,
                       child: Text(r),
@@ -879,7 +879,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
         // ── Cumple turnos de monitor (independiente del rol) ────────────────
         Container(
           decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(10),
+            color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -914,7 +914,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
         // ── Tabla de permisos ────────────────────────────────────────────
         Container(
           decoration: BoxDecoration(
-            color: Colors.white, borderRadius: BorderRadius.circular(10),
+            color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
           ),
           child: ClipRRect(
@@ -923,7 +923,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
               // Header azul
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                color: kPrimary,
+                color: context.sgi.brandBar,
                 child: Row(children: [
                   Text('Permisos de $username',
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
@@ -968,7 +968,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
 
               // Cabecera tabla
               Container(
-                color: const Color(0xFFF8F9FA),
+                color: Theme.of(context).colorScheme.surfaceContainer,
                 child: const Row(children: [
                   Expanded(child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -981,7 +981,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: kTextMuted)))),
                 ]),
               ),
-              const Divider(height: 1, color: Color(0xFFDEE2E6)),
+              Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
 
               // Filas de permisos
               ...Perm.todos.asMap().entries.map((e) {
@@ -991,8 +991,8 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                 final extra  = _extraPermisos.contains(codigo);
                 return Container(
                   decoration: BoxDecoration(
-                    color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
-                    border: const Border(bottom: BorderSide(color: Color(0xFFDEE2E6))),
+                    color: idx.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface,
+                    border: Border(bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
                   ),
                   child: Row(children: [
                     Expanded(
@@ -1015,12 +1015,12 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                     SizedBox(width: 80, child: Center(
                       child: delRol
                           ? const Icon(Icons.lock, size: 18, color: kPrimary)
-                          : const Icon(Icons.remove, size: 16, color: Color(0xFFDEE2E6)),
+                          : Icon(Icons.remove, size: 16, color: Theme.of(context).colorScheme.outlineVariant),
                     )),
                     // EXTRA
                     SizedBox(width: 80, child: Center(
                       child: esAdmin || esEstudiante || delRol
-                          ? const Icon(Icons.remove, size: 16, color: Color(0xFFDEE2E6))
+                          ? Icon(Icons.remove, size: 16, color: Theme.of(context).colorScheme.outlineVariant)
                           : Checkbox(
                               value: extra,
                               activeColor: kPrimary,
@@ -1060,7 +1060,7 @@ class _InfoPermiso extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 240),
             child: Text(descripcion,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF223542))),
+                style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurface)),
           ),
         ),
       ],

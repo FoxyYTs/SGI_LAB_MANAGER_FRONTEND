@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../services/update_service.dart' show kAppVersion;
 
 void showSgiAboutDialog(BuildContext context) {
@@ -135,7 +136,7 @@ class _LinkButton extends StatelessWidget {
       child: filled
           ? ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
+                backgroundColor: context.sgi.brandBar,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
 import '../core/presentaciones.dart';
@@ -391,7 +392,7 @@ class MovimientosContentState extends State<MovimientosContent> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF8E1),
+                color: kSemaforoAmarillo.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: kSemaforoAmarillo),
               ),
@@ -540,9 +541,9 @@ class MovimientosContentState extends State<MovimientosContent> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
-              color: sel ? color : Colors.white,
+              color: sel ? color : Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: sel ? color : const Color(0xFFDEE2E6)),
+              border: Border.all(color: sel ? color : Theme.of(context).colorScheme.outlineVariant),
             ),
             child: Text(
               _estadoFiltroLabels[estado] ?? estado,
@@ -587,7 +588,7 @@ class MovimientosContentState extends State<MovimientosContent> {
             icon: const Icon(Icons.add),
             label: const Text('Registrar primer préstamo'),
             style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
+                backgroundColor: context.sgi.brandBar,
                 foregroundColor: Colors.white),
             onPressed: () => setState(() => _mostrarForm = true),
           ),
@@ -776,7 +777,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
                       : const Icon(Icons.save_outlined),
                   label: const Text('Registrar préstamo'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.sgi.brandBar,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -958,7 +959,7 @@ class _InsumoSelectorButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFAAAAAA)),
+          border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Row(children: [
@@ -968,7 +969,7 @@ class _InsumoSelectorButton extends StatelessWidget {
             child: Text(
               nombre ?? 'Seleccionar insumo...',
               style: TextStyle(
-                color: nombre != null ? Colors.black87 : kTextMuted,
+                color: nombre != null ? Theme.of(context).colorScheme.onSurface : kTextMuted,
                 fontSize: 14,
               ),
               overflow: TextOverflow.ellipsis,
@@ -1121,13 +1122,6 @@ class _PrestamoCard extends StatelessWidget {
     'RECHAZADO': kDanger,
   };
 
-  static const _estadoBg = {
-    'PENDIENTE': Color(0xFFFFF8E1),
-    'ACTIVO':    Color(0xFFE3F2FD),
-    'DEVUELTO':  Color(0xFFE8F5E9),
-    'RECHAZADO': Color(0xFFFFEBEE),
-  };
-
   static const _estadoLabels = {
     'PENDIENTE': 'PENDIENTE',
     'ACTIVO':    'ACTIVO',
@@ -1140,7 +1134,7 @@ class _PrestamoCard extends StatelessWidget {
     final id       = prestamo['id']?.toString() ?? '';
     final estado   = prestamo['estado']?.toString() ?? '';
     final color    = _estadoColors[estado] ?? kTextMuted;
-    final bgColor  = _estadoBg[estado] ?? const Color(0xFFF5F5F5);
+    final bgColor  = color.withValues(alpha: 0.15);
     final label    = _estadoLabels[estado] ?? estado;
     final detalles = (prestamo['detalles'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final fecha    = (prestamo['fecha_solicitud']?.toString() ?? '')
@@ -1151,7 +1145,9 @@ class _PrestamoCard extends StatelessWidget {
     final isInactive  = estado == 'DEVUELTO' || estado == 'RECHAZADO';
 
     return Material(
-      color: isInactive ? Colors.white.withValues(alpha: 0.85) : Colors.white,
+      color: isInactive
+          ? Theme.of(context).colorScheme.surface.withValues(alpha: 0.6)
+          : Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(10),
       elevation: 1,
       shadowColor: Colors.black12,
@@ -1256,7 +1252,7 @@ class _PrestamoCard extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: kPrimary, foregroundColor: Colors.white,
+                          backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                           elevation: 0,
                           padding: const EdgeInsets.symmetric(vertical: 8)),
                       onPressed: ocupado ? null : () => onAprobar(id),
@@ -1347,7 +1343,7 @@ class _PrestamoCard extends StatelessWidget {
               child: const Text('Cancelar')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
+                backgroundColor: context.sgi.brandBar,
                 foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Confirmar'),
@@ -1460,7 +1456,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary, foregroundColor: Colors.white),
+              backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
           onPressed: _items.any((i) => i.insumoId != null) ? _confirmar : null,
           child: const Text('Agregar'),
         ),

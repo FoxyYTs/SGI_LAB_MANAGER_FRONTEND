@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/horario_utils.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/horario_bloque_dialog.dart';
 
@@ -110,7 +111,7 @@ class _PlantillasHorarioScreenState extends State<PlantillasHorarioScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
               onPressed: () {
                 final msg = nombreCtrl.text.trim().isEmpty
                     ? 'Escribe un nombre'
@@ -337,10 +338,9 @@ class _PlantillasHorarioScreenState extends State<PlantillasHorarioScreen> {
         if (!didPop) Navigator.pop(context, _aplicada);
       },
       child: Scaffold(
-        backgroundColor: kBackground,
         appBar: AppBar(
           title: const Text('Plantillas de horario'),
-          backgroundColor: Colors.white,
+          backgroundColor: Theme.of(context).colorScheme.surface,
           foregroundColor: kPrimary,
           elevation: 0.5,
           bottom: _ocupado
@@ -351,7 +351,7 @@ class _PlantillasHorarioScreenState extends State<PlantillasHorarioScreen> {
               : null,
         ),
         floatingActionButton: FloatingActionButton.extended(
-          backgroundColor: kPrimary,
+          backgroundColor: context.sgi.brandBar,
           foregroundColor: Colors.white,
           onPressed: _ocupado ? null : _guardarActual,
           icon: const Icon(Icons.save_outlined),

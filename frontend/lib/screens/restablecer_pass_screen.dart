@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 class RestablecerPassScreen extends StatefulWidget {
   const RestablecerPassScreen({super.key});
@@ -111,13 +112,7 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF002D72), Color(0xFF0056B3), Color(0xFF007BFF)],
-          ),
-        ),
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 32),
@@ -133,9 +128,9 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 20),
-                      decoration: const BoxDecoration(
-                        color: kPrimary,
-                        borderRadius: BorderRadius.only(
+                      decoration: BoxDecoration(
+                        color: context.sgi.brandBar,
+                        borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(12),
                           topRight: Radius.circular(12),
                         ),

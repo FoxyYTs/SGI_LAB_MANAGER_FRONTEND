@@ -6,8 +6,8 @@ class ActualizacionRequeridaScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: kBackground,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -26,20 +26,20 @@ class ActualizacionRequeridaScreen extends StatelessWidget {
                       size: 64, color: kDanger),
                 ),
                 const SizedBox(height: 28),
-                const Text(
+                Text(
                   'Actualización requerida',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: cs.onSurface,
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Tu versión de la aplicación está desactualizada y ya no es compatible con el servidor.\n\n'
                   'Por favor instala la versión más reciente para continuar usando SGI LAB MANAGER.',
-                  style: TextStyle(fontSize: 14, color: Colors.black54, height: 1.5),
+                  style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant, height: 1.5),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
@@ -60,7 +60,7 @@ class ActualizacionRequeridaScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   'Contacta al administrador si el problema persiste.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
               ],

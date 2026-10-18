@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/cache/cache_service.dart';
 import '../core/rango_fechas.dart';
 import '../widgets/filtro_rango_fechas.dart';
@@ -178,7 +179,7 @@ class _BitacoraContentState extends State<BitacoraContent> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF8E1),
+                color: kSemaforoAmarillo.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: kSemaforoAmarillo),
               ),
@@ -216,7 +217,7 @@ class _BitacoraContentState extends State<BitacoraContent> {
             child: Row(
               children: _tipos.map((tipo) {
                 final sel   = _filtroTipo == tipo;
-                final color = tipo == 'Todos' ? kPrimary : _colorTipo(tipo);
+                final color = tipo == 'Todos' ? context.sgi.brandBar : _colorTipo(tipo);
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: GestureDetector(
@@ -227,9 +228,9 @@ class _BitacoraContentState extends State<BitacoraContent> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
-                        color: sel ? color : Colors.white,
+                        color: sel ? color : Theme.of(context).colorScheme.surface,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: sel ? color : const Color(0xFFDEE2E6)),
+                        border: Border.all(color: sel ? color : Theme.of(context).colorScheme.outlineVariant),
                       ),
                       child: Text(
                         _labels[tipo] ?? tipo,
@@ -280,7 +281,7 @@ class _BitacoraContentState extends State<BitacoraContent> {
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.surface,
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
                             ),
@@ -337,8 +338,8 @@ class _BitacoraContentState extends State<BitacoraContent> {
         3: FixedColumnWidth(80),
         4: FlexColumnWidth(1.5),
       },
-      border: const TableBorder(
-          horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
+      border: TableBorder(
+          horizontalInside: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
       children: [
         _headerRow(['Insumo', 'Tipo', 'Fecha', 'Cantidad', 'Usuario']),
         ..._movimientos.asMap().entries.map((e) {
@@ -352,7 +353,7 @@ class _BitacoraContentState extends State<BitacoraContent> {
 
           return TableRow(
             decoration: BoxDecoration(
-                color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white),
+                color: idx.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface),
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -397,14 +398,7 @@ class _BitacoraContentState extends State<BitacoraContent> {
 
   Widget _chipTipo(String tipo) {
     final color = _colorTipo(tipo);
-    final bg    = switch (tipo) {
-      'ENTRADA'          => const Color(0xFFE8F5E9),
-      'SALIDA'           => const Color(0xFFFFEBEE),
-      'AJUSTE'           => const Color(0xFFE3F2FD),
-      'ROTURA'           => const Color(0xFFFFF8E1),
-      'CONSUMO_PRACTICA' => const Color(0xFFF3E5F5),
-      _                  => const Color(0xFFF5F5F5),
-    };
+    final bg    = color.withValues(alpha: 0.15);
     final label = _labels[tipo] ?? tipo;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -419,7 +413,7 @@ class _BitacoraContentState extends State<BitacoraContent> {
   }
 
   TableRow _headerRow(List<String> cols) => TableRow(
-    decoration: const BoxDecoration(color: kPrimary),
+    decoration: BoxDecoration(color: context.sgi.brandBar),
     children: cols.map((h) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Text(h,

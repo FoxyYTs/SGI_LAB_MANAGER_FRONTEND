@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/cache/cache_service.dart';
 import '../providers/auth_provider.dart';
 import '../core/sync/sync_service.dart';
@@ -274,12 +275,16 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _statCard(IconData icon, String label, String value,
-      Color color, Color bgColor) =>
+  Widget _statCard(IconData icon, String label, String value, Color color, Color bgColor) =>
       Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: bgColor, borderRadius: BorderRadius.circular(10),
+          // Claro: pastel fijo del diseño original (limpio y luminoso). Oscuro:
+          // tinte translúcido del color del dato (el pastel claro no sirve sobre fondo oscuro).
+          color: Theme.of(context).brightness == Brightness.dark
+              ? context.sgi.tileBg(color)
+              : bgColor,
+          borderRadius: BorderRadius.circular(10),
           boxShadow: [BoxShadow(
               color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 4, offset: const Offset(0, 2))],
@@ -312,7 +317,7 @@ class _DashboardContentState extends State<DashboardContent> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(10),
+        color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: ClipRRect(
@@ -324,7 +329,7 @@ class _DashboardContentState extends State<DashboardContent> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              color: kPrimary,
+              color: context.sgi.brandBar,
               child: Row(children: [
                 const Icon(Icons.calendar_today_outlined, color: Colors.white, size: 18),
                 const SizedBox(width: 8),
@@ -343,7 +348,7 @@ class _DashboardContentState extends State<DashboardContent> {
 
             // Subtítulo
             Container(
-              color: const Color(0xFFF0F4F8),
+              color: Theme.of(context).colorScheme.surfaceContainer,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: const Text('Encargados y asignaturas en turno',
                   style: TextStyle(fontSize: 11, color: kTextMuted)),
@@ -393,7 +398,9 @@ class _DashboardContentState extends State<DashboardContent> {
             return Container(
               width: colWidth,
               padding: const EdgeInsets.symmetric(vertical: 8),
-              color: esHoy ? kPrimary : const Color(0xFF0069D9),
+              color: esHoy
+                  ? context.sgi.brandBar
+                  : Color.lerp(context.sgi.brandBar, Colors.black, 0.18)!,
               alignment: Alignment.center,
               child: Text(e.value,
                   style: TextStyle(
@@ -421,16 +428,16 @@ class _DashboardContentState extends State<DashboardContent> {
                       child: Container(
                         alignment: Alignment.topCenter,
                         padding: const EdgeInsets.only(top: 6),
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           border: Border(
-                            right:  BorderSide(color: Color(0xFFDEE2E6)),
-                            bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                            right:  BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                            bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                           ),
                         ),
                         child: Text(_horaAmPm(hora),
                             style: TextStyle(
                                 fontSize: 10, fontWeight: FontWeight.w600,
-                                color: esAhora ? kPrimary : kTextMuted)),
+                                color: esAhora ? context.sgi.accent : kTextMuted)),
                       ),
                     );
                   }).toList(),
@@ -465,13 +472,15 @@ class _DashboardContentState extends State<DashboardContent> {
                           child: Container(
                             decoration: BoxDecoration(
                               color: esAhora
-                                  ? const Color(0xFFD4E8FF)
+                                  ? context.sgi.accent.withValues(alpha: 0.18)
                                   : esHoy && !ocupados.contains(i)
-                                      ? const Color(0xFFF0F7FF)
-                                      : i.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
+                                      ? context.sgi.accent.withValues(alpha: 0.07)
+                                      : i.isOdd
+                                          ? Theme.of(context).colorScheme.surfaceContainer
+                                          : Theme.of(context).colorScheme.surface,
                               border: Border(
-                                right:  const BorderSide(color: Color(0xFFDEE2E6)),
-                                bottom: const BorderSide(color: Color(0xFFDEE2E6)),
+                                right:  BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                                bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                                 left: esAhora
                                     ? const BorderSide(color: kSemaforoRojo, width: 2)
                                     : BorderSide.none,
@@ -491,13 +500,13 @@ class _DashboardContentState extends State<DashboardContent> {
                           height: b.dur * rowHeight - 4,
                           child: Container(
                             padding: const EdgeInsets.fromLTRB(5, 3, 5, 3),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFE8F5E9),
+                            decoration: BoxDecoration(
+                              color: kSuccess.withValues(alpha: 0.15),
                               border: Border(
-                                left: BorderSide(color: kSuccess, width: 3),
-                                top:    BorderSide(color: Color(0xFFB2DFDB)),
-                                right:  BorderSide(color: Color(0xFFB2DFDB)),
-                                bottom: BorderSide(color: Color(0xFFB2DFDB)),
+                                left: const BorderSide(color: kSuccess, width: 3),
+                                top:    BorderSide(color: kSuccess.withValues(alpha: 0.4)),
+                                right:  BorderSide(color: kSuccess.withValues(alpha: 0.4)),
+                                bottom: BorderSide(color: kSuccess.withValues(alpha: 0.4)),
                               ),
                             ),
                             child: Column(
@@ -600,7 +609,7 @@ class _DashboardContentState extends State<DashboardContent> {
     final acciones = _accionesVisibles();
     return Container(
     decoration: BoxDecoration(
-      color: Colors.white, borderRadius: BorderRadius.circular(10),
+      color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
       boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
     ),
     child: ClipRRect(
@@ -610,7 +619,7 @@ class _DashboardContentState extends State<DashboardContent> {
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: kPrimary,
+          color: context.sgi.brandBar,
           child: const Row(children: [
             Icon(Icons.bolt_outlined, color: Colors.white, size: 18),
             SizedBox(width: 8),
@@ -631,7 +640,7 @@ class _DashboardContentState extends State<DashboardContent> {
                 label: const Text('Códigos QR',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary, foregroundColor: Colors.white,
+                  backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   elevation: 0,
@@ -662,17 +671,17 @@ class _DashboardContentState extends State<DashboardContent> {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFDEE2E6)),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Stack(children: [
             Center(
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(icon, color: kPrimary, size: 22),
+                Icon(icon, color: context.sgi.accent, size: 22),
                 const SizedBox(height: 5),
                 Text(label,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 10, color: Color(0xFF223542),
+                    style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurface,
                         fontWeight: FontWeight.w500),
                     maxLines: 2, overflow: TextOverflow.ellipsis),
               ]),
@@ -701,7 +710,7 @@ class _DashboardContentState extends State<DashboardContent> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, borderRadius: BorderRadius.circular(10),
+        color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
       child: ClipRRect(
@@ -710,13 +719,13 @@ class _DashboardContentState extends State<DashboardContent> {
           // Header discreto
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: const Color(0xFFF8F9FA),
+            color: Theme.of(context).colorScheme.surfaceContainer,
             child: Row(children: [
               const Icon(Icons.warning_amber_rounded, color: kSemaforoRojo, size: 16),
               const SizedBox(width: 8),
-              const Expanded(
+              Expanded(
                 child: Text('⚠ Insumos Críticos',
-                    style: TextStyle(color: Color(0xFF223542), fontWeight: FontWeight.bold, fontSize: 13)),
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 13)),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -732,8 +741,8 @@ class _DashboardContentState extends State<DashboardContent> {
                   onPressed: () => widget.onNavigateTo?.call(Seccion.inventario),
                   style: TextButton.styleFrom(padding: EdgeInsets.zero,
                       minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                  child: const Text('Ver todos →',
-                      style: TextStyle(color: kPrimary, fontSize: 12)),
+                  child: Text('Ver todos →',
+                      style: TextStyle(color: context.sgi.accent, fontSize: 12)),
                 ),
             ]),
           ),
@@ -749,8 +758,8 @@ class _DashboardContentState extends State<DashboardContent> {
                   2: FixedColumnWidth(100),
                   3: FixedColumnWidth(90),
                 },
-                border: const TableBorder(
-                    horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
+                border: TableBorder(
+                    horizontalInside: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
                 children: [
                   _headerRow(['Insumo', 'Stock actual', 'Mínimo', 'Estado']),
                   ...lista.asMap().entries.map((e) {
@@ -760,7 +769,7 @@ class _DashboardContentState extends State<DashboardContent> {
                     final stockMin = double.tryParse(ins['stock_minimo'].toString()) ?? 0;
                     return TableRow(
                       decoration: BoxDecoration(
-                          color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white),
+                          color: idx.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface),
                       children: [
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -788,7 +797,7 @@ class _DashboardContentState extends State<DashboardContent> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                                color: const Color(0xFFFFEBEE),
+                                color: kSemaforoRojo.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(20)),
                             child: const Text('Crítico',
                                 style: TextStyle(color: kSemaforoRojo, fontSize: 11,
@@ -808,7 +817,7 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   TableRow _headerRow(List<String> cols) => TableRow(
-    decoration: const BoxDecoration(color: kPrimary),
+    decoration: BoxDecoration(color: context.sgi.brandBar),
     children: cols.map((h) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Text(h, softWrap: false, overflow: TextOverflow.ellipsis,
@@ -831,7 +840,7 @@ class _CacheBanner extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1), borderRadius: BorderRadius.circular(8),
+        color: kSemaforoAmarillo.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8),
         border: Border.all(color: kSemaforoAmarillo),
       ),
       child: Row(children: [

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 class PoliticaPrivacidadScreen extends StatelessWidget {
   const PoliticaPrivacidadScreen({super.key});
@@ -9,7 +10,7 @@ class PoliticaPrivacidadScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Política de Privacidad'),
-        backgroundColor: kPrimary,
+        backgroundColor: context.sgi.brandBar,
         foregroundColor: Colors.white,
         elevation: 0,
       ),
@@ -140,6 +141,6 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text,
-        style: const TextStyle(fontSize: 13, color: Colors.black87, height: 1.6),
+        style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface, height: 1.6),
       );
 }

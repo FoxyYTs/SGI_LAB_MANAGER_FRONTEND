@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 class RecuperarPassScreen extends StatefulWidget {
   const RecuperarPassScreen({super.key});
@@ -51,13 +52,7 @@ class _RecuperarPassScreenState extends State<RecuperarPassScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF002D72), Color(0xFF0056B3), Color(0xFF007BFF)],
-          ),
-        ),
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: Center(
           child: SingleChildScrollView(
             child: ConstrainedBox(
@@ -72,9 +67,9 @@ class _RecuperarPassScreenState extends State<RecuperarPassScreen> {
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 20),
-                      decoration: const BoxDecoration(
-                        color: kPrimary,
-                        borderRadius: BorderRadius.only(
+                      decoration: BoxDecoration(
+                        color: context.sgi.brandBar,
+                        borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(12),
                           topRight: Radius.circular(12),
                         ),
@@ -142,7 +137,7 @@ class _RecuperarPassScreenState extends State<RecuperarPassScreen> {
                   icon: const Icon(Icons.send),
                   label: const Text('Enviar código', style: TextStyle(fontSize: 16)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.sgi.brandBar,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),

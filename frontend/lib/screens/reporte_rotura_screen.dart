@@ -4,6 +4,7 @@ import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
 import '../widgets/error_carga.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/text_utils.dart';
 
 class ReporteRoturaScreen extends StatefulWidget {
@@ -184,9 +185,9 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
 
   Widget _header() => Container(
     width: double.infinity,
-    decoration: const BoxDecoration(
-      color: kPrimary,
-      borderRadius: BorderRadius.only(
+    decoration: BoxDecoration(
+      color: context.sgi.brandBar,
+      borderRadius: const BorderRadius.only(
         topLeft: Radius.circular(12),
         topRight: Radius.circular(12),
       ),
@@ -222,7 +223,7 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
       Text(title,
           style: const TextStyle(
               fontWeight: FontWeight.bold, color: kPrimary, fontSize: 13)),
-      const Divider(height: 8, thickness: 1, color: Color(0xFFDEE2E6)),
+      Divider(height: 8, thickness: 1, color: Theme.of(context).colorScheme.outlineVariant),
     ]),
   );
 
@@ -231,14 +232,14 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
     labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
     prefixIcon: Icon(icon, color: kPrimary, size: 18),
     filled: true,
-    fillColor: const Color(0xFFF8F9FA),
+    fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+      borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+      borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
@@ -262,7 +263,6 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.of(context).size.width >= 700;
     return Scaffold(
-      backgroundColor: wide ? const Color(0xFFE9ECEF) : kBackground,
       body: SafeArea(
         child: _enviado ? _buildConfirmacion() : _buildScrollBody(wide),
       ),
@@ -306,17 +306,17 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
         const Text('¡Reporte enviado!',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPrimary)),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'El personal del laboratorio revisará el reporte y se pondrá en contacto contigo.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.black54, fontSize: 14),
+          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 14),
         ),
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary, foregroundColor: Colors.white,
+              backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -363,9 +363,9 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
       child: Form(
         key: _formKey,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text(
+          Text(
             'Completa este formulario si rompiste o perdiste un implemento del laboratorio.',
-            style: TextStyle(fontSize: 14, color: Colors.black54),
+            style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
 
@@ -510,9 +510,9 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FA),
+                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
                       border: Border.all(
-                          color: state.hasError ? kDanger : const Color(0xFFDEE2E6)),
+                          color: state.hasError ? kDanger : Theme.of(context).colorScheme.outlineVariant),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
@@ -521,7 +521,7 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
                         const SizedBox(width: 8),
                         Expanded(child: Text(nombre ?? 'Seleccionar implemento...',
                             style: TextStyle(
-                              color: nombre != null ? Colors.black87 : Colors.grey,
+                              color: nombre != null ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
                               fontSize: 14,
                             ),
                             overflow: TextOverflow.ellipsis)),
@@ -557,8 +557,8 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8F9FA),
-                      border: Border.all(color: const Color(0xFFDEE2E6)),
+                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(children: [
@@ -569,7 +569,7 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
                             ? '${_fechaIncidente!.day.toString().padLeft(2,'0')}/${_fechaIncidente!.month.toString().padLeft(2,'0')}/${_fechaIncidente!.year}'
                             : 'Fecha del incidente (opcional)',
                         style: TextStyle(
-                          color: _fechaIncidente != null ? Colors.black87 : Colors.grey,
+                          color: _fechaIncidente != null ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 14,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -595,8 +595,8 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8F9FA),
-                    border: Border.all(color: const Color(0xFFDEE2E6)),
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(children: [
@@ -607,7 +607,7 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
                           ? '${_fechaIncidente!.day.toString().padLeft(2,'0')}/${_fechaIncidente!.month.toString().padLeft(2,'0')}/${_fechaIncidente!.year}'
                           : 'Fecha del incidente (opcional)',
                       style: TextStyle(
-                        color: _fechaIncidente != null ? Colors.black87 : Colors.grey,
+                        color: _fechaIncidente != null ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 14,
                       ),
                     ),
@@ -641,7 +641,7 @@ class _ReporteRoturaScreenState extends State<ReporteRoturaScreen> {
               label: const Text('Reportar rotura',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),

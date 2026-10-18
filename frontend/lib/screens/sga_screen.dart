@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
 import '../core/download_helper.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 
 // ── Constantes de pictogramas ─────────────────────────────────────────────────
@@ -225,10 +226,9 @@ class _SgaScreenState extends State<SgaScreen> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         elevation: 2,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -458,7 +458,7 @@ class _DatosSgaTab extends StatelessWidget {
           icon: const Icon(Icons.upload_file),
           label: const Text('Subir FDS'),
           style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary, foregroundColor: Colors.white),
+              backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
           onPressed: () =>
               (context.findAncestorStateOfType<_SgaScreenState>())?._extraerFDS(),
         ),
@@ -931,7 +931,7 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
                         : const Icon(Icons.save_outlined),
                     label: const Text('Guardar cambios'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: kPrimary,
+                      backgroundColor: context.sgi.brandBar,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -1017,23 +1017,23 @@ class _ColmenaTab extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          ...colmena!.entries.map((e) => _buildSeccionColmena(e.key, e.value)),
+          ...colmena!.entries.map((e) => _buildSeccionColmena(context, e.key, e.value)),
         ],
       ),
     );
   }
 
-  Widget _buildSeccionColmena(String key, dynamic value) {
+  Widget _buildSeccionColmena(BuildContext context, String key, dynamic value) {
     if (value is! Map) return const SizedBox.shrink();
     final map    = Map<String, dynamic>.from(value);
     final titulo = map.remove('titulo')?.toString() ?? key;
     return _ColmenaSeccion(
       titulo: titulo,
-      children: map.entries.map((e) => _buildCampo(e.key, e.value)).toList(),
+      children: map.entries.map((e) => _buildCampo(context, e.key, e.value)).toList(),
     );
   }
 
-  Widget _buildCampo(String key, dynamic value) {
+  Widget _buildCampo(BuildContext context, String key, dynamic value) {
     final label = key
         .replaceAll('_', ' ')
         .split(' ')
@@ -1060,7 +1060,7 @@ class _ColmenaTab extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 4),
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: kBackground,
+                  color: Theme.of(context).colorScheme.surfaceContainer,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Column(
@@ -1136,7 +1136,7 @@ class _SgaCard extends StatelessWidget {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1182,14 +1182,14 @@ class _ColmenaSeccionState extends State<_ColmenaSeccion> {
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             child: Container(
-              color: kPrimary,
+              color: context.sgi.brandBar,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(children: [
                 const Icon(Icons.assignment_outlined, color: Colors.white, size: 16),
@@ -1324,7 +1324,7 @@ class _DialogConfirmacionFDS extends StatelessWidget {
           icon: const Icon(Icons.check, size: 16),
           label: const Text('Aplicar extracción'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: kPrimary,
+            backgroundColor: context.sgi.brandBar,
             foregroundColor: Colors.white,
           ),
           onPressed: () => Navigator.pop(context, true),

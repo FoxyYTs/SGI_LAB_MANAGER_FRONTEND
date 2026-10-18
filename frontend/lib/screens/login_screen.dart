@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/log_service.dart';
 import '../core/api/api_client.dart';
 import '../core/sync/sync_service.dart';
@@ -112,57 +113,45 @@ class _LoginScreenState extends State<LoginScreen> {
         Expanded(child: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF002D72),
-              Color(0xFF0056B3),
-              Color(0xFF007BFF),
-            ],
-          ),
-        ),
+        // Fondo = color del tema (no un degradado azul a pantalla completa).
+        // Flutter Web, al agrandar la ventana, puede dejar "fantasma" del
+        // último frame pleno en la franja nueva; con el fondo del tema ese
+        // fantasma es del color del tema (invisible) en vez de azul.
+        color: Theme.of(context).scaffoldBackgroundColor,
         child: Center(
           child: SingleChildScrollView(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Card(
                 elevation: 12,
+                color: Theme.of(context).colorScheme.surface,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Cabecera con ícono de laboratorio
-                    Container(
-                      width: double.infinity,
+                    // Cabecera con ícono de laboratorio (misma superficie que el
+                    // cuerpo: en oscuro la tarjeta es oscura entera, sin corte).
+                    Padding(
                       padding: const EdgeInsets.fromLTRB(28, 28, 28, 20),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(12),
-                          topRight: Radius.circular(12),
-                        ),
-                      ),
-                      child: const Column(
+                      child: Column(
                         children: [
                           CircleAvatar(
                             radius: 28,
-                            backgroundColor: Color(0xFFE3F2FD),
-                            child: Icon(Icons.science, color: kPrimary, size: 30),
+                            backgroundColor: context.sgi.accent.withValues(alpha: 0.15),
+                            child: Icon(Icons.science, color: context.sgi.accent, size: 30),
                           ),
-                          SizedBox(height: 12),
+                          const SizedBox(height: 12),
                           Text(
                             "SGI LAB MANAGER",
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: kPrimary,
+                              color: context.sgi.accent,
                               letterSpacing: 0.5,
                             ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
+                          const SizedBox(height: 4),
+                          const Text(
                             "Laboratorios de Ciencias Básicas",
                             style: TextStyle(fontSize: 12, color: kTextMuted),
                           ),
@@ -171,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     // Cuerpo del formulario
                     Padding(
-                      padding: const EdgeInsets.all(28),
+                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
                       child: Column(
                         children: [
                           TextField(
@@ -213,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : ElevatedButton(
                                     onPressed: _handleLogin,
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: kPrimary,
+                                      backgroundColor: context.sgi.brandBar,
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8),

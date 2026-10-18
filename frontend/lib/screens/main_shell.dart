@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/secciones.dart';
 import '../core/sync/sync_service.dart';
 import '../services/monitor_reminder_service.dart';
@@ -150,10 +152,18 @@ class _MainShellState extends State<MainShell> {
 
   // ── Desktop: sidebar lateral + topbar (estilo Stitch) ───────────────────────
 
-  static const _kSidebarBg     = Color(0xFFEBF5FE);
-  static const _kSidebarBorder = Color(0xFFA1B4C5);
-  static const _kOnSurface     = Color(0xFF223542);
-  static const _kActiveItemBg  = Color(0xFFD4E8FF);
+  // Paleta del sidebar/topbar desktop. En claro conserva el diseño original
+  // (estilo Stitch); en oscuro deriva de los roles del tema para no quedar
+  // como un panel azul brillante sobre contenido oscuro.
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _kSidebarBg =>
+      _isDark ? Theme.of(context).colorScheme.surface : const Color(0xFFEBF5FE);
+  Color get _kSidebarBorder =>
+      _isDark ? Theme.of(context).colorScheme.outlineVariant : const Color(0xFFA1B4C5);
+  Color get _kOnSurface =>
+      _isDark ? Theme.of(context).colorScheme.onSurface : const Color(0xFF223542);
+  Color get _kActiveItemBg =>
+      _isDark ? kPrimary.withValues(alpha: 0.22) : const Color(0xFFD4E8FF);
 
   Widget _buildDesktop(
     BuildContext context,
@@ -163,7 +173,6 @@ class _MainShellState extends State<MainShell> {
   ) {
     final idx = _idx.clamp(0, tabs.length - 1);
     return Scaffold(
-      backgroundColor: kBackground,
       body: Row(children: [
         _buildSidebar(context, auth, sync, tabs, idx),
         Expanded(
@@ -185,23 +194,23 @@ class _MainShellState extends State<MainShell> {
       List<_TabDef> tabs, int idx) {
     return Container(
       width: 256,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: _kSidebarBg,
         border: Border(right: BorderSide(color: _kSidebarBorder)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Cabecera
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 22, 20, 14),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Laboratorio PCJIC',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: _kOnSurface)),
-            SizedBox(height: 2),
-            Text('Rionegro, Antioquia',
+            const SizedBox(height: 2),
+            const Text('Rionegro, Antioquia',
                 style: TextStyle(fontSize: 12, color: kTextMuted)),
           ]),
         ),
-        const Divider(height: 1, color: _kSidebarBorder),
+        Divider(height: 1, color: _kSidebarBorder),
         const SizedBox(height: 6),
 
         // Banner offline
@@ -259,7 +268,7 @@ class _MainShellState extends State<MainShell> {
           ),
 
         // Logout
-        const Divider(height: 1, color: _kSidebarBorder),
+        Divider(height: 1, color: _kSidebarBorder),
         _buildSidebarLogout(context, auth),
         const SizedBox(height: 8),
       ]),
@@ -364,21 +373,38 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  /// Botón que cicla el tema Sistema → Claro → Oscuro (acceso rápido además
+  /// del selector en Mi Perfil). El icono y el tooltip reflejan el modo actual.
+  Widget _themeToggle({Color? color}) {
+    final mode = context.watch<ThemeProvider>().mode;
+    final (IconData icon, String label, ThemeMode next) = switch (mode) {
+      ThemeMode.system => (Icons.brightness_auto, 'Sistema', ThemeMode.light),
+      ThemeMode.light => (Icons.light_mode, 'Claro', ThemeMode.dark),
+      ThemeMode.dark => (Icons.dark_mode, 'Oscuro', ThemeMode.system),
+    };
+    return IconButton(
+      icon: Icon(icon, size: 20, color: color),
+      tooltip: 'Tema: $label — tocar para cambiar',
+      onPressed: () => context.read<ThemeProvider>().setMode(next),
+    );
+  }
+
   Widget _buildDesktopTopBar(BuildContext context, AuthProvider auth, SyncService sync) {
     final initial = (auth.username ?? 'U').substring(0, 1).toUpperCase();
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         border: Border(bottom: BorderSide(color: _kSidebarBorder)),
-        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 1))],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 1))],
       ),
       child: Row(children: [
-        const Text('SGI LAB MANAGER',
+        Text('SGI LAB MANAGER',
             style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15,
                 letterSpacing: 0.8, color: _kOnSurface)),
         const Spacer(),
+        _themeToggle(color: kTextMuted),
         // Botón Acerca de
         IconButton(
           tooltip: 'Acerca de',
@@ -395,7 +421,7 @@ class _MainShellState extends State<MainShell> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(auth.username ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.bold,
+                    style: TextStyle(fontWeight: FontWeight.bold,
                         fontSize: 13, color: _kOnSurface)),
                 if (auth.rol != null)
                   Text(auth.rol!,
@@ -405,7 +431,7 @@ class _MainShellState extends State<MainShell> {
             const SizedBox(width: 10),
             CircleAvatar(
               radius: 18,
-              backgroundColor: kPrimary.withValues(alpha: 0.15),
+              backgroundColor: context.sgi.accent.withValues(alpha: 0.15),
               backgroundImage: auth.fotoUrl != null
                   ? NetworkImage(auth.fotoUrl!)
                   : null,
@@ -432,9 +458,8 @@ class _MainShellState extends State<MainShell> {
   ) {
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: kPrimary,
+        backgroundColor: context.sgi.brandBar,
         foregroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -447,6 +472,7 @@ class _MainShellState extends State<MainShell> {
               color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
         ),
         actions: [
+          _themeToggle(color: Colors.white),
           IconButton(
             icon: const Icon(Icons.info_outline, color: Colors.white, size: 20),
             tooltip: 'Acerca de',
@@ -518,7 +544,7 @@ class _MainShellState extends State<MainShell> {
       child: Column(
         children: [
           DrawerHeader(
-            decoration: const BoxDecoration(color: kPrimary),
+            decoration: BoxDecoration(color: context.sgi.brandBar),
             margin: EdgeInsets.zero,
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
             child: SizedBox(
@@ -566,7 +592,7 @@ class _MainShellState extends State<MainShell> {
                         fontSize: 14,
                         fontWeight:
                             idx == e.key ? FontWeight.bold : FontWeight.normal,
-                        color: idx == e.key ? kPrimary : Colors.black87,
+                        color: idx == e.key ? kPrimary : Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     selected: idx == e.key,
@@ -590,8 +616,8 @@ class _MainShellState extends State<MainShell> {
                 ),
                 ListTile(
                   leading: const Icon(Icons.logout, color: kTextMuted, size: 22),
-                  title: const Text('Cerrar sesión',
-                      style: TextStyle(fontSize: 14, color: Colors.black54)),
+                  title: Text('Cerrar sesión',
+                      style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   onTap: () async {
                     final nav = Navigator.of(context);
                     Navigator.pop(context);
@@ -618,7 +644,7 @@ class _MainShellState extends State<MainShell> {
         style: TextStyle(
           fontSize: 14,
           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? kPrimary : Colors.black87,
+          color: isSelected ? kPrimary : Theme.of(context).colorScheme.onSurface,
         ),
       ),
       initiallyExpanded: isSelected,

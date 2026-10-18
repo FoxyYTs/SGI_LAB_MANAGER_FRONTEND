@@ -5,6 +5,7 @@ import '../providers/inventario_provider.dart';
 import '../providers/auth_provider.dart';
 import '../models/insumo_model.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
 import 'insumo_form_screen.dart';
@@ -180,7 +181,7 @@ class _InventarioContentState extends State<InventarioContent> {
                     margin: const EdgeInsets.only(bottom: 10),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF8E1),
+                      color: kSemaforoAmarillo.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: kSemaforoAmarillo),
                     ),
@@ -248,7 +249,7 @@ class _InventarioContentState extends State<InventarioContent> {
                               borderRadius: BorderRadius.circular(8),
                               borderSide: const BorderSide(color: kPrimary)),
                           contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                          filled: true, fillColor: Colors.white,
+                          filled: true, fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
                         ),
                         onChanged: _onSearchChanged,
                       ),
@@ -260,7 +261,7 @@ class _InventarioContentState extends State<InventarioContent> {
                         icon: const Icon(Icons.add, size: 18),
                         label: const Text('Nuevo Insumo'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: kPrimary, foregroundColor: Colors.white,
+                          backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                       ),
@@ -274,15 +275,15 @@ class _InventarioContentState extends State<InventarioContent> {
                     // Chips informativos
                     _resumenChip(Icons.inventory_2_outlined,
                         'Total: ${seccion.length}',
-                        const Color(0xFF6C757D), const Color(0xFFF0F0F0)),
+                        kTextMuted),
                     // Los residuos no tienen semáforo: sin críticos ni bajos.
                     if (!esResiduo) ...[
                       const SizedBox(width: 8),
                       _resumenChip(Icons.circle, 'Críticos: ${seccion.where((i) => i.semaforo == "ROJO").length}',
-                          kSemaforoRojo, const Color(0xFFFFEBEE)),
+                          kSemaforoRojo),
                       const SizedBox(width: 8),
                       _resumenChip(Icons.circle, 'Bajos: ${seccion.where((i) => i.semaforo == "AMARILLO").length}',
-                          const Color(0xFFE65100), const Color(0xFFFFF8E1)),
+                          const Color(0xFFE65100)),
                     ],
                     const Spacer(),
                   ]),
@@ -331,7 +332,7 @@ class _InventarioContentState extends State<InventarioContent> {
                           ? _buildCardList(filtrados, context)
                           : Container(
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Theme.of(context).colorScheme.surface,
                                 borderRadius: BorderRadius.circular(8),
                                 boxShadow: const [
                                   BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
@@ -388,14 +389,14 @@ class _InventarioContentState extends State<InventarioContent> {
       itemBuilder: (ctx, i) {
         final insumo = items[i];
         final color  = _semaforoColor(insumo.estado);
-        final (chipLabel, chipColor, chipBg) = switch (insumo.estado) {
-          'RESIDUO'  => ('RESIDUO', _kResiduo,        const Color(0xFFEFEBE9)),
-          'ROJO'     => ('CRÍTICO', kSemaforoRojo,    const Color(0xFFFFEBEE)),
-          'AMARILLO' => ('BAJO',    kSemaforoAmarillo, const Color(0xFFFFF8E1)),
-          _          => ('OK',      kSemaforoVerde,    const Color(0xFFE8F5E9)),
+        final (chipLabel, chipColor) = switch (insumo.estado) {
+          'RESIDUO'  => ('RESIDUO', _kResiduo),
+          'ROJO'     => ('CRÍTICO', kSemaforoRojo),
+          'AMARILLO' => ('BAJO',    kSemaforoAmarillo),
+          _          => ('OK',      kSemaforoVerde),
         };
         return Material(
-          color: Colors.white,
+          color: Theme.of(ctx).colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
           elevation: 1,
           shadowColor: Colors.black12,
@@ -435,7 +436,7 @@ class _InventarioContentState extends State<InventarioContent> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: chipBg,
+                        color: chipColor.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(chipLabel,
@@ -479,8 +480,8 @@ class _InventarioContentState extends State<InventarioContent> {
         5: const FixedColumnWidth(_kAnchoEstado),
         if (showSga) 6: const FixedColumnWidth(48),
       },
-      border: const TableBorder(
-          horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
+      border: TableBorder(
+          horizontalInside: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
       children: [
         _headerRow(
           showSga
@@ -493,7 +494,7 @@ class _InventarioContentState extends State<InventarioContent> {
         ...items.asMap().entries.map((e) {
           final idx    = e.key;
           final insumo = e.value;
-          final rowBg  = idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white;
+          final rowBg  = idx.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface;
           return TableRow(
             decoration: BoxDecoration(color: rowBg),
             children: [
@@ -536,8 +537,8 @@ class _InventarioContentState extends State<InventarioContent> {
         5: FixedColumnWidth(48),
         6: FixedColumnWidth(48),
       },
-      border: const TableBorder(
-          horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
+      border: TableBorder(
+          horizontalInside: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
       children: [
         _headerRow(
           residuos
@@ -548,7 +549,7 @@ class _InventarioContentState extends State<InventarioContent> {
         ...items.asMap().entries.map((e) {
           final idx    = e.key;
           final insumo = e.value;
-          final rowBg  = idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white;
+          final rowBg  = idx.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface;
           return TableRow(
             decoration: BoxDecoration(color: rowBg),
             children: [
@@ -590,7 +591,7 @@ class _InventarioContentState extends State<InventarioContent> {
   TableRow _headerRow(List<String> cols, List<String> keys) {
     const padding = EdgeInsets.symmetric(horizontal: 8, vertical: 8);
     return TableRow(
-      decoration: const BoxDecoration(color: kPrimary),
+      decoration: BoxDecoration(color: context.sgi.brandBar),
       children: List.generate(cols.length, (i) {
         final key      = keys[i];
         final isActive = key.isNotEmpty && _sortCol == key;
@@ -643,18 +644,18 @@ class _InventarioContentState extends State<InventarioContent> {
   }
 
   Widget _semaforo(String s) {
-    final (label, color, bg) = switch (s) {
-      'ROJO'     => ('CRÍTICO', kSemaforoRojo,    const Color(0xFFFFEBEE)),
-      'AMARILLO' => ('BAJO',    const Color(0xFFE65100), const Color(0xFFFFF8E1)),
-      'RESIDUO'  => ('RESIDUO', _kResiduo,        const Color(0xFFEFEBE9)),
-      _          => ('OK',      kSemaforoVerde,   const Color(0xFFE8F5E9)),
+    final (label, color) = switch (s) {
+      'ROJO'     => ('CRÍTICO', kSemaforoRojo),
+      'AMARILLO' => ('BAJO',    const Color(0xFFE65100)),
+      'RESIDUO'  => ('RESIDUO', _kResiduo),
+      _          => ('OK',      kSemaforoVerde),
     };
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
           child: Text(label,
               softWrap: false, maxLines: 1,
               style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
@@ -724,10 +725,12 @@ class _InventarioContentState extends State<InventarioContent> {
         Text(label, style: const TextStyle(fontSize: 12, color: kTextMuted)),
       ]);
 
-  Widget _resumenChip(IconData icon, String label, Color color, Color bg) =>
+  Widget _resumenChip(IconData icon, String label, Color color) =>
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+        // Fondo = el propio color al ~14% (receta de chip de Stitch): se ve
+        // bien sobre superficie clara y oscura sin pasteles fijos.
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 13, color: color),
           const SizedBox(width: 5),

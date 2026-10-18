@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/permissions.dart';
 import '../core/text_utils.dart';
 import '../models/insumo_model.dart' show kTipoResiduo;
@@ -45,10 +46,9 @@ class ConfiguracionScreenState extends State<ConfiguracionScreen>
     final auth = context.read<AuthProvider>();
 
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Configuración',
             style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold)),
         elevation: 1,
@@ -205,7 +205,7 @@ class _CrudListState extends State<_CrudList> {
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Nuevo'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
@@ -291,7 +291,7 @@ class _UbicacionesTab extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: ctx.sgi.brandBar, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
               await onSave({
@@ -350,7 +350,7 @@ class _UnidadesTab extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: ctx.sgi.brandBar, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
               await onSave({'nombre_unidad': ctrl.text.trim()});
@@ -403,7 +403,7 @@ class _ProgramasTab extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: ctx.sgi.brandBar, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
               await onSave({'nombre': ctrl.text.trim(), 'activo': true});
@@ -557,7 +557,7 @@ class _DocentesTabState extends State<_DocentesTab> {
                 child: const Text('Cancelar')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary, foregroundColor: Colors.white),
+                  backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
               onPressed: () async {
                 Navigator.pop(dialogCtx);
                 await onSave({
@@ -813,7 +813,7 @@ class _GuiasTabState extends State<_GuiasTab> {
                 child: const Text('Cancelar')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary, foregroundColor: Colors.white),
+                  backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
               onPressed: () async {
                 Navigator.pop(dialogCtx);
                 await onSave({
@@ -969,7 +969,7 @@ class _GuiasTabState extends State<_GuiasTab> {
                       avatar: const Icon(Icons.inventory_2_outlined, size: 15, color: kPrimary),
                       label: Text(seleccionado!['nombre_insumo'] ?? '',
                           style: const TextStyle(fontSize: 13)),
-                      backgroundColor: kPrimary.withValues(alpha: 0.08),
+                      backgroundColor: context.sgi.accent.withValues(alpha: 0.08),
                       side: const BorderSide(color: kPrimary, width: 0.5),
                       onDeleted: () => setSt(() {
                         seleccionado = null;
@@ -1040,7 +1040,7 @@ class _GuiasTabState extends State<_GuiasTab> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: kPrimary, foregroundColor: Colors.white),
+                          backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
                       icon: agregando
                           ? const SizedBox(
                               width: 16, height: 16,
@@ -1133,7 +1133,7 @@ class _GuiasTabState extends State<_GuiasTab> {
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Nueva'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
@@ -1332,7 +1332,7 @@ class _AreasTab extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: ctx.sgi.brandBar, foregroundColor: Colors.white),
             onPressed: () async {
               Navigator.pop(ctx);
               await onSave({'nombre_area': ctrl.text.trim()});
@@ -1454,7 +1454,7 @@ class _AsignaturasTabState extends State<_AsignaturasTab> {
                 child: const Text('Cancelar')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary, foregroundColor: Colors.white),
+                  backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
               onPressed: () async {
                 Navigator.pop(dialogCtx);
                 await onSave({
@@ -1527,7 +1527,7 @@ class _ItemCard extends StatelessWidget {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(
@@ -1576,7 +1576,6 @@ extension on _ItemCard {
   Widget _buildAccionesAbajo() => Card(
         elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        color: Colors.white,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1644,7 +1643,7 @@ class _MultiSelectChips extends StatelessWidget {
         return FilterChip(
           label: Text(label, style: TextStyle(
               fontSize: 12,
-              color: activo ? Colors.white : Colors.black87)),
+              color: activo ? Colors.white : Theme.of(context).colorScheme.onSurface)),
           selected: activo,
           onSelected: (_) {
             final nuevo = Set<String>.from(seleccionados);
@@ -1653,8 +1652,8 @@ class _MultiSelectChips extends StatelessWidget {
           },
           selectedColor: kPrimary,
           checkmarkColor: Colors.white,
-          backgroundColor: const Color(0xFFF0F0F0),
-          side: BorderSide(color: activo ? kPrimary : const Color(0xFFCCCCCC)),
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+          side: BorderSide(color: activo ? kPrimary : Theme.of(context).colorScheme.outlineVariant),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         );
@@ -1712,7 +1711,7 @@ class _LabSection extends StatelessWidget {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -2075,7 +2074,7 @@ class _LabConfigTabState extends State<_LabConfigTab> {
                         : const Icon(Icons.save_outlined),
                     label: const Text('Guardar configuración'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: kPrimary,
+                      backgroundColor: context.sgi.brandBar,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
