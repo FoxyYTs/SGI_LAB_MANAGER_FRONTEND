@@ -47,11 +47,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = if (keyPropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // Sin key.properties no hay firma release: el chequeo de abajo
+            // detiene el build en vez de firmar con la clave de debug.
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -62,6 +60,21 @@ android {
 
 flutter {
     source = "../.."
+}
+
+// Un APK/AAB release firmado con la clave de debug no se puede actualizar
+// sobre la versión de Play y no prueba nada: mejor fallar con un mensaje.
+gradle.taskGraph.whenReady {
+    val esRelease = allTasks.any { t ->
+        t.project == project && t.name.endsWith("Release") &&
+            (t.name.startsWith("assemble") || t.name.startsWith("bundle"))
+    }
+    if (esRelease && !keyPropertiesFile.exists()) {
+        throw GradleException(
+            "Falta android/key.properties (keystore de subida). " +
+                "Para probar sin firma usa un build debug o profile."
+        )
+    }
 }
 
 dependencies {
