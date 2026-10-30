@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
 import '../core/impresion_calculo.dart';
+import '../core/permissions.dart';
 import '../core/theme/app_theme.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
@@ -47,15 +48,19 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
 
   Future<void> _cargar() async {
     if (!mounted) return;
-    setState(() { _cargando = true; _error = null; });
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
     try {
       final dio = _dio;
       final q = _busquedaCtrl.text.trim();
       final res = await Future.wait([
-        obtenerTodas(dio, 'operaciones/impresiones/', queryParameters: {
-          if (_filtroPagado != null) 'pagado': _filtroPagado,
-          if (q.isNotEmpty) 'q': q,
-        }),
+        obtenerTodas(
+          dio,
+          'operaciones/impresiones/',
+          queryParameters: {if (_filtroPagado != null) 'pagado': _filtroPagado, if (q.isNotEmpty) 'q': q},
+        ),
         obtenerTodas(dio, 'operaciones/materiales-impresion/'),
         dio.get('operaciones/tarifa-impresion/').then((r) => [Map<String, dynamic>.from(r.data)]),
       ]);
@@ -68,7 +73,10 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _cargando = false; _error = mensajeErrorApi(e); });
+      setState(() {
+        _cargando = false;
+        _error = mensajeErrorApi(e);
+      });
     }
   }
 
@@ -89,8 +97,7 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
     }
     final guardado = await showDialog<bool>(
       context: context,
-      builder: (_) => _CotizacionDialog(
-        dio: _dio, materiales: activos, tarifa: _tarifa, cotizacion: cotizacion),
+      builder: (_) => _CotizacionDialog(dio: _dio, materiales: activos, tarifa: _tarifa, cotizacion: cotizacion),
     );
     if (guardado == true) _cargar();
   }
@@ -104,11 +111,18 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Registrar pago'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${c['cliente_nombre']} — ${formatoPesos(num.parse('${c['total']}'))}'),
-            const SizedBox(height: 12),
-            TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'N.º de recibo (opcional)')),
-          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${c['cliente_nombre']} — ${formatoPesos(num.parse('${c['total']}'))}'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                decoration: const InputDecoration(labelText: 'N.º de recibo (opcional)'),
+              ),
+            ],
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
             ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Marcar pagado')),
@@ -120,8 +134,10 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
       if (ok != true) return;
     }
     try {
-      await _dio.post('operaciones/impresiones/${c['id']}/marcar-pagado/',
-          data: {'pagado': !pagado, 'recibo': recibo ?? ''});
+      await _dio.post(
+        'operaciones/impresiones/${c['id']}/marcar-pagado/',
+        data: {'pagado': !pagado, 'recibo': recibo ?? ''},
+      );
       _cargar();
     } catch (e) {
       if (mounted) _snack(mensajeErrorApi(e), kDanger);
@@ -136,8 +152,10 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
         content: Text('¿Eliminar la cotización de ${c['cliente_nombre']}?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true),
-              child: Text('Eliminar', style: TextStyle(color: context.sgi.danger))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Eliminar', style: TextStyle(color: context.sgi.danger)),
+          ),
         ],
       ),
     );
@@ -161,62 +179,88 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final auth = context.watch<AuthProvider>();
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _cargando ? null : () => _abrirFormulario(),
-        backgroundColor: context.sgi.brandBar,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva cotización'),
-      ),
+      floatingActionButton: !auth.can(Perm.impresionesGestionar)
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _cargando ? null : () => _abrirFormulario(),
+              backgroundColor: context.sgi.brandBar,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add),
+              label: const Text('Nueva cotización'),
+            ),
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1000),
-          child: Column(children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Row(children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Impresiones 3D',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.sgi.accent)),
-                    const SizedBox(height: 4),
-                    Text('Cotiza por gramos y horas de máquina y registra el pago.',
-                        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
-                  ]),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Impresiones 3D',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: context.sgi.accent),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Cotiza por gramos y horas de máquina y registra el pago.',
+                            style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (auth.can(Perm.impresionesTarifas))
+                      TextButton.icon(
+                        onPressed: _cargando ? null : _abrirTarifas,
+                        icon: const Icon(Icons.tune),
+                        label: const Text('Tarifas y materiales'),
+                      ),
+                  ],
                 ),
-                TextButton.icon(
-                  onPressed: _cargando ? null : _abrirTarifas,
-                  icon: const Icon(Icons.tune),
-                  label: const Text('Tarifas y materiales'),
+              ),
+              Container(
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    for (final (valor, etiqueta) in [(null, 'Todas'), ('false', 'Pendientes'), ('true', 'Pagadas')])
+                      ChoiceChip(
+                        label: Text(etiqueta),
+                        selected: _filtroPagado == valor,
+                        onSelected: (_) {
+                          setState(() => _filtroPagado = valor);
+                          _cargar();
+                        },
+                      ),
+                    SizedBox(
+                      width: 260,
+                      child: TextField(
+                        controller: _busquedaCtrl,
+                        onChanged: _buscar,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          prefixIcon: Icon(Icons.search),
+                          hintText: 'Buscar cliente o documento',
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ]),
-            ),
-            Container(
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-                for (final (valor, etiqueta) in [(null, 'Todas'), ('false', 'Pendientes'), ('true', 'Pagadas')])
-                  ChoiceChip(
-                    label: Text(etiqueta),
-                    selected: _filtroPagado == valor,
-                    onSelected: (_) { setState(() => _filtroPagado = valor); _cargar(); },
-                  ),
-                SizedBox(
-                  width: 260,
-                  child: TextField(
-                    controller: _busquedaCtrl,
-                    onChanged: _buscar,
-                    decoration: const InputDecoration(
-                      isDense: true, prefixIcon: Icon(Icons.search), hintText: 'Buscar cliente o documento'),
-                  ),
-                ),
-              ]),
-            ),
-            const SizedBox(height: 8),
-            Expanded(child: _lista(cs)),
-          ]),
+              ),
+              const SizedBox(height: 8),
+              Expanded(child: _lista(cs)),
+            ],
+          ),
         ),
       ),
     );
@@ -226,15 +270,24 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
     if (_cargando) return Center(child: CircularProgressIndicator(color: context.sgi.accent));
     if (_error != null) {
       return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(_error!, style: TextStyle(color: context.sgi.danger), textAlign: TextAlign.center),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(onPressed: _cargar, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              _error!,
+              style: TextStyle(color: context.sgi.danger),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(onPressed: _cargar, icon: const Icon(Icons.refresh), label: const Text('Reintentar')),
+          ],
+        ),
       );
     }
     if (_cotizaciones.isEmpty) {
-      return Center(child: Text('No hay cotizaciones.', style: TextStyle(color: cs.onSurfaceVariant)));
+      return Center(
+        child: Text('No hay cotizaciones.', style: TextStyle(color: cs.onSurfaceVariant)),
+      );
     }
     return RefreshIndicator(
       onRefresh: _cargar,
@@ -249,6 +302,7 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
 
   Widget _tarjeta(Map<String, dynamic> c, ColorScheme cs) {
     final pagado = c['pagado'] == true;
+    final gestiona = context.read<AuthProvider>().can(Perm.impresionesGestionar);
     final estadoColor = pagado ? context.sgi.success : context.sgi.orange;
     final fecha = DateTime.tryParse('${c['fecha_hora']}')?.toLocal();
     final detalle = [
@@ -260,39 +314,55 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
     return Card(
       margin: EdgeInsets.zero,
       child: ListTile(
-        onTap: () => _abrirFormulario(c),
+        onTap: gestiona ? () => _abrirFormulario(c) : null,
         title: Text(
-          [c['cliente_nombre'], if ((c['cliente_documento'] ?? '').toString().isNotEmpty) c['cliente_documento']].join(' — '),
+          [
+            c['cliente_nombre'],
+            if ((c['cliente_documento'] ?? '').toString().isNotEmpty) c['cliente_documento'],
+          ].join(' — '),
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(detalle, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-          Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(formatoPesos(num.parse('${c['total']}')),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-            Container(
-              margin: const EdgeInsets.only(top: 2),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: context.sgi.tileBg(estadoColor),
-                borderRadius: BorderRadius.circular(10)),
-              child: Text(pagado ? 'Pagado' : 'Pendiente',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: estadoColor)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  formatoPesos(num.parse('${c['total']}')),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(top: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: context.sgi.tileBg(estadoColor),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    pagado ? 'Pagado' : 'Pendiente',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: estadoColor),
+                  ),
+                ),
+              ],
             ),
-          ]),
-          PopupMenuButton<String>(
-            onSelected: (op) => switch (op) {
-              'editar' => _abrirFormulario(c),
-              'pago' => _marcarPagado(c),
-              _ => _eliminar(c),
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'editar', child: Text('Editar')),
-              PopupMenuItem(value: 'pago', child: Text(pagado ? 'Quitar pago' : 'Marcar pagado')),
-              const PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
-            ],
-          ),
-        ]),
+            if (gestiona)
+              PopupMenuButton<String>(
+                onSelected: (op) => switch (op) {
+                  'editar' => _abrirFormulario(c),
+                  'pago' => _marcarPagado(c),
+                  _ => _eliminar(c),
+                },
+                itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'editar', child: Text('Editar')),
+                  PopupMenuItem(value: 'pago', child: Text(pagado ? 'Quitar pago' : 'Marcar pagado')),
+                  const PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -326,7 +396,9 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
   void initState() {
     super.initState();
     final porDefecto = widget.materiales.firstWhere(
-        (m) => '${m['nombre']}'.toLowerCase() == 'hyper pla', orElse: () => widget.materiales.first);
+      (m) => '${m['nombre']}'.toLowerCase() == 'hyper pla',
+      orElse: () => widget.materiales.first,
+    );
     _materialId = widget.cotizacion?['material'] ?? porDefecto['id'];
   }
 
@@ -399,71 +471,105 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
           key: _form,
           onChanged: () => setState(() {}),
           child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(controller: _nombre, validator: requerido,
-                  decoration: const InputDecoration(labelText: 'Nombre del cliente *')),
-              const SizedBox(height: 8),
-              Row(children: [
-                Expanded(child: TextFormField(controller: _documento,
-                    decoration: const InputDecoration(labelText: 'Documento'))),
-                const SizedBox(width: 8),
-                Expanded(child: TextFormField(controller: _contacto,
-                    decoration: const InputDecoration(labelText: 'Correo o teléfono'))),
-              ]),
-              const SizedBox(height: 8),
-              TextFormField(controller: _descripcion,
-                  decoration: const InputDecoration(labelText: 'Descripción de la pieza')),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int>(
-                initialValue: _materialId,
-                decoration: const InputDecoration(labelText: 'Material'),
-                items: [
-                  for (final m in widget.materiales)
-                    DropdownMenuItem(value: m['id'] as int,
-                        child: Text('${m['nombre']} (${formatoPesos(_n(m['precio_rollo']))} / ${_n(m['peso_rollo_g']).toStringAsFixed(0)} g)')),
-                ],
-                onChanged: (v) => setState(() => _materialId = v!),
-              ),
-              const SizedBox(height: 8),
-              Row(children: [
-                Expanded(child: TextFormField(
-                  controller: _gramos,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Gramos *'),
-                  validator: (v) => (leerDecimal(v ?? '') ?? 0) <= 0 ? 'Mayor que 0' : null,
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: TextFormField(
-                  controller: _horas,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Horas'),
-                  validator: (v) => (v ?? '').isEmpty || (int.tryParse(v!) ?? -1) >= 0 ? null : 'Inválido',
-                )),
-                const SizedBox(width: 8),
-                Expanded(child: TextFormField(
-                  controller: _minutos,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Minutos'),
-                  validator: (v) {
-                    if ((v ?? '').isEmpty) return null;
-                    final m = int.tryParse(v!);
-                    return m == null || m < 0 || m > 59 ? '0 a 59' : null;
-                  },
-                )),
-              ]),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(8)),
-                child: Row(children: [
-                  Text('Total estimado', style: TextStyle(color: cs.onSurfaceVariant)),
-                  const Spacer(),
-                  Text(formatoPesos(_totalPrevio),
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.sgi.accent)),
-                ]),
-              ),
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: _nombre,
+                  validator: requerido,
+                  decoration: const InputDecoration(labelText: 'Nombre del cliente *'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _documento,
+                        decoration: const InputDecoration(labelText: 'Documento'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _contacto,
+                        decoration: const InputDecoration(labelText: 'Correo o teléfono'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: _descripcion,
+                  decoration: const InputDecoration(labelText: 'Descripción de la pieza'),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<int>(
+                  initialValue: _materialId,
+                  decoration: const InputDecoration(labelText: 'Material'),
+                  items: [
+                    for (final m in widget.materiales)
+                      DropdownMenuItem(
+                        value: m['id'] as int,
+                        child: Text(
+                          '${m['nombre']} (${formatoPesos(_n(m['precio_rollo']))} / ${_n(m['peso_rollo_g']).toStringAsFixed(0)} g)',
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _materialId = v!),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _gramos,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Gramos *'),
+                        validator: (v) => (leerDecimal(v ?? '') ?? 0) <= 0 ? 'Mayor que 0' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _horas,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Horas'),
+                        validator: (v) => (v ?? '').isEmpty || (int.tryParse(v!) ?? -1) >= 0 ? null : 'Inválido',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _minutos,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Minutos'),
+                        validator: (v) {
+                          if ((v ?? '').isEmpty) return null;
+                          final m = int.tryParse(v!);
+                          return m == null || m < 0 || m > 59 ? '0 a 59' : null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    children: [
+                      Text('Total estimado', style: TextStyle(color: cs.onSurfaceVariant)),
+                      const Spacer(),
+                      Text(
+                        formatoPesos(_totalPrevio),
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.sgi.accent),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -491,7 +597,8 @@ class _TarifasDialogState extends State<_TarifasDialog> {
   late final _tarifaHora = TextEditingController(text: _pesos(widget.tarifa['tarifa_hora']));
   late final _minimo = TextEditingController(text: _pesos(widget.tarifa['cobro_minimo']));
   late final _margen = TextEditingController(
-      text: (double.tryParse('${widget.tarifa['margen_fallos_pct']}') ?? 0).toString().replaceAll(RegExp(r'\.0$'), ''));
+    text: (double.tryParse('${widget.tarifa['margen_fallos_pct']}') ?? 0).toString().replaceAll(RegExp(r'\.0$'), ''),
+  );
   late List<Map<String, dynamic>> _materiales = widget.materiales;
   bool _cambio = false;
   bool _guardando = false;
@@ -515,11 +622,14 @@ class _TarifasDialogState extends State<_TarifasDialog> {
     }
     setState(() => _guardando = true);
     try {
-      await widget.dio.patch('operaciones/tarifa-impresion/', data: {
-        'tarifa_hora': hora.toStringAsFixed(2),
-        'cobro_minimo': minimo.toStringAsFixed(2),
-        'margen_fallos_pct': margen.toStringAsFixed(2),
-      });
+      await widget.dio.patch(
+        'operaciones/tarifa-impresion/',
+        data: {
+          'tarifa_hora': hora.toStringAsFixed(2),
+          'cobro_minimo': minimo.toStringAsFixed(2),
+          'margen_fallos_pct': margen.toStringAsFixed(2),
+        },
+      );
       _cambio = true;
       if (mounted) _snack('Tarifas guardadas. Aplican a las cotizaciones nuevas.', kSuccess);
     } catch (e) {
@@ -538,21 +648,33 @@ class _TarifasDialogState extends State<_TarifasDialog> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
           title: Text(m == null ? 'Nuevo material' : 'Editar material'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: nombre, decoration: const InputDecoration(labelText: 'Nombre (ej. PETG)')),
-            const SizedBox(height: 8),
-            TextField(controller: precio, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Precio del rollo (\$)')),
-            const SizedBox(height: 8),
-            TextField(controller: peso, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Peso del rollo (g)')),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Activo'),
-              value: activo,
-              onChanged: (v) => setD(() => activo = v),
-            ),
-          ]),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nombre,
+                decoration: const InputDecoration(labelText: 'Nombre (ej. PETG)'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: precio,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Precio del rollo (\$)'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: peso,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Peso del rollo (g)'),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Activo'),
+                value: activo,
+                onChanged: (v) => setD(() => activo = v),
+              ),
+            ],
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
             ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Guardar')),
@@ -596,47 +718,77 @@ class _TarifasDialogState extends State<_TarifasDialog> {
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: TextField(controller: _tarifaHora, keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Máquina \$/hora'))),
-              const SizedBox(width: 8),
-              Expanded(child: TextField(controller: _minimo, keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Cobro mínimo \$'))),
-              const SizedBox(width: 8),
-              Expanded(child: TextField(controller: _margen,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Margen fallos %'))),
-            ]),
-            const SizedBox(height: 4),
-            Text('El margen se suma al costo del material. Los cambios no alteran cotizaciones ya hechas.',
-                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(onPressed: _guardando ? null : _guardarTarifa, child: const Text('Guardar tarifas')),
-            ),
-            const Divider(),
-            Row(children: [
-              const Text('Materiales', style: TextStyle(fontWeight: FontWeight.w600)),
-              const Spacer(),
-              TextButton.icon(onPressed: () => _editarMaterial(), icon: const Icon(Icons.add), label: const Text('Agregar')),
-            ]),
-            for (final m in _materiales)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                title: Text('${m['nombre']}',
-                    style: TextStyle(color: m['activo'] == true ? null : cs.onSurfaceVariant)),
-                subtitle: Text('${formatoPesos(double.tryParse('${m['precio_rollo']}') ?? 0)} por '
-                    '${_pesos(m['peso_rollo_g'])} g${m['activo'] == true ? '' : ' · inactivo'}'),
-                trailing: IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _editarMaterial(m)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _tarifaHora,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Máquina \$/hora'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _minimo,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Cobro mínimo \$'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _margen,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Margen fallos %'),
+                    ),
+                  ),
+                ],
               ),
-          ]),
+              const SizedBox(height: 4),
+              Text(
+                'El margen se suma al costo del material. Los cambios no alteran cotizaciones ya hechas.',
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(onPressed: _guardando ? null : _guardarTarifa, child: const Text('Guardar tarifas')),
+              ),
+              const Divider(),
+              Row(
+                children: [
+                  const Text('Materiales', style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () => _editarMaterial(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Agregar'),
+                  ),
+                ],
+              ),
+              for (final m in _materiales)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(
+                    '${m['nombre']}',
+                    style: TextStyle(color: m['activo'] == true ? null : cs.onSurfaceVariant),
+                  ),
+                  subtitle: Text(
+                    '${formatoPesos(double.tryParse('${m['precio_rollo']}') ?? 0)} por '
+                    '${_pesos(m['peso_rollo_g'])} g${m['activo'] == true ? '' : ' · inactivo'}',
+                  ),
+                  trailing: IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _editarMaterial(m)),
+                ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, _cambio), child: const Text('Cerrar')),
-      ],
+      actions: [TextButton(onPressed: () => Navigator.pop(context, _cambio), child: const Text('Cerrar'))],
     );
   }
 }
