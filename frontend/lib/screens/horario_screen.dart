@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
 import '../core/horario_utils.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../core/permissions.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/horario_bloque_dialog.dart';
@@ -138,11 +139,10 @@ class _HorarioScreenState extends State<HorarioScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       body: Column(
         children: [
           Container(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             child: TabBar(
               controller: _tab,
               // Desplazable: en móvil las 5 pestañas no caben y se encimaban.
@@ -326,7 +326,7 @@ class _GuiasDialogState extends State<_GuiasDialog> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary, foregroundColor: Colors.white),
+                backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Guardar'),
           ),
@@ -360,7 +360,7 @@ class _GuiasDialogState extends State<_GuiasDialog> {
             tooltip: 'Nueva guía',
             onPressed: _dialog,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
       ]),
       contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -416,29 +416,32 @@ class _GuiasDialogState extends State<_GuiasDialog> {
                               Tooltip(
                                 message: 'Abrir en Drive',
                                 child: IconButton(
+                                  tooltip: 'Abrir guía',
                                   icon: const Icon(Icons.open_in_new,
                                       color: kPrimary, size: 18),
                                   onPressed: () =>
                                       launchUrl(Uri.parse(url)),
                                   padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                 ),
                               ),
                             if (widget.puedeEditar) ...[
                               IconButton(
+                                tooltip: 'Editar guía',
                                 icon: const Icon(Icons.edit_outlined,
                                     color: kPrimary, size: 18),
                                 onPressed: () => _dialog(g),
                                 padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                               ),
                               IconButton(
+                                tooltip: 'Eliminar guía',
                                 icon: const Icon(Icons.delete_outline,
                                     color: kDanger, size: 18),
                                 onPressed: () =>
                                     _eliminar(g['id'].toString()),
                                 padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                               ),
                             ],
                           ],
@@ -827,7 +830,7 @@ class _TabEncargadosState extends State<_TabEncargados>
           const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFFDEE2E6)),
+              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Table(
@@ -838,9 +841,9 @@ class _TabEncargadosState extends State<_TabEncargados>
               },
               children: [
                 TableRow(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF8F9FA),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainer,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
                   ),
                   children: const [
                     Padding(
@@ -866,8 +869,8 @@ class _TabEncargadosState extends State<_TabEncargados>
                   final extraH = horasExtraMap[uid] ?? 0;
                   final tieneExtra = extraH > 0;
                   return TableRow(
-                    decoration: const BoxDecoration(
-                      border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
                     ),
                     children: [
                       Padding(
@@ -1115,7 +1118,7 @@ class _TabEncargadosState extends State<_TabEncargados>
           const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFFDEE2E6)),
+              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -1128,8 +1131,8 @@ class _TabEncargadosState extends State<_TabEncargados>
                 final isLast = idx == _horasExtraList.length - 1;
                 return Container(
                   decoration: BoxDecoration(
-                    border: idx == 0 ? null : const Border(
-                      top: BorderSide(color: Color(0xFFDEE2E6)),
+                    border: idx == 0 ? null : Border(
+                      top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                     ),
                     borderRadius: idx == 0
                         ? const BorderRadius.vertical(top: Radius.circular(8))
@@ -1195,14 +1198,14 @@ class _TabEncargadosState extends State<_TabEncargados>
           ..._dias.map((d) => Container(
             width: _colWidth,
             padding: const EdgeInsets.symmetric(vertical: 8),
-            color: kPrimary,
+            color: context.sgi.brandBar,
             alignment: Alignment.center,
             child: Text(d,
                 style: const TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
           )),
         ]),
-        const Divider(height: 1, thickness: 1, color: Color(0xFFDEE2E6)),
+        Divider(height: 1, thickness: 1, color: Theme.of(context).colorScheme.outlineVariant),
         // Filas de horas
         ..._horas.map((h) => _buildHoraRow(h, puedeEditar)),
       ],
@@ -1219,8 +1222,8 @@ class _TabEncargadosState extends State<_TabEncargados>
             width: _labelWidth,
             alignment: Alignment.topCenter,
             padding: const EdgeInsets.only(top: 8),
-            decoration: const BoxDecoration(
-              border: Border(right: BorderSide(color: Color(0xFFDEE2E6))),
+            decoration: BoxDecoration(
+              border: Border(right: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
             ),
             child: Text(_horaAmPm(hora),
                 style: const TextStyle(fontSize: 11, color: kTextMuted, fontWeight: FontWeight.w600)),
@@ -1235,10 +1238,10 @@ class _TabEncargadosState extends State<_TabEncargados>
                 constraints: const BoxConstraints(minHeight: _rowHeight),
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
-                  color: dia.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
-                  border: const Border(
-                    right:  BorderSide(color: Color(0xFFDEE2E6)),
-                    bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                  color: dia.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface,
+                  border: Border(
+                    right:  BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                    bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                   ),
                 ),
                 child: Wrap(
@@ -1730,14 +1733,14 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
           ..._dias.asMap().entries.map((e) => Container(
             width: _colWidth,
             padding: const EdgeInsets.symmetric(vertical: 8),
-            color: kPrimary,
+            color: context.sgi.brandBar,
             alignment: Alignment.center,
             child: Text(_dias[e.key],
                 style: const TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
           )),
         ]),
-        const Divider(height: 1, thickness: 1, color: Color(0xFFDEE2E6)),
+        Divider(height: 1, thickness: 1, color: Theme.of(context).colorScheme.outlineVariant),
         // Cuerpo
         SizedBox(
           height: totalH.toDouble(),
@@ -1755,10 +1758,10 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
                     child: Container(
                       alignment: Alignment.topCenter,
                       padding: const EdgeInsets.only(top: 5),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         border: Border(
-                          right:  BorderSide(color: Color(0xFFDEE2E6)),
-                          bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                          right:  BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                          bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                         ),
                       ),
                       child: Text(
@@ -1803,16 +1806,16 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
                 onTap: (puedeEditar && empty) ? () => _agregar(dia, _horas[i]) : null,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: dia.isOdd ? const Color(0xFFF8F9FA) : Colors.white,
-                    border: const Border(
-                      right:  BorderSide(color: Color(0xFFDEE2E6)),
-                      bottom: BorderSide(color: Color(0xFFDEE2E6)),
+                    color: dia.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface,
+                    border: Border(
+                      right:  BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                      bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
                     ),
                   ),
                   child: (puedeEditar && empty)
-                      ? const Center(
+                      ? Center(
                           child: Icon(Icons.add_circle_outline,
-                              size: 13, color: Color(0xFFDDDDDD)))
+                              size: 13, color: Theme.of(context).colorScheme.outlineVariant))
                       : null,
                 ),
               ),
@@ -1870,13 +1873,13 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
           height: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(4),
             border: Border(
               left:   BorderSide(color: color, width: 3),
-              top:    const BorderSide(color: Color(0xFFDEE2E6)),
-              right:  const BorderSide(color: Color(0xFFDEE2E6)),
-              bottom: const BorderSide(color: Color(0xFFDEE2E6)),
+              top:    BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+              right:  BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+              bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
             ),
             boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
           ),
@@ -1896,7 +1899,7 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE9ECEF),
+                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: Text('${b.duracion}h',
@@ -1931,13 +1934,13 @@ class _TabAsignaturasState extends State<_TabAsignaturas>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(4),
             border: Border(
               left:   BorderSide(color: color, width: 3),
-              top:    const BorderSide(color: Color(0xFFDEE2E6)),
-              right:  const BorderSide(color: Color(0xFFDEE2E6)),
-              bottom: const BorderSide(color: Color(0xFFDEE2E6)),
+              top:    BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+              right:  BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+              bottom: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
             ),
           ),
           child: Column(
@@ -2051,7 +2054,7 @@ class _TabGestionState extends State<_TabGestion>
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary, foregroundColor: Colors.white),
+                backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Guardar'),
           ),
@@ -2145,7 +2148,7 @@ class _TabGestionState extends State<_TabGestion>
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary, foregroundColor: Colors.white),
+                  backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Guardar'),
             ),
@@ -2260,20 +2263,22 @@ class _TabGestionState extends State<_TabGestion>
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
+                                          tooltip: 'Editar área',
                                           icon: const Icon(Icons.edit_outlined,
                                               color: kPrimary, size: 18),
                                           onPressed: () => _dialogArea(a),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                         const SizedBox(width: 4),
                                         IconButton(
+                                          tooltip: 'Eliminar área',
                                           icon: const Icon(Icons.delete_outline,
                                               color: kDanger, size: 18),
                                           onPressed: () =>
                                               _eliminarArea(a['id'].toString()),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                       ],
                                     )
@@ -2356,20 +2361,22 @@ class _TabGestionState extends State<_TabGestion>
                                       ),
                                       if (puedeEditar) ...[
                                         IconButton(
+                                          tooltip: 'Editar asignatura',
                                           icon: const Icon(Icons.edit_outlined,
                                               color: kPrimary, size: 18),
                                           onPressed: () => _dialogAsignatura(s),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                         const SizedBox(width: 4),
                                         IconButton(
+                                          tooltip: 'Eliminar asignatura',
                                           icon: const Icon(Icons.delete_outline,
                                               color: kDanger, size: 18),
                                           onPressed: () => _eliminarAsignatura(
                                               s['id'].toString()),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                       ],
                                     ],
@@ -2624,7 +2631,7 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
     final gestor = context.read<AuthProvider>().can(Perm.academicoGestionar);
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFDEE2E6)),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Table(
@@ -2641,9 +2648,9 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
         defaultVerticalAlignment: TableCellVerticalAlignment.middle,
         children: [
           TableRow(
-            decoration: const BoxDecoration(
-              color: Color(0xFFF8F9FA),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainer,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             children: const [
               _CeldaHeader('Monitor'),
@@ -2665,8 +2672,8 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
             final colorHoras  = f.cumple ? kSuccess : kWarning;
 
             return TableRow(
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Color(0xFFDEE2E6))),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
               ),
               children: [
                 InkWell(
@@ -2705,7 +2712,7 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
                       value: f.progreso,
                       minHeight: 4,
                       color: colorHoras,
-                      backgroundColor: const Color(0xFFE9ECEF),
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
                     ),
                   ),
                 ])),
@@ -2734,7 +2741,7 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
                               ),
                               onPressed: () => _marcar(uid, !completada),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                             ),
                 ),
               ],
@@ -2869,7 +2876,7 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.surface,
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
                         ),
@@ -2913,7 +2920,7 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
         4: FlexColumnWidth(3),
         5: FixedColumnWidth(100),
       },
-      border: const TableBorder(horizontalInside: BorderSide(color: Color(0xFFDEE2E6))),
+      border: TableBorder(horizontalInside: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
       children: [
         _headerRow(['Monitor', 'Programa', 'Fecha', 'Duración', 'Descripción', 'Fuente']),
         ..._registros.asMap().entries.map((entry) {
@@ -2922,7 +2929,7 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
           final duracion = double.tryParse(r['duracion_horas'].toString()) ?? 0;
           final fuente   = r['fuente']?.toString() ?? 'APP';
           return TableRow(
-            decoration: BoxDecoration(color: idx.isOdd ? const Color(0xFFF8F9FA) : Colors.white),
+            decoration: BoxDecoration(color: idx.isOdd ? Theme.of(context).colorScheme.surfaceContainer : Theme.of(context).colorScheme.surface),
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2961,7 +2968,7 @@ class _TabRegistrosMonitoresState extends State<_TabRegistrosMonitores>
   }
 
   TableRow _headerRow(List<String> cols) => TableRow(
-    decoration: const BoxDecoration(color: kPrimary),
+    decoration: BoxDecoration(color: context.sgi.brandBar),
     children: cols.map((h) => Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Text(h,
@@ -3056,7 +3063,7 @@ class _SelectorEncargadoDialogState extends State<_SelectorEncargadoDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+          style: ElevatedButton.styleFrom(backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
           onPressed: _seleccionado == null ? null : () {
             Navigator.pop(context, {
               ..._seleccionado!,
@@ -3220,7 +3227,7 @@ class _FormAsignaturaDialogState extends State<_FormAsignaturaDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary, foregroundColor: Colors.white),
+              backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
           onPressed: _asignaturaId == null ? null : () {
             Navigator.pop(context, {
               'asignatura_id': _asignaturaId,

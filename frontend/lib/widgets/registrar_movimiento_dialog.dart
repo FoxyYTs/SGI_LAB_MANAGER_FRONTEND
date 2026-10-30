@@ -337,7 +337,7 @@ class _RegistrarMovimientoDialogState extends State<RegistrarMovimientoDialog> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFEBEE),
+                        color: kDanger.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(_error!,

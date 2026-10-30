@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import '../utils/qr_saver.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 const _kFrontendUrl = String.fromEnvironment('FRONTEND_URL', defaultValue: '');
 
@@ -92,9 +93,9 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
           children: [
             // Header
             Container(
-              decoration: const BoxDecoration(
-                color: kPrimary,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+              decoration: BoxDecoration(
+                color: context.sgi.brandBar,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               ),
               child: TabBar(
                 controller: _tab,
@@ -174,7 +175,7 @@ class _QrTab extends StatelessWidget {
           Text(
             form.desc,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 13, color: Colors.black54),
+            style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
           Container(

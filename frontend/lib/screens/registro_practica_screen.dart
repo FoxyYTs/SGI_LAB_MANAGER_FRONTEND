@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 class RegistroPracticaScreen extends StatefulWidget {
   const RegistroPracticaScreen({super.key});
@@ -180,10 +181,9 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: kPrimary,
+        backgroundColor: context.sgi.brandBar,
         title: const Text('Registro de Práctica',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
@@ -202,10 +202,10 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
         const SizedBox(height: 8),
         Text(_asignaturaSel?['nombre'] ?? '',
             textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 15, color: Colors.black54)),
+            style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 24),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+          style: ElevatedButton.styleFrom(backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
           onPressed: () => setState(() {
             _enviado     = false;
             _docenteSel  = null;
@@ -234,8 +234,8 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
     child: Form(
       key: _formKey,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Registra la práctica que estás realizando.',
-            style: TextStyle(fontSize: 14, color: Colors.black54)),
+        Text('Registra la práctica que estás realizando.',
+            style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 20),
 
         _seccion('Docente'),
@@ -383,7 +383,7 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
                         ? _formatDate(_fechaPractica!)
                         : 'Fecha de la práctica *',
                     style: TextStyle(
-                      color: _fechaPractica != null ? Colors.black87 : Colors.grey,
+                      color: _fechaPractica != null ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 14,
                     ),
                   ),
@@ -431,7 +431,7 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
                 : const Icon(Icons.send_outlined),
             label: const Text('Registrar práctica'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary, foregroundColor: Colors.white,
+              backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
@@ -461,7 +461,7 @@ class _RegistroPracticaScreenState extends State<RegistroPracticaScreen> {
           Text(
             time != null ? _formatTime(time) : label,
             style: TextStyle(
-              color: time != null ? Colors.black87 : Colors.grey,
+              color: time != null ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 14,
             ),
           ),

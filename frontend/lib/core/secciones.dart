@@ -13,6 +13,7 @@ enum Seccion {
   bitacora,
   horario,
   informes,
+  impresiones,
   configuracion,
 }
 
@@ -25,6 +26,7 @@ extension SeccionPermiso on Seccion {
         Seccion.bitacora      => Perm.bitacoraVer,
         Seccion.horario       => Perm.academicoVer,
         Seccion.informes      => Perm.informesVer,
+        Seccion.impresiones   => Perm.impresionesVer,
         Seccion.configuracion => Perm.configuracionGestion,
       };
 

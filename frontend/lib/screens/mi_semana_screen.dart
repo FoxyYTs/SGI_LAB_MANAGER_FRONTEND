@@ -100,10 +100,9 @@ class _MiSemanaScreenState extends State<MiSemanaScreen> {
   Widget build(BuildContext context) {
     final esActual = _lunes == _lunesDe(DateTime.now());
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
         title: Text(_semana != null && _usuarioId != null ? _semana!.nombre : 'Mi semana'),
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         foregroundColor: kPrimary,
         elevation: 0.5,
       ),
@@ -267,8 +266,8 @@ class _MiSemanaScreenState extends State<MiSemanaScreen> {
           const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: const Color(0xFFDEE2E6)),
+              color: Theme.of(context).colorScheme.surface,
+              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(children: hijos),
@@ -325,7 +324,7 @@ List<Widget> _filasResumen(ResumenSemana r) => [
             SizedBox(
               width: 36,
               child: Text(f.dia,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.black87)),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
             ),
             Expanded(
               child: Text(f.rangos,
@@ -367,7 +366,7 @@ class MiSemanaResumenCard extends StatelessWidget {
           ],
         );
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(10),
       elevation: 1,
       child: InkWell(
@@ -404,7 +403,7 @@ class MiSemanaResumenCard extends StatelessWidget {
                 value: f.progreso,
                 minHeight: 8,
                 color: color,
-                backgroundColor: const Color(0xFFE9ECEF),
+                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
               ),
             ),
             if (compacta && semana.rangos.isNotEmpty) ...[

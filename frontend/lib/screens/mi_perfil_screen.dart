@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/theme/colors.dart';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
+import '../core/theme/app_theme.dart';
 import '../widgets/cerrar_sesion.dart';
 
 /// Mensaje legible de un error del backend ({'error': ...} / {'foto': ...} /
@@ -30,6 +32,8 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl  = TextEditingController();
   final _emailCtrl     = TextEditingController();
+  /// Correo guardado en el servidor: si el del formulario difiere, se pide la contraseña.
+  String _emailOriginal = '';
   final _telefonoCtrl  = TextEditingController();
   final _semestreCtrl  = TextEditingController();
 
@@ -93,6 +97,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
         _firstNameCtrl.text   = perfil['first_name'] ?? '';
         _lastNameCtrl.text    = perfil['last_name']  ?? '';
         _emailCtrl.text       = perfil['email']      ?? '';
+        _emailOriginal        = _emailCtrl.text;
         _telefonoCtrl.text    = p['telefono']         ?? '';
         _semestreCtrl.text    = (p['semestre'] ?? '').toString();
         _programaSeleccionado = p['programa'] as String?;
@@ -114,8 +119,42 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     }
   }
 
+  /// El backend exige la contraseña actual para cambiar el propio correo.
+  Future<String?> _pedirPassword() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirma tu contraseña'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Para cambiar tu correo escribe tu contraseña actual.'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            obscureText: true,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Contraseña actual'),
+            onSubmitted: (_) => Navigator.pop(ctx, true),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
+        ],
+      ),
+    );
+    final password = ctrl.text;
+    ctrl.dispose();
+    return ok == true && password.isNotEmpty ? password : null;
+  }
+
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
+    String? passwordActual;
+    if (_emailCtrl.text.trim().toLowerCase() != _emailOriginal.toLowerCase()) {
+      passwordActual = await _pedirPassword();
+      if (passwordActual == null || !mounted) return;
+    }
     setState(() => _guardando = true);
 
     final auth = context.read<AuthProvider>();
@@ -126,6 +165,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       'last_name':  _lastNameCtrl.text.trim(),
       'email':      _emailCtrl.text.trim(),
       'telefono':   _telefonoCtrl.text.trim(),
+      'password_actual': ?passwordActual,
     };
 
     if (_programaSeleccionado != null) {
@@ -139,6 +179,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
     try {
       await dio.patch('usuarios/perfil/', data: data);
+      _emailOriginal = _emailCtrl.text.trim();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -318,9 +359,8 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.surface,
         elevation: 1,
         title: const Text('Mi Perfil',
             style: TextStyle(color: kPrimary, fontWeight: FontWeight.bold)),
@@ -351,6 +391,8 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                             _buildFormDatos(),
                             const SizedBox(height: 20),
                             _buildFormPassword(),
+                            const SizedBox(height: 20),
+                            _buildApariencia(),
                           ],
                         ),
                 ),
@@ -370,7 +412,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(10),
         boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
       ),
@@ -465,7 +507,53 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     _buildFormDatos(),
     const SizedBox(height: 16),
     _buildFormPassword(),
+    const SizedBox(height: 16),
+    _buildApariencia(),
   ]);
+
+  // ── Apariencia (tema claro/oscuro) ──────────────────────────────────────
+  Widget _buildApariencia() {
+    final mode = context.watch<ThemeProvider>().mode;
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
+      ),
+      child: Column(children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: context.sgi.brandBar,
+            borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+          ),
+          child: const Row(children: [
+            Icon(Icons.palette_outlined, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text('Apariencia',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ThemeMode>(
+              segments: const [
+                ButtonSegment(value: ThemeMode.system, label: Text('Sistema')),
+                ButtonSegment(value: ThemeMode.light, label: Text('Claro')),
+                ButtonSegment(value: ThemeMode.dark, label: Text('Oscuro')),
+              ],
+              selected: {mode},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) => context.read<ThemeProvider>().setMode(s.first),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
 
   // ── Avatar (móvil) ────────────────────────────────────────────────────────
 
@@ -503,7 +591,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
   Widget _buildFormDatos() => Container(
     decoration: BoxDecoration(
-      color: Colors.white, borderRadius: BorderRadius.circular(10),
+      color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
       boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
     ),
     child: Column(children: [
@@ -511,9 +599,9 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: const BoxDecoration(
-          color: kPrimary,
-          borderRadius: BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+        decoration: BoxDecoration(
+          color: context.sgi.brandBar,
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
         ),
         child: const Row(children: [
           Icon(Icons.person_outline, color: Colors.white, size: 18),
@@ -596,7 +684,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
                 label: Text(_guardando ? 'Guardando...' : 'Guardar cambios',
                     style: const TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary, foregroundColor: Colors.white,
+                  backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                 ),
@@ -612,16 +700,16 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
   Widget _buildFormPassword() => Container(
     decoration: BoxDecoration(
-      color: Colors.white, borderRadius: BorderRadius.circular(10),
+      color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(10),
       boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))],
     ),
     child: Column(children: [
       Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: const BoxDecoration(
-          color: kPrimary,
-          borderRadius: BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+        decoration: BoxDecoration(
+          color: context.sgi.brandBar,
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
         ),
         child: const Row(children: [
           Icon(Icons.lock_outline, color: Colors.white, size: 18),
@@ -641,6 +729,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
             obscureText: !_verPassActual,
             decoration: _inputDec('Contraseña actual', Icons.lock_outline).copyWith(
               suffixIcon: IconButton(
+                tooltip: _verPassActual ? 'Ocultar contraseña' : 'Mostrar contraseña',
                 icon: Icon(_verPassActual ? Icons.visibility_off : Icons.visibility, size: 18),
                 onPressed: () => setState(() => _verPassActual = !_verPassActual),
               ),
@@ -654,6 +743,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
               obscureText: !_verPassNueva,
               decoration: _inputDec('Nueva contraseña', Icons.lock_person_outlined).copyWith(
                 suffixIcon: IconButton(
+                  tooltip: _verPassNueva ? 'Ocultar contraseña' : 'Mostrar contraseña',
                   icon: Icon(_verPassNueva ? Icons.visibility_off : Icons.visibility, size: 18),
                   onPressed: () => setState(() => _verPassNueva = !_verPassNueva),
                 ),
@@ -664,6 +754,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
               obscureText: !_verPassNueva2,
               decoration: _inputDec('Confirmar contraseña', Icons.lock_reset_outlined).copyWith(
                 suffixIcon: IconButton(
+                  tooltip: _verPassNueva2 ? 'Ocultar contraseña' : 'Mostrar contraseña',
                   icon: Icon(_verPassNueva2 ? Icons.visibility_off : Icons.visibility, size: 18),
                   onPressed: () => setState(() => _verPassNueva2 = !_verPassNueva2),
                 ),
@@ -697,21 +788,13 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   );
 
 
-  InputDecoration _inputDec(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, size: 18, color: kPrimary),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: kPrimary, width: 1.5),
-      ),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      filled: true,
-      fillColor: Colors.white,
-    );
-  }
+  // Borde/relleno vienen del `inputDecorationTheme` global (app_theme) para que
+  // el campo siga el tema en claro y oscuro.
+  InputDecoration _inputDec(String label, IconData icon) => InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 18, color: kPrimary),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -835,7 +918,6 @@ class _EditarPerfilUsuarioDialogState
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       filled: true,
-      fillColor: Colors.white,
       isDense: true,
     );
   }

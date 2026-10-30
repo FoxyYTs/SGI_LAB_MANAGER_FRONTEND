@@ -8,6 +8,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'providers/auth_provider.dart';
 import 'providers/inventario_provider.dart';
+import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/main_shell.dart';
 import 'screens/solicitud_prestamo_screen.dart';
@@ -24,6 +25,7 @@ import 'screens/actualizacion_requerida_screen.dart';
 import 'screens/politica_privacidad_screen.dart';
 import 'core/api/api_client.dart';
 import 'core/theme/colors.dart';
+import 'core/theme/app_theme.dart';
 import 'core/sync/sync_service.dart';
 import 'core/database/local_db.dart';
 import 'core/navigation_service.dart';
@@ -98,6 +100,11 @@ void main() async {
   LogService.log('Cargando sesión guardada...');
   final auth = AuthProvider();
   await auth.cargarSesion();
+
+  // Tema claro/oscuro guardado — se carga antes de la UI para arrancar ya
+  // en el tema elegido, sin parpadeo.
+  final themeProvider = ThemeProvider();
+  await themeProvider.cargar();
   LogService.log('Sesión cargada — autenticado: ${auth.isAuthenticated}, rol: ${auth.rol}');
 
   // Inicializar conectividad aunque no haya sesión (para detectar online/offline en login).
@@ -114,6 +121,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: auth),
+        ChangeNotifierProvider.value(value: themeProvider),
         ChangeNotifierProvider(create: (_) => InventarioProvider()),
         ChangeNotifierProvider.value(value: SyncService.instance),
       ],
@@ -140,30 +148,9 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: kPrimary),
-        primaryColor: kPrimary,
-        scaffoldBackgroundColor: kBackground,
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-          elevation: 2,
-          shadowColor: Colors.black26,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: kPrimary,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          ),
-        ),
-        tabBarTheme: const TabBarThemeData(
-          labelColor: kPrimary,
-          unselectedLabelColor: kTextMuted,
-          indicatorColor: kPrimary,
-        ),
-      ),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: context.watch<ThemeProvider>().mode,
       // home: si el usuario ya está autenticado muestra el shell; si no, el login.
       home: const _AuthGate(),
       routes: {

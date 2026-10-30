@@ -7,6 +7,7 @@ import '../core/api/paginacion.dart';
 import '../core/download_helper.dart';
 import '../core/permissions.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 
 class InformesContent extends StatefulWidget {
@@ -65,7 +66,6 @@ class _InformesContentState extends State<InformesContent> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kBackground,
       body: _cargando
           ? const Center(child: CircularProgressIndicator(color: kPrimary))
           : Align(
@@ -95,9 +95,9 @@ class _InformesContentState extends State<InformesContent> {
                                           fontWeight: FontWeight.bold,
                                           color: kPrimary)),
                                   const SizedBox(height: 4),
-                                  const Text(
+                                  Text(
                                       'Descarga informes en PDF o Excel. Puedes filtrar por rango de fechas.',
-                                      style: TextStyle(fontSize: 13, color: Colors.black54)),
+                                      style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                                   const SizedBox(height: 12),
                                 ],
                               ),
@@ -336,7 +336,7 @@ class _InformeTileState extends State<_InformeTile> {
           // ── Header azul ───────────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            color: kPrimary,
+            color: context.sgi.brandBar,
             child: Row(children: [
               Icon(widget.tipo.icon, color: Colors.white, size: 18),
               const SizedBox(width: 8),
@@ -361,7 +361,7 @@ class _InformeTileState extends State<_InformeTile> {
                     'Último: $ultimaVez',
                     style: TextStyle(
                         fontSize: 11,
-                        color: nunca ? kTextMuted : const Color(0xFF223542),
+                        color: nunca ? kTextMuted : Theme.of(context).colorScheme.onSurface,
                         fontStyle: nunca ? FontStyle.italic : FontStyle.normal),
                     overflow: TextOverflow.ellipsis,
                   )),
@@ -418,10 +418,12 @@ class _InformeTileState extends State<_InformeTile> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
-            color: activo ? kPrimary.withValues(alpha: 0.08) : Colors.white,
+            color: activo
+                ? kPrimary.withValues(alpha: 0.12)
+                : Theme.of(context).colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-                color: activo ? kPrimary : const Color(0xFFCED4DA)),
+                color: activo ? kPrimary : Theme.of(context).colorScheme.outlineVariant),
           ),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(Icons.calendar_today_outlined, size: 12,
@@ -443,13 +445,19 @@ class _InformeTileState extends State<_InformeTile> {
     required Color color,
     required bool loading,
     required VoidCallback onTap,
-  }) =>
-      GestureDetector(
+  }) {
+    // En oscuro el relleno pleno de marca se ve demasiado vivo: lo apagamos
+    // mezclándolo con la superficie (el texto blanco sigue legible).
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark
+        ? Color.lerp(color, Theme.of(context).colorScheme.surface, 0.28)!
+        : color;
+    return GestureDetector(
         onTap: loading ? null : onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: color,
+            color: bg,
             borderRadius: BorderRadius.circular(6),
           ),
           child: loading
@@ -463,6 +471,7 @@ class _InformeTileState extends State<_InformeTile> {
                 ]),
         ),
       );
+  }
 
 }
 
@@ -548,7 +557,7 @@ class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
               if (tituloController.text.trim().isEmpty) return;
               Navigator.pop(ctx, true);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: kPrimary),
+            style: ElevatedButton.styleFrom(backgroundColor: context.sgi.brandBar),
             child: const Text('Subir', style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -693,8 +702,8 @@ class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
                     ),
           ]),
           const SizedBox(height: 4),
-          const Text('Documentos elaborados manualmente y almacenados en la plataforma.',
-              style: TextStyle(fontSize: 12, color: Colors.black54)),
+          Text('Documentos elaborados manualmente y almacenados en la plataforma.',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 12),
 
           // ── Lista ──────────────────────────────────────────────────────
@@ -707,18 +716,18 @@ class _InformesSubidosSectionState extends State<_InformesSubidosSection> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE0E0E0)),
+                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
               ),
-              child: const Center(
+              child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.inbox_outlined, size: 36, color: Colors.black26),
-                    SizedBox(height: 8),
+                    Icon(Icons.inbox_outlined, size: 36, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(height: 8),
                     Text('No hay informes subidos aún.',
-                        style: TextStyle(color: Colors.black45, fontSize: 13)),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                   ],
                 ),
               ),

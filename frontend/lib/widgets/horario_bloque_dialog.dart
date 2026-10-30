@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../core/horario_utils.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 enum ModoBloque { encargado, asignatura }
 
@@ -620,7 +621,7 @@ class _BloqueFormDialogState extends State<BloqueFormDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: kPrimary, foregroundColor: Colors.white),
+          style: ElevatedButton.styleFrom(backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white),
           onPressed: _aceptar,
           child: Text(widget.textoBoton),
         ),

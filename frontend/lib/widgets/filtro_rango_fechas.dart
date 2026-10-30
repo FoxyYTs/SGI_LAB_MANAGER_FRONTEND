@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/rango_fechas.dart';
-import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 /// Botón "Fechas" que abre un selector de rango y, si hay uno elegido, se
 /// muestra como chip con la "x" para limpiarlo. Se usa en el historial de
@@ -32,11 +32,11 @@ class FiltroRangoFechas extends StatelessWidget {
     final r = rango;
     if (r == null) {
       return ActionChip(
-        avatar: const Icon(Icons.date_range, size: 16, color: kPrimary),
-        label: const Text('Fechas', style: TextStyle(fontSize: 12, color: kPrimary)),
+        avatar: Icon(Icons.date_range, size: 16, color: context.sgi.accent),
+        label: Text('Fechas', style: TextStyle(fontSize: 12, color: context.sgi.accent)),
         tooltip: 'Filtrar por rango de fechas',
-        backgroundColor: Colors.white,
-        side: const BorderSide(color: Color(0xFFDEE2E6)),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         onPressed: () => _elegir(context),
       );
@@ -45,8 +45,8 @@ class FiltroRangoFechas extends StatelessWidget {
       avatar: const Icon(Icons.date_range, size: 16, color: Colors.white),
       label: Text(etiquetaRango(r),
           style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
-      backgroundColor: kPrimary,
-      side: const BorderSide(color: kPrimary),
+      backgroundColor: context.sgi.brandBar,
+      side: BorderSide(color: context.sgi.brandBar),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       deleteIcon: const Icon(Icons.close, size: 16, color: Colors.white),
       deleteButtonTooltipMessage: 'Quitar filtro de fechas',

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../core/api/api_client.dart';
 import '../core/horario_utils.dart';
 import '../core/theme/colors.dart';
+import '../core/theme/app_theme.dart';
 
 class RegistroHorasScreen extends StatefulWidget {
   const RegistroHorasScreen({super.key});
@@ -150,9 +151,9 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
 
   Widget _header() => Container(
     width: double.infinity,
-    decoration: const BoxDecoration(
-      color: kPrimary,
-      borderRadius: BorderRadius.only(
+    decoration: BoxDecoration(
+      color: context.sgi.brandBar,
+      borderRadius: const BorderRadius.only(
         topLeft: Radius.circular(12),
         topRight: Radius.circular(12),
       ),
@@ -188,7 +189,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
       Text(title,
           style: const TextStyle(
               fontWeight: FontWeight.bold, color: kPrimary, fontSize: 13)),
-      const Divider(height: 8, thickness: 1, color: Color(0xFFDEE2E6)),
+      Divider(height: 8, thickness: 1, color: Theme.of(context).colorScheme.outlineVariant),
     ]),
   );
 
@@ -197,14 +198,14 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
     labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
     prefixIcon: Icon(icon, color: kPrimary, size: 18),
     filled: true,
-    fillColor: const Color(0xFFF8F9FA),
+    fillColor: Theme.of(context).colorScheme.surfaceContainerHigh,
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+      borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
     ),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
-      borderSide: const BorderSide(color: Color(0xFFDEE2E6)),
+      borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(8),
@@ -228,7 +229,6 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
   Widget build(BuildContext context) {
     final wide = MediaQuery.of(context).size.width >= 700;
     return Scaffold(
-      backgroundColor: wide ? const Color(0xFFE9ECEF) : kBackground,
       body: SafeArea(
         child: _enviado ? _buildConfirmacion() : _buildScrollBody(wide),
       ),
@@ -273,13 +273,13 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: kPrimary)),
         const SizedBox(height: 8),
         Text(_monitorSel!['nombre']?.toString() ?? '',
-            style: const TextStyle(fontSize: 16, color: Colors.black54)),
+            style: TextStyle(fontSize: 16, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary, foregroundColor: Colors.white,
+              backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
@@ -325,9 +325,9 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
       child: Form(
         key: _formKey,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text(
+          Text(
             'Registra las actividades realizadas durante tu turno en el laboratorio.',
-            style: TextStyle(fontSize: 14, color: Colors.black54),
+            style: TextStyle(fontSize: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
 
@@ -362,7 +362,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
                   if (_semestre != null) ...[
                     const SizedBox(width: 8),
                     Text('· Semestre $_semestre',
-                        style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                   ],
                 ]),
               ),
@@ -396,9 +396,9 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8F9FA),
+                    color: Theme.of(context).colorScheme.surfaceContainerHigh,
                     border: Border.all(
-                        color: state.hasError ? kDanger : const Color(0xFFDEE2E6)),
+                        color: state.hasError ? kDanger : Theme.of(context).colorScheme.outlineVariant),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(children: [
@@ -409,7 +409,9 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
                           ? '${_fechaActividad!.day.toString().padLeft(2,'0')}/${_fechaActividad!.month.toString().padLeft(2,'0')}/${_fechaActividad!.year}'
                           : 'Fecha de la actividad *',
                       style: TextStyle(
-                        color: _fechaActividad != null ? Colors.black87 : Colors.grey,
+                        color: _fechaActividad != null
+                            ? Theme.of(context).colorScheme.onSurface
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 14,
                       ),
                     ),
@@ -465,7 +467,7 @@ class _RegistroHorasScreenState extends State<RegistroHorasScreen> {
               label: const Text('Registrar horas',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary, foregroundColor: Colors.white,
+                backgroundColor: context.sgi.brandBar, foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),

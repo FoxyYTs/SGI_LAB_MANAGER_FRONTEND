@@ -64,9 +64,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               style: const TextStyle(fontSize: 12, color: kTextMuted),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'La aplicación se descargará, reemplazará y reiniciará automáticamente.',
-              style: TextStyle(fontSize: 13, color: Colors.black54),
+              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
         );
@@ -79,7 +79,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             const SizedBox(height: 16),
             LinearProgressIndicator(
               value: _progreso > 0 ? _progreso : null,
-              backgroundColor: const Color(0xFFE9ECEF),
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
               color: kPrimary,
               minHeight: 6,
               borderRadius: BorderRadius.circular(3),
@@ -100,7 +100,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             const SizedBox(height: 12),
             Text(
               _error ?? 'Error desconocido al descargar la actualización.',
-              style: const TextStyle(fontSize: 13, color: Colors.black87),
+              style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurface),
               textAlign: TextAlign.center,
             ),
           ],
