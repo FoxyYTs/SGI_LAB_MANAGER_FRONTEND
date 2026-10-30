@@ -14,6 +14,7 @@ class Perm {
   static const informesVer          = 'informes.ver';
   static const informesGestionar    = 'informes.gestionar';
   static const usuariosGestionar    = 'usuarios.gestionar';
+  static const impresionesGestionar = 'impresiones.gestionar';
 
   /// Todos los permisos disponibles en el sistema
   static const todos = [
@@ -24,6 +25,7 @@ class Perm {
     configuracionGestion, configuracionRoles,
     informesVer, informesGestionar,
     usuariosGestionar,
+    impresionesGestionar,
   ];
 
   /// Nombre legible para mostrar en la UI
@@ -41,6 +43,7 @@ class Perm {
     'informes.ver':          'Ver informes',
     'informes.gestionar':    'Gestionar informes',
     'usuarios.gestionar':    'Gestionar usuarios',
+    'impresiones.gestionar': 'Gestionar impresiones 3D',
   }[codigo] ?? codigo;
 
   /// Descripción de qué habilita cada permiso — debe coincidir con
@@ -59,5 +62,6 @@ class Perm {
     'informes.ver':          'Generar y descargar informes PDF del sistema',
     'informes.gestionar':    'Subir y eliminar informes manuales',
     'usuarios.gestionar':    'Activar/desactivar cuentas y editar el perfil de otros usuarios',
+    'impresiones.gestionar': 'Cotizar impresiones 3D, registrar pagos y editar tarifas y materiales',
   }[codigo] ?? '';
 }
