@@ -32,6 +32,8 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl  = TextEditingController();
   final _emailCtrl     = TextEditingController();
+  /// Correo guardado en el servidor: si el del formulario difiere, se pide la contraseña.
+  String _emailOriginal = '';
   final _telefonoCtrl  = TextEditingController();
   final _semestreCtrl  = TextEditingController();
 
@@ -95,6 +97,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
         _firstNameCtrl.text   = perfil['first_name'] ?? '';
         _lastNameCtrl.text    = perfil['last_name']  ?? '';
         _emailCtrl.text       = perfil['email']      ?? '';
+        _emailOriginal        = _emailCtrl.text;
         _telefonoCtrl.text    = p['telefono']         ?? '';
         _semestreCtrl.text    = (p['semestre'] ?? '').toString();
         _programaSeleccionado = p['programa'] as String?;
@@ -116,8 +119,42 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
     }
   }
 
+  /// El backend exige la contraseña actual para cambiar el propio correo.
+  Future<String?> _pedirPassword() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirma tu contraseña'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Para cambiar tu correo escribe tu contraseña actual.'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            obscureText: true,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: 'Contraseña actual'),
+            onSubmitted: (_) => Navigator.pop(ctx, true),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirmar')),
+        ],
+      ),
+    );
+    final password = ctrl.text;
+    ctrl.dispose();
+    return ok == true && password.isNotEmpty ? password : null;
+  }
+
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
+    String? passwordActual;
+    if (_emailCtrl.text.trim().toLowerCase() != _emailOriginal.toLowerCase()) {
+      passwordActual = await _pedirPassword();
+      if (passwordActual == null || !mounted) return;
+    }
     setState(() => _guardando = true);
 
     final auth = context.read<AuthProvider>();
@@ -128,6 +165,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
       'last_name':  _lastNameCtrl.text.trim(),
       'email':      _emailCtrl.text.trim(),
       'telefono':   _telefonoCtrl.text.trim(),
+      'password_actual': ?passwordActual,
     };
 
     if (_programaSeleccionado != null) {
@@ -141,6 +179,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
 
     try {
       await dio.patch('usuarios/perfil/', data: data);
+      _emailOriginal = _emailCtrl.text.trim();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
