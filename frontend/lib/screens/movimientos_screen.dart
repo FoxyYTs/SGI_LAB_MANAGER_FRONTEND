@@ -822,6 +822,7 @@ class _PrestamoFormState extends State<_PrestamoForm> {
         ),
         if (_items.length > 1)
           IconButton(
+            tooltip: 'Quitar ítem',
             icon: const Icon(Icons.remove_circle_outline,
                 color: kDanger, size: 20),
             onPressed: () => setState(() {
@@ -1497,6 +1498,7 @@ class _AgregarItemDialogState extends State<_AgregarItemDialog> {
         ),
         if (_items.length > 1)
           IconButton(
+            tooltip: 'Quitar ítem',
             icon: const Icon(Icons.remove_circle_outline, color: kDanger, size: 20),
             onPressed: () => setState(() {
               _items[i].dispose();

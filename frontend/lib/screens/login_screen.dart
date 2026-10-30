@@ -183,6 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               labelText: 'Contraseña',
                               prefixIcon: const Icon(Icons.lock_outline, color: kPrimary),
                               suffixIcon: IconButton(
+                                tooltip: _obscurePass ? 'Mostrar contraseña' : 'Ocultar contraseña',
                                 icon: Icon(_obscurePass ? Icons.visibility : Icons.visibility_off),
                                 onPressed: () => setState(() => _obscurePass = !_obscurePass),
                               ),

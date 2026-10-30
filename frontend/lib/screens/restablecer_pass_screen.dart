@@ -226,6 +226,7 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
                               labelText: 'Nueva contraseña',
                               prefixIcon: const Icon(Icons.lock_outline, color: kPrimary),
                               suffixIcon: IconButton(
+                                tooltip: _obscurePass ? 'Mostrar contraseña' : 'Ocultar contraseña',
                                 icon: Icon(_obscurePass ? Icons.visibility : Icons.visibility_off),
                                 onPressed: () => setState(() => _obscurePass = !_obscurePass),
                               ),
@@ -243,6 +244,7 @@ class _RestablecerPassScreenState extends State<RestablecerPassScreen> {
                               labelText: 'Confirmar contraseña',
                               prefixIcon: const Icon(Icons.lock_outline, color: kPrimary),
                               suffixIcon: IconButton(
+                                tooltip: _obscurePass2 ? 'Mostrar contraseña' : 'Ocultar contraseña',
                                 icon: Icon(_obscurePass2 ? Icons.visibility : Icons.visibility_off),
                                 onPressed: () => setState(() => _obscurePass2 = !_obscurePass2),
                               ),

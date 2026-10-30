@@ -729,6 +729,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
             obscureText: !_verPassActual,
             decoration: _inputDec('Contraseña actual', Icons.lock_outline).copyWith(
               suffixIcon: IconButton(
+                tooltip: _verPassActual ? 'Ocultar contraseña' : 'Mostrar contraseña',
                 icon: Icon(_verPassActual ? Icons.visibility_off : Icons.visibility, size: 18),
                 onPressed: () => setState(() => _verPassActual = !_verPassActual),
               ),
@@ -742,6 +743,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
               obscureText: !_verPassNueva,
               decoration: _inputDec('Nueva contraseña', Icons.lock_person_outlined).copyWith(
                 suffixIcon: IconButton(
+                  tooltip: _verPassNueva ? 'Ocultar contraseña' : 'Mostrar contraseña',
                   icon: Icon(_verPassNueva ? Icons.visibility_off : Icons.visibility, size: 18),
                   onPressed: () => setState(() => _verPassNueva = !_verPassNueva),
                 ),
@@ -752,6 +754,7 @@ class _MiPerfilScreenState extends State<MiPerfilScreen> {
               obscureText: !_verPassNueva2,
               decoration: _inputDec('Confirmar contraseña', Icons.lock_reset_outlined).copyWith(
                 suffixIcon: IconButton(
+                  tooltip: _verPassNueva2 ? 'Ocultar contraseña' : 'Mostrar contraseña',
                   icon: Icon(_verPassNueva2 ? Icons.visibility_off : Icons.visibility, size: 18),
                   onPressed: () => setState(() => _verPassNueva2 = !_verPassNueva2),
                 ),

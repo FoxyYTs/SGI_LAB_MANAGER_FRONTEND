@@ -782,7 +782,7 @@ class _TarifasDialogState extends State<_TarifasDialog> {
                     '${formatoPesos(double.tryParse('${m['precio_rollo']}') ?? 0)} por '
                     '${_pesos(m['peso_rollo_g'])} g${m['activo'] == true ? '' : ' · inactivo'}',
                   ),
-                  trailing: IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _editarMaterial(m)),
+                  trailing: IconButton(tooltip: 'Editar material', icon: const Icon(Icons.edit_outlined), onPressed: () => _editarMaterial(m)),
                 ),
             ],
           ),

@@ -447,6 +447,7 @@ class _InventarioContentState extends State<InventarioContent> {
                 if (insumo.usaSga) ...[
                   const SizedBox(width: 4),
                   IconButton(
+                    tooltip: 'Ficha SGA',
                     icon: Icon(Icons.science_outlined, size: 20,
                         color: insumo.tieneSga ? kPrimary : kTextMuted),
                     onPressed: () => Navigator.push(ctx,
@@ -667,6 +668,7 @@ class _InventarioContentState extends State<InventarioContent> {
   Widget _sgaBtn(BuildContext context, Insumo insumo) => Tooltip(
     message: 'Ver ficha SGA',
     child: IconButton(
+      tooltip: 'Ficha SGA',
       icon: Icon(
         Icons.science_outlined,
         size: 20,

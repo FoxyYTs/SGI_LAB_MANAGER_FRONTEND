@@ -912,6 +912,7 @@ class _EditarSgaTabState extends State<_EditarSgaTab> {
                       ),
                       if (_fechaVencimiento != null)
                         IconButton(
+                          tooltip: 'Quitar fecha de vencimiento',
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () => setState(() => _fechaVencimiento = null),
                         ),
