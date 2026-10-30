@@ -397,11 +397,11 @@ class MovimientosContentState extends State<MovimientosContent> {
                 border: Border.all(color: kSemaforoAmarillo),
               ),
               child: Row(children: [
-                const Icon(Icons.wifi_off, color: Color(0xFFE65100), size: 16),
+                Icon(Icons.wifi_off, color: context.sgi.orange, size: 16),
                 const SizedBox(width: 8),
                 Expanded(child: Text(
                   'Datos guardados (${_cachedAt != null ? CacheService.formatEdad(_cachedAt!) : "—"}) — aprobar/rechazar se encolará',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)),
+                  style: TextStyle(fontSize: 12, color: context.sgi.orange),
                 )),
               ]),
             ),

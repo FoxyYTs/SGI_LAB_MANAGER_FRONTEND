@@ -844,12 +844,12 @@ class _CacheBanner extends StatelessWidget {
         border: Border.all(color: kSemaforoAmarillo),
       ),
       child: Row(children: [
-        const Icon(Icons.history, color: Color(0xFFE65100), size: 16),
+        Icon(Icons.history, color: context.sgi.orange, size: 16),
         const SizedBox(width: 8),
         Expanded(child: Text('Mostrando datos guardados ($edad)',
-            style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)))),
+            style: TextStyle(fontSize: 12, color: context.sgi.orange))),
         GestureDetector(onTap: onRefresh,
-            child: const Icon(Icons.refresh, color: Color(0xFFE65100), size: 16)),
+            child: Icon(Icons.refresh, color: context.sgi.orange, size: 16)),
       ]),
     );
   }
