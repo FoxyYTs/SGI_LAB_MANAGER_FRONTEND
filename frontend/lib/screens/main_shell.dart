@@ -17,6 +17,7 @@ import 'bitacora_screen.dart';
 import 'horario_screen.dart';
 import 'configuracion_screen.dart';
 import 'informes_screen.dart';
+import 'impresiones_screen.dart';
 import '../widgets/cerrar_sesion.dart';
 
 class _TabDef {
@@ -94,6 +95,7 @@ class _MainShellState extends State<MainShell> {
     _TabDef(Seccion.bitacora,      Icons.history_outlined,          'Bitácora',      const BitacoraContent()),
     _TabDef(Seccion.horario,       Icons.calendar_month_outlined,   'Horario',       const HorarioScreen()),
     _TabDef(Seccion.informes,      Icons.picture_as_pdf_outlined,   'Informes',      const InformesContent()),
+    _TabDef(Seccion.impresiones,   Icons.print_outlined,            'Impresiones 3D', const ImpresionesContent()),
     _TabDef(Seccion.configuracion, Icons.settings_outlined,         'Configuración', ConfiguracionScreen(key: _configKey)),
   ].where((t) => t.seccion.visiblePara(auth.can)).toList();
 
