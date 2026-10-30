@@ -391,6 +391,12 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
   late final _minutos = TextEditingController(text: '${widget.cotizacion?['minutos'] ?? ''}');
   late int _materialId;
   bool _guardando = false;
+  bool _autoriza = false;
+
+  /// Ley 1581: documento o contacto del cliente exigen su autorización; una
+  /// cotización que ya la tiene no la vuelve a pedir.
+  bool get _yaAutorizo => widget.cotizacion?['autorizacion_datos'] != null;
+  bool get _pideAutorizacion => _documento.text.trim().isNotEmpty || _contacto.text.trim().isNotEmpty;
 
   @override
   void initState() {
@@ -443,6 +449,7 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
       'gramos': leerDecimal(_gramos.text)!.toStringAsFixed(2),
       'horas': int.tryParse(_horas.text) ?? 0,
       'minutos': int.tryParse(_minutos.text) ?? 0,
+      'autoriza_datos': _autoriza,
     };
     try {
       final id = widget.cotizacion?['id'];
@@ -497,6 +504,23 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
                     ),
                   ],
                 ),
+                if (_pideAutorizacion)
+                  FormField<bool>(
+                    validator: (_) => _yaAutorizo || _autoriza ? null : 'Sin autorización deja documento y contacto vacíos.',
+                    builder: (campo) => CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _yaAutorizo || _autoriza,
+                      onChanged: _yaAutorizo ? null : (v) => setState(() => _autoriza = v ?? false),
+                      title: const Text(
+                        'El cliente autorizó el tratamiento de su documento y contacto (Ley 1581)',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      subtitle: campo.hasError
+                          ? Text(campo.errorText!, style: TextStyle(fontSize: 12, color: context.sgi.danger))
+                          : null,
+                    ),
+                  ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _descripcion,
