@@ -693,6 +693,7 @@ class _SolicitudPrestamoScreenState extends State<SolicitudPrestamoScreen> {
         ),
         if (_items.length > 1)
           IconButton(
+            tooltip: 'Quitar ítem',
             icon: const Icon(Icons.remove_circle_outline, color: kDanger, size: 20),
             onPressed: () => setState(() { _items[i].dispose(); _items.removeAt(i); }),
           ),

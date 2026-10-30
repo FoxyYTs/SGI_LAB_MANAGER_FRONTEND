@@ -274,6 +274,7 @@ class _RegistroScreenState extends State<RegistroScreen> {
         labelText: label,
         prefixIcon: const Icon(Icons.lock_outline, color: kPrimary),
         suffixIcon: IconButton(
+          tooltip: obscure ? 'Mostrar contraseña' : 'Ocultar contraseña',
           icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
           onPressed: onToggle,
         ),

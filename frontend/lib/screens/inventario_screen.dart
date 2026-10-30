@@ -186,13 +186,13 @@ class _InventarioContentState extends State<InventarioContent> {
                       border: Border.all(color: kSemaforoAmarillo),
                     ),
                     child: Row(children: [
-                      const Icon(Icons.history, color: Color(0xFFE65100), size: 16),
+                      Icon(Icons.history, color: context.sgi.orange, size: 16),
                       const SizedBox(width: 8),
                       Expanded(child: Text(
                         provider.lastSync != null
                             ? 'Mostrando datos guardados (última sync: ${_formatFecha(provider.lastSync!)})'
                             : 'Mostrando datos guardados — sin conexión al servidor',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFFE65100)),
+                        style: TextStyle(fontSize: 12, color: context.sgi.orange),
                       )),
                     ]),
                   ),
@@ -447,6 +447,7 @@ class _InventarioContentState extends State<InventarioContent> {
                 if (insumo.usaSga) ...[
                   const SizedBox(width: 4),
                   IconButton(
+                    tooltip: 'Ficha SGA',
                     icon: Icon(Icons.science_outlined, size: 20,
                         color: insumo.tieneSga ? kPrimary : kTextMuted),
                     onPressed: () => Navigator.push(ctx,
@@ -646,7 +647,7 @@ class _InventarioContentState extends State<InventarioContent> {
   Widget _semaforo(String s) {
     final (label, color) = switch (s) {
       'ROJO'     => ('CRÍTICO', kSemaforoRojo),
-      'AMARILLO' => ('BAJO',    const Color(0xFFE65100)),
+      'AMARILLO' => ('BAJO',    context.sgi.orange),
       'RESIDUO'  => ('RESIDUO', _kResiduo),
       _          => ('OK',      kSemaforoVerde),
     };
@@ -667,6 +668,7 @@ class _InventarioContentState extends State<InventarioContent> {
   Widget _sgaBtn(BuildContext context, Insumo insumo) => Tooltip(
     message: 'Ver ficha SGA',
     child: IconButton(
+      tooltip: 'Ficha SGA',
       icon: Icon(
         Icons.science_outlined,
         size: 20,

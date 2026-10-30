@@ -585,6 +585,7 @@ class _PermisosPorUsuarioState extends State<_PermisosPorUsuario> {
                     prefixIcon: const Icon(Icons.search, size: 18, color: kTextMuted),
                     suffixIcon: _query.isNotEmpty
                         ? IconButton(
+                            tooltip: 'Limpiar búsqueda',
                             icon: const Icon(Icons.clear, size: 16, color: kTextMuted),
                             onPressed: () => _busquedaCtrl.clear(),
                           )

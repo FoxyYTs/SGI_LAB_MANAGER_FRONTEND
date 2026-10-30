@@ -360,7 +360,7 @@ class _GuiasDialogState extends State<_GuiasDialog> {
             tooltip: 'Nueva guía',
             onPressed: _dialog,
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
       ]),
       contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -416,29 +416,32 @@ class _GuiasDialogState extends State<_GuiasDialog> {
                               Tooltip(
                                 message: 'Abrir en Drive',
                                 child: IconButton(
+                                  tooltip: 'Abrir guía',
                                   icon: const Icon(Icons.open_in_new,
                                       color: kPrimary, size: 18),
                                   onPressed: () =>
                                       launchUrl(Uri.parse(url)),
                                   padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                 ),
                               ),
                             if (widget.puedeEditar) ...[
                               IconButton(
+                                tooltip: 'Editar guía',
                                 icon: const Icon(Icons.edit_outlined,
                                     color: kPrimary, size: 18),
                                 onPressed: () => _dialog(g),
                                 padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                               ),
                               IconButton(
+                                tooltip: 'Eliminar guía',
                                 icon: const Icon(Icons.delete_outline,
                                     color: kDanger, size: 18),
                                 onPressed: () =>
                                     _eliminar(g['id'].toString()),
                                 padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                               ),
                             ],
                           ],
@@ -2260,20 +2263,22 @@ class _TabGestionState extends State<_TabGestion>
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
+                                          tooltip: 'Editar área',
                                           icon: const Icon(Icons.edit_outlined,
                                               color: kPrimary, size: 18),
                                           onPressed: () => _dialogArea(a),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                         const SizedBox(width: 4),
                                         IconButton(
+                                          tooltip: 'Eliminar área',
                                           icon: const Icon(Icons.delete_outline,
                                               color: kDanger, size: 18),
                                           onPressed: () =>
                                               _eliminarArea(a['id'].toString()),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                       ],
                                     )
@@ -2356,20 +2361,22 @@ class _TabGestionState extends State<_TabGestion>
                                       ),
                                       if (puedeEditar) ...[
                                         IconButton(
+                                          tooltip: 'Editar asignatura',
                                           icon: const Icon(Icons.edit_outlined,
                                               color: kPrimary, size: 18),
                                           onPressed: () => _dialogAsignatura(s),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                         const SizedBox(width: 4),
                                         IconButton(
+                                          tooltip: 'Eliminar asignatura',
                                           icon: const Icon(Icons.delete_outline,
                                               color: kDanger, size: 18),
                                           onPressed: () => _eliminarAsignatura(
                                               s['id'].toString()),
                                           padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(),
+                                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                         ),
                                       ],
                                     ],
@@ -2734,7 +2741,7 @@ class _TabSeguimientoMonitoresState extends State<_TabSeguimientoMonitores>
                               ),
                               onPressed: () => _marcar(uid, !completada),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                             ),
                 ),
               ],

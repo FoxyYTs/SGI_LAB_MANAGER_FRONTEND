@@ -780,7 +780,7 @@ class _InsumoDetailScreenState extends State<InsumoDetailScreen> {
                 : stock <= stockMin
                     ? ('CRÍTICO',  kSemaforoRojo)
                     : stock <= stockMin * 1.5
-                        ? ('BAJO',     const Color(0xFFE65100))
+                        ? ('BAJO',     context.sgi.orange)
                         : ('OK',       kSemaforoVerde);
 
             return Container(
