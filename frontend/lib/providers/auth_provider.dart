@@ -162,6 +162,11 @@ class AuthProvider with ChangeNotifier, WidgetsBindingObserver {
       // Tras setTokens: si la cola recibe un 401, el interceptor ya puede refrescar.
       if (_token != null) await SyncService.instance.init(_token);
 
+      // Los permisos cacheados pueden ser de una versión anterior (p. ej.
+      // códigos nuevos tras actualizar): se refrescan sin bloquear el
+      // arranque; sin red se conservan los de la caché.
+      if (_token != null) unawaited(recargarPermisos());
+
       if (_token != null && kIsWeb) _programarCierreMedianoche();
     } catch (e) {
       // Si el almacenamiento seguro falla (Keystore no disponible, etc.),
