@@ -306,7 +306,24 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
         ],
       ),
     );
-    if (nuevo != null && nuevo != c['estado']) await _post('${c['id']}/estado/', {'estado': nuevo});
+    if (nuevo == null || nuevo == c['estado'] || !mounted) return;
+    // Entregar con saldo se permite (fiado), pero no sin darse cuenta (DEF-051).
+    final saldo = _num(c['saldo']);
+    if (nuevo == 'ENTREGADO' && saldo > 0) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Saldo pendiente'),
+          content: Text('Queda un saldo de ${formatoPesos(saldo)}. ¿Entregar igual?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Entregar')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await _post('${c['id']}/estado/', {'estado': nuevo});
   }
 
   Future<void> _verQr(Map<String, dynamic> c) async {
@@ -562,7 +579,8 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
                   const PopupMenuItem(value: 'estado', child: Text('Cambiar estado')),
                   const PopupMenuItem(value: 'qr', child: Text('QR de seguimiento')),
                   const PopupMenuItem(value: 'enlaces', child: Text('Enlaces de las piezas')),
-                  if (!conAbonos) const PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
+                  // Con cualquier abono, aunque esté anulado, no se borra (DEF-046).
+                  if (_lista(c['pagos']).isEmpty) const PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
                 ],
               ),
           ],
