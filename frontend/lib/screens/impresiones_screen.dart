@@ -687,6 +687,7 @@ class _ArchivosDialog extends StatefulWidget {
 }
 
 class _ArchivosDialogState extends State<_ArchivosDialog> {
+  static const _maxMbArchivo = 95;
   late Map<String, dynamic> _cot = widget.cotizacion;
   bool _cambio = false;
   int? _ocupada; // pieza con una operación en curso
@@ -706,7 +707,9 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
       _cot = Map<String, dynamic>.from(r.data);
       _cambio = true;
     } catch (e) {
-      if (mounted) _snack(mensajeErrorApi(e), kDanger);
+      // nginx responde el 413 en HTML (y sin CORS en web): mensaje propio.
+      final muyGrande = e is DioException && e.response?.statusCode == 413;
+      if (mounted) _snack(muyGrande ? 'El archivo supera $_maxMbArchivo MB.' : mensajeErrorApi(e), kDanger);
     }
     if (mounted) setState(() => _ocupada = null);
   }
@@ -718,6 +721,17 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
     );
     if (elegidos.isEmpty) return;
     final archivo = elegidos.first;
+    // Mismo tope que el backend (MAX_MB_MODELO_3D); más grande, que lo
+    // guarden en la nube y peguen el enlace.
+    final tamano = await archivo.length();
+    if (tamano > _maxMbArchivo * 1024 * 1024) {
+      _snack(
+        'El archivo pesa ${(tamano / 1024 / 1024).toStringAsFixed(1)} MB; el máximo es $_maxMbArchivo MB. '
+        'Súbelo a Drive y pega el enlace.',
+        kDanger,
+      );
+      return;
+    }
     final bytes = await archivo.readAsBytes();
     if (bytes.isEmpty) return;
     await _enviar(p, () => widget.dio.post(
@@ -780,8 +794,8 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
           shrinkWrap: true,
           children: [
             Text(
-              'Pega el enlace si el archivo está en la nube; si lo trajeron en USB, súbelo (hasta 50 MB). '
-              'No se muestra en el QR público.',
+              'Pega un enlace (Drive, OneDrive, Printables, Thingiverse…) para que el archivo quede fuera del '
+              'servidor, o súbelo si lo trajeron en USB (hasta 95 MB). No se muestra en el QR público.',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 8),
@@ -790,36 +804,57 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
                 final enlace = '${p['enlace_archivo'] ?? ''}';
                 final tiene = enlace.isNotEmpty || p['url_archivo'] != null;
                 final ocupada = _ocupada == p['id'];
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    enlace.isNotEmpty ? Icons.link : (tiene ? Icons.insert_drive_file_outlined : Icons.block),
-                    color: tiene ? context.sgi.accent : cs.outline,
-                  ),
-                  title: Text('${p['descripcion'] ?? ''}'.isEmpty ? 'Pieza ${i + 1}' : '${p['descripcion']}'),
-                  subtitle: Text(
-                    enlace.isNotEmpty ? enlace : (tiene ? '${p['nombre_archivo']}' : 'Sin archivo'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  trailing: ocupada
-                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                      : Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (tiene)
-                              IconButton(tooltip: 'Abrir', icon: const Icon(Icons.open_in_new), onPressed: () => _abrir(p)),
-                            IconButton(tooltip: 'Pegar enlace', icon: const Icon(Icons.add_link), onPressed: () => _pegarEnlace(p)),
-                            IconButton(tooltip: 'Subir archivo', icon: const Icon(Icons.upload_file), onPressed: () => _subir(p)),
-                            if (tiene)
-                              IconButton(
-                                tooltip: 'Quitar',
-                                icon: Icon(Icons.delete_outline, color: context.sgi.danger),
-                                onPressed: () => _enviar(p, () => widget.dio.delete(_ruta(p))),
-                              ),
-                          ],
-                        ),
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        enlace.isNotEmpty ? Icons.link : (tiene ? Icons.insert_drive_file_outlined : Icons.block),
+                        color: tiene ? context.sgi.accent : cs.outline,
+                      ),
+                      title: Text('${p['descripcion'] ?? ''}'.isEmpty ? 'Pieza ${i + 1}' : '${p['descripcion']}'),
+                      subtitle: Text(
+                        enlace.isNotEmpty ? enlace : (tiene ? '${p['nombre_archivo']}' : 'Sin archivo ni enlace'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: ocupada
+                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                          : null,
+                    ),
+                    // Botones con texto: un ícono solo no dice qué hace.
+                    if (!ocupada)
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          if (tiene)
+                            TextButton.icon(
+                              onPressed: () => _abrir(p),
+                              icon: const Icon(Icons.open_in_new, size: 18),
+                              label: const Text('Abrir'),
+                            ),
+                          TextButton.icon(
+                            onPressed: () => _pegarEnlace(p),
+                            icon: const Icon(Icons.add_link, size: 18),
+                            label: Text(enlace.isNotEmpty ? 'Cambiar enlace' : 'Pegar enlace'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _subir(p),
+                            icon: const Icon(Icons.upload_file, size: 18),
+                            label: Text(p['url_archivo'] != null ? 'Cambiar archivo' : 'Subir archivo'),
+                          ),
+                          if (tiene)
+                            TextButton.icon(
+                              onPressed: () => _enviar(p, () => widget.dio.delete(_ruta(p))),
+                              icon: Icon(Icons.delete_outline, size: 18, color: context.sgi.danger),
+                              label: Text('Quitar', style: TextStyle(color: context.sgi.danger)),
+                            ),
+                        ],
+                      ),
+                    const Divider(),
+                  ],
                 );
               }),
           ],

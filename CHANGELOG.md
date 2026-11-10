@@ -20,12 +20,12 @@ Cambios de SGI LAB MANAGER (app y backend). Formato basado en
 - Tarifas nuevas: cargo de preparación por pieza, recargo por urgencia y
   anticipo sugerido (por defecto 0, 15 % y 50 %).
 - **Archivo de cada pieza**: enlace (Drive, Printables…) o archivo subido
-  (.stl, .3mf, .obj, .step, .gcode; hasta 50 MB). Solo lo ve el personal y
+  (.stl, .3mf, .obj, .step, .gcode; hasta 95 MB). Solo lo ve el personal y
   se descarga por la API autenticada; no sale en el QR.
 
 ### Cambiado
-- nginx acepta hasta 50 MB por petición en `/api/` (antes 10 MB), para
-  los modelos 3D y los informes PDF.
+- nginx acepta hasta 100 MB por petición en `/api/` (antes 10 MB), para
+  los modelos 3D (hasta 95 MB) y los informes PDF (hasta 50 MB).
 - "Marcar pagado" se reemplaza por "Registrar abono". La API cambió: la
   versión 1.1.0 de la app ya no puede cotizar ni cobrar impresiones.
 
