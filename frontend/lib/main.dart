@@ -15,6 +15,7 @@ import 'screens/solicitud_prestamo_screen.dart';
 import 'screens/registro_horas_screen.dart';
 import 'screens/registro_practica_screen.dart';
 import 'screens/reporte_rotura_screen.dart';
+import 'screens/seguimiento_impresion_screen.dart';
 import 'screens/registro_screen.dart';
 import 'screens/recuperar_pass_screen.dart';
 import 'screens/restablecer_pass_screen.dart';
@@ -166,6 +167,7 @@ class MyApp extends StatelessWidget {
         '/registro-horas':     (ctx) => const RegistroHorasScreen(),
         '/registro-practica':  (ctx) => const RegistroPracticaScreen(),
         '/reporte-rotura':     (ctx) => const ReporteRoturaScreen(),
+        '/seguimiento':        (ctx) => const SeguimientoImpresionScreen(),
         '/registro':           (ctx) => const RegistroScreen(),
         '/recuperar-pass':     (ctx) => const RecuperarPassScreen(),
         '/restablecer-pass':   (ctx) => const RestablecerPassScreen(),
