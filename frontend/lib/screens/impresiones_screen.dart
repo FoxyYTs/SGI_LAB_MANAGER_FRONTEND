@@ -881,7 +881,14 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
 
   /// Ley 1581: documento o contacto del cliente exigen su autorización; un
   /// encargo que ya la tiene no la vuelve a pedir.
-  bool get _yaAutorizo => widget.cotizacion?['autorizacion_datos'] != null;
+  /// La autorización registrada vale solo para esa persona y esos datos: si
+  /// cambian nombre, documento o contacto se pide de nuevo (DEF-038, 039).
+  bool get _yaAutorizo {
+    final c = widget.cotizacion;
+    if (c == null || c['autorizacion_datos'] == null) return false;
+    return [(_nombre, 'cliente_nombre'), (_documento, 'cliente_documento'), (_contacto, 'cliente_contacto')]
+        .every((par) => par.$1.text.trim() == '${c[par.$2] ?? ''}'.trim());
+  }
   bool get _pideAutorizacion => _documento.text.trim().isNotEmpty || _contacto.text.trim().isNotEmpty;
 
   /// Tarifas de la vista previa: las congeladas del encargo, o las vigentes.
@@ -940,7 +947,8 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
       'cliente_contacto': _contacto.text.trim(),
       'descripcion': _descripcion.text.trim(),
       'urgente': _urgente,
-      'autoriza_datos': _autoriza,
+      // Solo si la casilla está a la vista: oculta conserva su valor (DEF-043).
+      'autoriza_datos': _pideAutorizacion && _autoriza,
       'piezas': [
         for (final p in _piezas)
           {
@@ -1095,7 +1103,11 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
         width: 480,
         child: Form(
           key: _form,
-          onChanged: () => setState(() {}),
+          // Al vaciar documento y contacto la casilla se desmarca: si no, al
+          // escribir datos nuevos aparecería ya marcada (DEF-043).
+          onChanged: () => setState(() {
+            if (!_pideAutorizacion) _autoriza = false;
+          }),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1130,13 +1142,24 @@ class _CotizacionDialogState extends State<_CotizacionDialog> {
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
                       value: _yaAutorizo || _autoriza,
-                      onChanged: _yaAutorizo ? null : (v) => setState(() => _autoriza = v ?? false),
+                      onChanged: _yaAutorizo
+                          ? null
+                          : (v) {
+                              setState(() => _autoriza = v ?? false);
+                              campo.didChange(v); // quita el error al marcarla (DEF-044)
+                            },
                       title: const Text(
                         'El cliente autorizó el tratamiento de su documento y contacto (Ley 1581)',
                         style: TextStyle(fontSize: 13),
                       ),
                       subtitle: campo.hasError
                           ? Text(campo.errorText!, style: TextStyle(fontSize: 12, color: context.sgi.danger))
+                          : _yaAutorizo
+                          ? Text(
+                              'Registrada el ${_fecha(widget.cotizacion!['autorizacion_datos'])}'
+                              '${'${widget.cotizacion!['autorizacion_registrada_por_nombre'] ?? ''}'.isEmpty ? '' : ' por ${widget.cotizacion!['autorizacion_registrada_por_nombre']}'}',
+                              style: const TextStyle(fontSize: 12),
+                            )
                           : null,
                     ),
                   ),
