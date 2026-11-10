@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -10,7 +9,6 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/api/api_client.dart';
 import '../core/api/paginacion.dart';
-import '../core/download_helper.dart';
 import '../core/impresion_calculo.dart';
 import '../core/permissions.dart';
 import '../core/theme/app_theme.dart';
@@ -129,16 +127,16 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Encargo creado.'),
-          action: SnackBarAction(label: 'Adjuntar archivos', onPressed: () => _verArchivos(guardado)),
+          action: SnackBarAction(label: 'Agregar enlaces', onPressed: () => _verEnlaces(guardado)),
         ),
       );
     }
   }
 
-  Future<void> _verArchivos(Map<String, dynamic> c) async {
+  Future<void> _verEnlaces(Map<String, dynamic> c) async {
     final cambio = await showDialog<bool>(
       context: context,
-      builder: (_) => _ArchivosDialog(dio: _dio, cotizacion: c),
+      builder: (_) => _EnlacesDialog(dio: _dio, cotizacion: c),
     );
     if (cambio == true) _cargar();
   }
@@ -524,11 +522,11 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (piezas.any((p) => p['url_archivo'] != null || '${p['enlace_archivo'] ?? ''}'.isNotEmpty))
+            if (piezas.any((p) => '${p['enlace_archivo'] ?? ''}'.isNotEmpty))
               IconButton(
-                tooltip: 'Archivos de las piezas',
-                icon: Icon(Icons.attach_file, size: 20, color: cs.onSurfaceVariant),
-                onPressed: () => _verArchivos(c),
+                tooltip: 'Enlaces de las piezas',
+                icon: Icon(Icons.link, size: 20, color: cs.onSurfaceVariant),
+                onPressed: () => _verEnlaces(c),
               ),
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -554,7 +552,7 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
                   'abonos' => _verAbonos(c),
                   'estado' => _cambiarEstado(c),
                   'qr' => _verQr(c),
-                  'archivos' => _verArchivos(c),
+                  'enlaces' => _verEnlaces(c),
                   _ => _eliminar(c),
                 },
                 itemBuilder: (_) => [
@@ -563,7 +561,7 @@ class _ImpresionesContentState extends State<ImpresionesContent> {
                   if (_lista(c['pagos']).isNotEmpty) const PopupMenuItem(value: 'abonos', child: Text('Ver abonos')),
                   const PopupMenuItem(value: 'estado', child: Text('Cambiar estado')),
                   const PopupMenuItem(value: 'qr', child: Text('QR de seguimiento')),
-                  const PopupMenuItem(value: 'archivos', child: Text('Archivos de las piezas')),
+                  const PopupMenuItem(value: 'enlaces', child: Text('Enlaces de las piezas')),
                   if (!conAbonos) const PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
                 ],
               ),
@@ -673,21 +671,20 @@ class _SeguimientoQrDialogState extends State<_SeguimientoQrDialog> {
   }
 }
 
-// ── Archivos de las piezas ───────────────────────────────────────────────────
+// ── Enlaces de las piezas ────────────────────────────────────────────────────
 
-/// Modelo 3D de cada pieza: un enlace (el archivo vive en Drive, Printables…)
-/// o el archivo subido al servidor. Es interno: no sale en la página del QR.
-/// Se puede cambiar aunque el encargo tenga abonos (no altera el cobro).
-class _ArchivosDialog extends StatefulWidget {
+/// Enlace al modelo 3D de cada pieza (Drive, Printables…): el archivo queda
+/// fuera del servidor. Es interno: no sale en la página del QR. Se puede
+/// cambiar aunque el encargo tenga abonos (no altera el cobro).
+class _EnlacesDialog extends StatefulWidget {
   final Dio dio;
   final Map<String, dynamic> cotizacion;
-  const _ArchivosDialog({required this.dio, required this.cotizacion});
+  const _EnlacesDialog({required this.dio, required this.cotizacion});
   @override
-  State<_ArchivosDialog> createState() => _ArchivosDialogState();
+  State<_EnlacesDialog> createState() => _EnlacesDialogState();
 }
 
-class _ArchivosDialogState extends State<_ArchivosDialog> {
-  static const _maxMbArchivo = 95;
+class _EnlacesDialogState extends State<_EnlacesDialog> {
   late Map<String, dynamic> _cot = widget.cotizacion;
   bool _cambio = false;
   int? _ocupada; // pieza con una operación en curso
@@ -697,7 +694,7 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
   void _snack(String msg, Color color) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: color));
 
-  String _ruta(Map<String, dynamic> p) => 'operaciones/impresiones/${_cot['id']}/piezas/${p['id']}/archivo/';
+  String _ruta(Map<String, dynamic> p) => 'operaciones/impresiones/${_cot['id']}/piezas/${p['id']}/enlace/';
 
   /// Ejecuta la petición sobre la pieza y toma el encargo actualizado.
   Future<void> _enviar(Map<String, dynamic> p, Future<Response> Function() peticion) async {
@@ -707,37 +704,9 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
       _cot = Map<String, dynamic>.from(r.data);
       _cambio = true;
     } catch (e) {
-      // nginx responde el 413 en HTML (y sin CORS en web): mensaje propio.
-      final muyGrande = e is DioException && e.response?.statusCode == 413;
-      if (mounted) _snack(muyGrande ? 'El archivo supera $_maxMbArchivo MB.' : mensajeErrorApi(e), kDanger);
+      if (mounted) _snack(mensajeErrorApi(e), kDanger);
     }
     if (mounted) setState(() => _ocupada = null);
-  }
-
-  Future<void> _subir(Map<String, dynamic> p) async {
-    final elegidos = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['stl', '3mf', 'obj', 'step', 'stp', 'gcode', 'bgcode'],
-    );
-    if (elegidos.isEmpty) return;
-    final archivo = elegidos.first;
-    // Mismo tope que el backend (MAX_MB_MODELO_3D); más grande, que lo
-    // guarden en la nube y peguen el enlace.
-    final tamano = await archivo.length();
-    if (tamano > _maxMbArchivo * 1024 * 1024) {
-      _snack(
-        'El archivo pesa ${(tamano / 1024 / 1024).toStringAsFixed(1)} MB; el máximo es $_maxMbArchivo MB. '
-        'Súbelo a Drive y pega el enlace.',
-        kDanger,
-      );
-      return;
-    }
-    final bytes = await archivo.readAsBytes();
-    if (bytes.isEmpty) return;
-    await _enviar(p, () => widget.dio.post(
-      _ruta(p),
-      data: FormData.fromMap({'archivo': MultipartFile.fromBytes(bytes, filename: archivo.name)}),
-    ));
   }
 
   Future<void> _pegarEnlace(Map<String, dynamic> p) async {
@@ -764,58 +733,41 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
     await _enviar(p, () => widget.dio.post(_ruta(p), data: {'enlace': enlace}));
   }
 
-  /// Un enlace se abre afuera; un archivo subido se descarga con el JWT
-  /// (la ruta de /media/ está bloqueada), igual que los informes subidos.
-  Future<void> _abrir(Map<String, dynamic> p) async {
-    final enlace = '${p['enlace_archivo'] ?? ''}';
-    try {
-      if (enlace.isNotEmpty) {
-        await launchUrl(Uri.parse(enlace), mode: LaunchMode.externalApplication);
-        return;
-      }
-      setState(() => _ocupada = p['id']);
-      final r = await widget.dio.get<List<int>>(p['url_archivo'], options: Options(responseType: ResponseType.bytes));
-      final msg = await saveAndOpenFile(r.data!, '${p['nombre_archivo']}');
-      if (msg != null && mounted) _snack(msg, kSuccess);
-    } catch (e) {
-      if (mounted) _snack(mensajeErrorApi(e), kDanger);
+  Future<void> _abrir(String enlace) async {
+    if (!await launchUrl(Uri.parse(enlace), mode: LaunchMode.externalApplication) && mounted) {
+      _snack('No se pudo abrir el enlace.', kDanger);
     }
-    if (mounted) setState(() => _ocupada = null);
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('Archivos de las piezas'),
+      title: const Text('Enlaces de las piezas'),
       content: SizedBox(
         width: 460,
         child: ListView(
           shrinkWrap: true,
           children: [
             Text(
-              'Pega un enlace (Drive, OneDrive, Printables, Thingiverse…) para que el archivo quede fuera del '
-              'servidor, o súbelo si lo trajeron en USB (hasta 95 MB). No se muestra en el QR público.',
+              'Pega el enlace del archivo (Drive, OneDrive, Printables, Thingiverse…); el archivo queda fuera '
+              'del servidor. No se muestra en el QR público.',
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 8),
             for (final (i, p) in _piezas.indexed)
               Builder(builder: (_) {
                 final enlace = '${p['enlace_archivo'] ?? ''}';
-                final tiene = enlace.isNotEmpty || p['url_archivo'] != null;
                 final ocupada = _ocupada == p['id'];
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                        enlace.isNotEmpty ? Icons.link : (tiene ? Icons.insert_drive_file_outlined : Icons.block),
-                        color: tiene ? context.sgi.accent : cs.outline,
-                      ),
+                      leading: Icon(Icons.link, color: enlace.isNotEmpty ? context.sgi.accent : cs.outline),
                       title: Text('${p['descripcion'] ?? ''}'.isEmpty ? 'Pieza ${i + 1}' : '${p['descripcion']}'),
                       subtitle: Text(
-                        enlace.isNotEmpty ? enlace : (tiene ? '${p['nombre_archivo']}' : 'Sin archivo ni enlace'),
+                        enlace.isNotEmpty ? enlace : 'Sin enlace',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 12),
@@ -829,9 +781,9 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
                       Wrap(
                         spacing: 4,
                         children: [
-                          if (tiene)
+                          if (enlace.isNotEmpty)
                             TextButton.icon(
-                              onPressed: () => _abrir(p),
+                              onPressed: () => _abrir(enlace),
                               icon: const Icon(Icons.open_in_new, size: 18),
                               label: const Text('Abrir'),
                             ),
@@ -840,12 +792,7 @@ class _ArchivosDialogState extends State<_ArchivosDialog> {
                             icon: const Icon(Icons.add_link, size: 18),
                             label: Text(enlace.isNotEmpty ? 'Cambiar enlace' : 'Pegar enlace'),
                           ),
-                          TextButton.icon(
-                            onPressed: () => _subir(p),
-                            icon: const Icon(Icons.upload_file, size: 18),
-                            label: Text(p['url_archivo'] != null ? 'Cambiar archivo' : 'Subir archivo'),
-                          ),
-                          if (tiene)
+                          if (enlace.isNotEmpty)
                             TextButton.icon(
                               onPressed: () => _enviar(p, () => widget.dio.delete(_ruta(p))),
                               icon: Icon(Icons.delete_outline, size: 18, color: context.sgi.danger),
