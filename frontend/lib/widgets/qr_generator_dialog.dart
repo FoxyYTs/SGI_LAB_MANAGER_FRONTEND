@@ -8,6 +8,22 @@ import '../core/theme/app_theme.dart';
 
 const _kFrontendUrl = String.fromEnvironment('FRONTEND_URL', defaultValue: '');
 
+/// URL pública de una ruta de la app web, para los QR. Los parámetros van
+/// antes del `#` (los lee `Uri.base`, como en restablecer_pass_screen.dart).
+String urlPublica(String route, {Map<String, String>? query}) {
+  final q = query == null ? '' : '?${Uri(queryParameters: query).query}';
+  if (kIsWeb) {
+    return '${Uri.base.origin}/$q#$route';
+  }
+  if (_kFrontendUrl.isNotEmpty) {
+    final base = _kFrontendUrl.endsWith('/')
+        ? _kFrontendUrl.substring(0, _kFrontendUrl.length - 1)
+        : _kFrontendUrl;
+    return '$base/$q#$route';
+  }
+  return 'http://localhost:8080/$q#$route';
+}
+
 class QrGeneratorDialog extends StatefulWidget {
   const QrGeneratorDialog({super.key});
 
@@ -69,19 +85,6 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
     super.dispose();
   }
 
-  static String _buildUrl(String route) {
-    if (kIsWeb) {
-      return '${Uri.base.origin}/#$route';
-    }
-    if (_kFrontendUrl.isNotEmpty) {
-      final base = _kFrontendUrl.endsWith('/')
-          ? _kFrontendUrl.substring(0, _kFrontendUrl.length - 1)
-          : _kFrontendUrl;
-      return '$base/#$route';
-    }
-    return 'http://localhost:8080/#$route';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -118,7 +121,7 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
               child: TabBarView(
                 controller: _tab,
                 children: _forms.map((f) {
-                  final url = f.externalUrl ?? _buildUrl(f.route);
+                  final url = f.externalUrl ?? urlPublica(f.route);
                   return _QrTab(form: f, url: url);
                 }).toList(),
               ),
@@ -138,7 +141,7 @@ class _QrGeneratorDialogState extends State<QrGeneratorDialog>
                   ElevatedButton.icon(
                     onPressed: () async {
                       final f = _forms[_tab.index];
-                      final url = f.externalUrl ?? _buildUrl(f.route);
+                      final url = f.externalUrl ?? urlPublica(f.route);
                       final svgString = Barcode.qrCode().toSvg(url, width: 200, height: 200);
                       await guardarQrComoSvg(svgString, fileName: f.fileName);
                       if (context.mounted) {

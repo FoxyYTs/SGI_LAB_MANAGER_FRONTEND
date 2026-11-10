@@ -17,6 +17,7 @@ class Perm {
   static const impresionesVer       = 'impresiones.ver';
   static const impresionesGestionar = 'impresiones.gestionar';
   static const impresionesTarifas   = 'impresiones.tarifas';
+  static const impresionesAnularPagos = 'impresiones.anular_pagos';
 
   /// Todos los permisos disponibles en el sistema
   static const todos = [
@@ -27,7 +28,7 @@ class Perm {
     configuracionGestion, configuracionRoles,
     informesVer, informesGestionar,
     usuariosGestionar,
-    impresionesVer, impresionesGestionar, impresionesTarifas,
+    impresionesVer, impresionesGestionar, impresionesTarifas, impresionesAnularPagos,
   ];
 
   /// Nombre legible para mostrar en la UI
@@ -48,6 +49,7 @@ class Perm {
     'impresiones.ver':       'Ver impresiones 3D',
     'impresiones.gestionar': 'Gestionar impresiones 3D',
     'impresiones.tarifas':   'Tarifas de impresión 3D',
+    'impresiones.anular_pagos': 'Anular abonos 3D',
   }[codigo] ?? codigo;
 
   /// Descripción de qué habilita cada permiso — debe coincidir con
@@ -67,7 +69,8 @@ class Perm {
     'informes.gestionar':    'Subir y eliminar informes manuales',
     'usuarios.gestionar':    'Activar/desactivar cuentas y editar el perfil de otros usuarios',
     'impresiones.ver':       'Consultar las cotizaciones de impresión 3D',
-    'impresiones.gestionar': 'Crear, editar y eliminar cotizaciones 3D y registrar pagos',
+    'impresiones.gestionar': 'Crear, editar y eliminar encargos 3D, registrar abonos y cambiar su estado',
     'impresiones.tarifas':   'Editar tarifas, cobro mínimo, margen y materiales de impresión 3D',
+    'impresiones.anular_pagos': 'Anular abonos de impresiones 3D registrados por error',
   }[codigo] ?? '';
 }
