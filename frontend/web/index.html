@@ -45,7 +45,10 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', 'G-VJHJ8STXEG');
+    // Sin query string: el QR de impresiones (?c=código) y el enlace de
+    // restablecer contraseña (?token=&email=) llevan datos que no deben
+    // llegar a Google Analytics (DEF-047).
+    gtag('config', 'G-VJHJ8STXEG', {page_location: location.origin + location.pathname});
   </script>
 </head>
 <body>
