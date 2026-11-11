@@ -55,7 +55,19 @@ class _PolicyContent extends StatelessWidget {
           'En el módulo de impresiones 3D el personal registra además datos de '
           'personas externas: nombre, y de forma opcional documento y correo o '
           'teléfono (solo con autorización expresa del cliente, guardada con su '
-          'fecha), junto con los datos del trabajo y del pago.',
+          'fecha y el nombre de quien la registró; si cambian, se pide de nuevo), '
+          'junto con los datos del trabajo y del pago: piezas, valor cotizado, '
+          'abonos con su número de recibo, estado del trabajo y, si se agrega, el '
+          'enlace al archivo del modelo 3D. Ese archivo queda en el servicio que '
+          'elija el cliente (Google Drive, OneDrive, Printables u otro) y no se '
+          'copia al servidor.\n\n'
+          'Página de seguimiento: cada encargo tiene un código QR que abre una '
+          'página pública, sin inicio de sesión, con el nombre abreviado del '
+          'cliente (por ejemplo, «Juan P.»), las piezas, los valores pagados y '
+          'pendientes y el estado del trabajo. La puede ver cualquier persona que '
+          'tenga el enlace. No muestra documento, contacto, recibos ni enlaces a '
+          'archivos. Si el enlace se comparte por error, el laboratorio puede '
+          'cambiar el código.',
         ),
 
         _Section('3. Finalidad del tratamiento'),
@@ -85,7 +97,8 @@ class _PolicyContent extends StatelessWidget {
           'de ellos. La aplicación usa como encargados del tratamiento a Google '
           'Firebase Cloud Messaging (notificaciones; recibe un identificador del '
           'dispositivo) y Google Analytics (estadísticas de uso de la versión web, '
-          'sin nombres, correos ni documentos). Estos servicios pueden procesar '
+          'sin nombres, correos, documentos ni los códigos de seguimiento). Estos '
+          'servicios pueden procesar '
           'datos fuera de Colombia (transferencia internacional). Fuera de esto, '
           'los datos solo se entregan por obligación legal.',
         ),
@@ -101,7 +114,7 @@ class _PolicyContent extends StatelessWidget {
 
         _Section('7. Vigencia'),
         _Body(
-          'Esta versión rige desde el 30 de octubre de 2026. Los cambios sustanciales se '
+          'Esta versión rige desde el 10 de noviembre de 2026. Los cambios sustanciales se '
           'notifican en la aplicación y se publican en '
           'sgilabmanager.foxyyts.qzz.io/politica-privacidad.',
         ),
