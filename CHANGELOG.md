@@ -4,6 +4,14 @@ Cambios de SGI LAB MANAGER (app y backend). Formato basado en
 [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones según
 [SemVer](https://semver.org/lang/es/).
 
+## [1.2.1] — sin publicar
+
+### Corregido
+- **QR y enlace de seguimiento de impresiones 3D en la app Android**: apuntaban
+  a `http://localhost:8080` porque la APK se compilaba sin `FRONTEND_URL`.
+  Ahora usan por defecto `https://sgilabmanager.foxyyts.qzz.io` (también el
+  QR de Registro de Horas).
+
 ## [1.2.0] — 2026-11-10
 
 ### Añadido
