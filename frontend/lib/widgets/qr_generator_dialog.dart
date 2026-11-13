@@ -6,7 +6,12 @@ import '../utils/qr_saver.dart';
 import '../core/theme/colors.dart';
 import '../core/theme/app_theme.dart';
 
-const _kFrontendUrl = String.fromEnvironment('FRONTEND_URL', defaultValue: '');
+/// Frontend público para los QR en builds nativas (APK/desktop). Dev:
+/// --dart-define=FRONTEND_URL=https://dev-sgilabmanager.foxyyts.qzz.io
+const _kFrontendUrl = String.fromEnvironment(
+  'FRONTEND_URL',
+  defaultValue: 'https://sgilabmanager.foxyyts.qzz.io',
+);
 
 /// URL pública de una ruta de la app web, para los QR. Los parámetros van
 /// antes del `#` (los lee `Uri.base`, como en restablecer_pass_screen.dart).
@@ -15,13 +20,10 @@ String urlPublica(String route, {Map<String, String>? query}) {
   if (kIsWeb) {
     return '${Uri.base.origin}/$q#$route';
   }
-  if (_kFrontendUrl.isNotEmpty) {
-    final base = _kFrontendUrl.endsWith('/')
-        ? _kFrontendUrl.substring(0, _kFrontendUrl.length - 1)
-        : _kFrontendUrl;
-    return '$base/$q#$route';
-  }
-  return 'http://localhost:8080/$q#$route';
+  final base = _kFrontendUrl.endsWith('/')
+      ? _kFrontendUrl.substring(0, _kFrontendUrl.length - 1)
+      : _kFrontendUrl;
+  return '$base/$q#$route';
 }
 
 class QrGeneratorDialog extends StatefulWidget {
